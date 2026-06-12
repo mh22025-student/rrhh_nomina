@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     const planillasDelMes = await db.planilla.findMany({
       where: {
-        estado: { in: ['APROBADA', 'PAGADA'] },
+        estado: { in: ['CALCULADA', 'APROBADA', 'PAGADA'] },
         fecha_inicio_periodo: { gte: startOfMonth },
         fecha_fin_periodo: { lte: endOfMonth },
       },
@@ -88,13 +88,16 @@ export async function GET(request: NextRequest) {
     const day10Next = new Date(currentYear, currentMonth, 10);
 
     if (!isssPresentado) {
-      vencimientos.push({ nombre: 'ISSS', fecha: day15.toISOString().split('T')[0], estado: 'PENDIENTE' });
+      const dias = Math.ceil((day15.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      vencimientos.push({ nombre: 'ISSS', fecha: day15.toISOString().split('T')[0], estado: 'PENDIENTE', dias: Math.max(0, dias) });
     }
     if (!afpPresentado) {
-      vencimientos.push({ nombre: 'AFP', fecha: day20.toISOString().split('T')[0], estado: 'PENDIENTE' });
+      const dias = Math.ceil((day20.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      vencimientos.push({ nombre: 'AFP', fecha: day20.toISOString().split('T')[0], estado: 'PENDIENTE', dias: Math.max(0, dias) });
     }
     if (!isrEntero) {
-      vencimientos.push({ nombre: 'ISR F-910', fecha: day10Next.toISOString().split('T')[0], estado: 'PENDIENTE' });
+      const dias = Math.ceil((day10Next.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      vencimientos.push({ nombre: 'ISR F-910', fecha: day10Next.toISOString().split('T')[0], estado: 'PENDIENTE', dias: Math.max(0, dias) });
     }
 
     // Recent planillas (last 5)
@@ -118,7 +121,7 @@ export async function GET(request: NextRequest) {
 
       const pMes = await db.planilla.findMany({
         where: {
-          estado: { in: ['APROBADA', 'PAGADA'] },
+          estado: { in: ['CALCULADA', 'APROBADA', 'PAGADA'] },
           fecha_inicio_periodo: { gte: mStart },
           fecha_fin_periodo: { lte: mEnd },
         },

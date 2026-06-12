@@ -1,0 +1,1442 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useCallback, useEffect, createContext, useContext } from 'react';
+     4→import {
+     5→  Users, Briefcase, Calculator, FileText, Settings, User, Shield,
+     6→  ChevronDown, ChevronRight, LogOut, Lock, Menu, X, LayoutDashboard,
+     7→  DollarSign, CheckCircle, Send, Gift, ClipboardList, ListChecks,
+     8→  BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye,
+     9→  AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle, Clock
+    10→} from 'lucide-react';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Input } from '@/components/ui/input';
+    13→import { Label } from '@/components/ui/label';
+    14→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    15→import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+    16→import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+    17→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    18→import { Progress } from '@/components/ui/progress';
+    19→import { Badge } from '@/components/ui/badge';
+    20→import { Separator } from '@/components/ui/separator';
+    21→import { ScrollArea } from '@/components/ui/scroll-area';
+    22→import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+    23→import { useToast } from '@/hooks/use-toast';
+    24→
+    25→// Module components
+    26→import EmployeeDirectory from '@/components/modules/EmployeeDirectory';
+    27→import EmployeeDetail from '@/components/modules/EmployeeDetail';
+    28→import NewEmployeeForm from '@/components/modules/NewEmployeeForm';
+    29→import IncidenceManager from '@/components/modules/IncidenceManager';
+    30→import UserManagement from '@/components/modules/UserManagement';
+    31→import PayrollDashboard from '@/components/modules/PayrollDashboard';
+    32→import PayrollPeriods from '@/components/modules/PayrollPeriods';
+    33→import PayrollCalculation from '@/components/modules/PayrollCalculation';
+    34→import PayrollApproval from '@/components/modules/PayrollApproval';
+    35→import BankDispersion from '@/components/modules/BankDispersion';
+    36→import AguinaldoView from '@/components/modules/AguinaldoView';
+    37→import LiquidationView from '@/components/modules/LiquidationView';
+    38→import ProfileCatalog from '@/components/modules/ProfileCatalog';
+    39→import SalaryBands from '@/components/modules/SalaryBands';
+    40→import IsssReport from '@/components/modules/IsssReport';
+    41→import AfpReport from '@/components/modules/AfpReport';
+    42→import IsrReport from '@/components/modules/IsrReport';
+    43→import TalentReport from '@/components/modules/TalentReport';
+    44→import LegalParameters from '@/components/modules/LegalParameters';
+    45→import OrgChart from '@/components/modules/OrgChart';
+    46→import Integrations from '@/components/modules/Integrations';
+    47→import AuditLog from '@/components/modules/AuditLog';
+    48→import SelfServicePortal from '@/components/modules/SelfServicePortal';
+    49→
+    50→// ============================================================
+    51→// Types
+    52→// ============================================================
+    53→type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+    54→
+    55→interface UserData {
+    56→  id: string;
+    57→  email: string;
+    58→  nombre: string;
+    59→  apellido: string;
+    60→  rol: UserRole;
+    61→  debe_cambiar_password: boolean;
+    62→  empleadoId?: string;
+    63→}
+    64→
+    65→interface AuthContextType {
+    66→  user: UserData | null;
+    67→  accessToken: string | null;
+    68→  login: (email: string, password: string) => Promise<void>;
+    69→  logout: () => Promise<void>;
+    70→  refreshAccessToken: () => Promise<string | null>;
+    71→  isLoading: boolean;
+    72→}
+    73→
+    74→// ============================================================
+    75→// Auth Context
+    76→// ============================================================
+    77→const AuthContext = createContext<AuthContextType | null>(null);
+    78→
+    79→function useAuth() {
+    80→  const ctx = useContext(AuthContext);
+    81→  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+    82→  return ctx;
+    83→}
+    84→
+    85→// ============================================================
+    86→// View Types
+    87→// ============================================================
+    88→type ViewId =
+    89→  | 'dashboard'
+    90→  | '02-01' | '02-02' | '02-03' | '02-04'
+    91→  | '03-01' | '03-02' | '03-03'
+    92→  | '04-01' | '04-02' | '04-03' | '04-04' | '04-05' | '04-06' | '04-07'
+    93→  | '05-01' | '05-02' | '05-03' | '05-04'
+    94→  | '06-01' | '06-02' | '06-03' | '06-04' | '06-05'
+    95→  | '01-03';
+    96→
+    97→interface NavItem {
+    98→  id: ViewId;
+    99→  label: string;
+   100→  icon: React.ElementType;
+   101→}
+   102→
+   103→interface NavGroup {
+   104→  title: string;
+   105→  icon: React.ElementType;
+   106→  items: NavItem[];
+   107→  roles: UserRole[];
+   108→}
+   109→
+   110→// ============================================================
+   111→// Navigation Configuration (RBAC)
+   112→// ============================================================
+   113→const NAV_GROUPS: NavGroup[] = [
+   114→  {
+   115→    title: 'Seguridad',
+   116→    icon: Shield,
+   117→    roles: ['ADMIN'],
+   118→    items: [
+   119→      { id: '01-03', label: 'Gestión Usuarios', icon: Users },
+   120→    ],
+   121→  },
+   122→  {
+   123→    title: 'Módulo 02 - Empleados',
+   124→    icon: Users,
+   125→    roles: ['ADMIN', 'ANALISTA', 'AUDITOR'],
+   126→    items: [
+   127→      { id: '02-01', label: 'Directorio', icon: ListChecks },
+   128→      { id: '02-03', label: 'Nuevo Empleado', icon: User },
+   129→      { id: '02-04', label: 'Incidencias', icon: AlertCircle },
+   130→    ],
+   131→  },
+   132→  {
+   133→    title: 'Módulo 03 - Perfiles',
+   134→    icon: Briefcase,
+   135→    roles: ['ADMIN', 'ANALISTA', 'APROBADOR', 'AUDITOR'],
+   136→    items: [
+   137→      { id: '03-01', label: 'Catálogo', icon: BookOpen },
+   138→      { id: '03-02', label: 'Formulario de Perfil', icon: FileText },
+   139→      { id: '03-03', label: 'Bandas Salariales', icon: DollarSign },
+   140→    ],
+   141→  },
+   142→  {
+   143→    title: 'Módulo 04 - Nómina',
+   144→    icon: Calculator,
+   145→    roles: ['ADMIN', 'ANALISTA', 'APROBADOR', 'GERENCIA', 'AUDITOR'],
+   146→    items: [
+   147→      { id: '04-01', label: 'Dashboard', icon: LayoutDashboard },
+   148→      { id: '04-02', label: 'Períodos', icon: CalendarIcon },
+   149→      { id: '04-03', label: 'Cálculo', icon: Calculator },
+   150→      { id: '04-04', label: 'Aprobación', icon: CheckCircle },
+   151→      { id: '04-05', label: 'Dispersión', icon: Send },
+   152→      { id: '04-06', label: 'Aguinaldo', icon: Gift },
+   153→      { id: '04-07', label: 'Liquidaciones', icon: ClipboardList },
+   154→    ],
+   155→  },
+   156→  {
+   157→    title: 'Módulo 05 - Reportes',
+   158→    icon: FileText,
+   159→    roles: ['ADMIN', 'GERENCIA', 'AUDITOR'],
+   160→    items: [
+   161→      { id: '05-01', label: 'Planilla ISSS', icon: FileText },
+   162→      { id: '05-02', label: 'Planilla AFP', icon: FileText },
+   163→      { id: '05-03', label: 'Retenciones ISR', icon: FileText },
+   164→      { id: '05-04', label: 'Gestión Talento', icon: BarChart3 },
+   165→    ],
+   166→  },
+   167→  {
+   168→    title: 'Módulo 06 - Admin',
+   169→    icon: Settings,
+   170→    roles: ['ADMIN', 'APROBADOR'],
+   171→    items: [
+   172→      { id: '06-01', label: 'Parámetros Legales', icon: ScaleIcon },
+   173→      { id: '06-02', label: 'Organigrama', icon: GitBranch },
+   174→      { id: '06-03', label: 'Integraciones', icon: Plug },
+   175→      { id: '06-04', label: 'Bitácora', icon: ScrollText },
+   176→    ],
+   177→  },
+   178→  {
+   179→    title: 'Vista Empleado',
+   180→    icon: User,
+   181→    roles: ['EMPLEADO'],
+   182→    items: [
+   183→      { id: '06-05', label: 'Mi Portal', icon: Eye },
+   184→    ],
+   185→  },
+   186→];
+   187→
+   188→// Filter items within a group based on more granular RBAC
+   189→function getVisibleItems(group: NavGroup, role: UserRole): NavItem[] {
+   190→  const roleItemMap: Record<UserRole, Record<string, string[]>> = {
+   191→    ADMIN: {
+   192→      'Seguridad': ['01-03'],
+   193→      'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
+   194→      'Módulo 03 - Perfiles': ['03-01', '03-02', '03-03'],
+   195→      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-04', '04-05', '04-06', '04-07'],
+   196→      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+   197→      'Módulo 06 - Admin': ['06-01', '06-02', '06-03', '06-04'],
+   198→      'Vista Empleado': [],
+   199→    },
+   200→    ANALISTA: {
+   201→      'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
+   202→      'Módulo 03 - Perfiles': ['03-01', '03-02'],
+   203→      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-06'],
+   204→    },
+   205→    APROBADOR: {
+   206→      'Módulo 03 - Perfiles': ['03-03'],
+   207→      'Módulo 04 - Nómina': ['04-04', '04-05', '04-07'],
+   208→      'Módulo 06 - Admin': ['06-01'],
+   209→    },
+   210→    GERENCIA: {
+   211→      'Módulo 04 - Nómina': ['04-01'],
+   212→      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+   213→    },
+   214→    AUDITOR: {
+   215→      'Módulo 02 - Empleados': ['02-01'],
+   216→      'Módulo 03 - Perfiles': ['03-01'],
+   217→      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03'],
+   218→      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+   219→      'Módulo 06 - Admin': ['06-04'],
+   220→    },
+   221→    EMPLEADO: {
+   222→      'Vista Empleado': ['06-05'],
+   223→    },
+   224→  };
+   225→
+   226→  const allowedIds = roleItemMap[role]?.[group.title] ?? [];
+   227→  return group.items.filter(item => allowedIds.includes(item.id));
+   228→}
+   229→
+   230→// Custom calendar icon since we can't import it from lucide
+   231→function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
+   232→  return (
+   233→    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+   234→      <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+   235→      <line x1="16" x2="16" y1="2" y2="6"/>
+   236→      <line x1="8" x2="8" y1="2" y2="6"/>
+   237→      <line x1="3" x2="21" y1="10" y2="10"/>
+   238→    </svg>
+   239→  );
+   240→}
+   241→
+   242→function ScaleIcon(props: React.SVGProps<SVGSVGElement>) {
+   243→  return (
+   244→    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+   245→      <path d="M16 3h5v5"/>
+   246→      <path d="M8 3H3v5"/>
+   247→      <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/>
+   248→      <path d="m15 9 6-6"/>
+   249→    </svg>
+   250→  );
+   251→}
+   252→
+   253→// ============================================================
+   254→// VIEW LABELS MAP
+   255→// ============================================================
+   256→const VIEW_LABELS: Record<ViewId, string> = {
+   257→  'dashboard': 'Dashboard',
+   258→  '01-03': 'Gestión de Usuarios',
+   259→  '02-01': 'Directorio de Empleados',
+   260→  '02-02': 'Detalle de Empleado',
+   261→  '02-03': 'Nuevo Empleado',
+   262→  '02-04': 'Incidencias',
+   263→  '03-01': 'Catálogo de Perfiles',
+   264→  '03-02': 'Formulario de Perfil',
+   265→  '03-03': 'Bandas Salariales',
+   266→  '04-01': 'Dashboard Nómina',
+   267→  '04-02': 'Períodos de Nómina',
+   268→  '04-03': 'Cálculo de Nómina',
+   269→  '04-04': 'Aprobación de Nómina',
+   270→  '04-05': 'Dispersión de Pago',
+   271→  '04-06': 'Aguinaldo',
+   272→  '04-07': 'Liquidaciones',
+   273→  '05-01': 'Planilla ISSS',
+   274→  '05-02': 'Planilla AFP',
+   275→  '05-03': 'Retenciones ISR',
+   276→  '05-04': 'Gestión de Talento',
+   277→  '06-01': 'Parámetros Legales',
+   278→  '06-02': 'Organigrama',
+   279→  '06-03': 'Integraciones',
+   280→  '06-04': 'Bitácora',
+   281→  '06-05': 'Mi Portal',
+   282→};
+   283→
+   284→// ============================================================
+   285→// LOGIN SCREEN
+   286→// ============================================================
+   287→interface LoginScreenProps {
+   288→  onLogin: (email: string, password: string) => Promise<void>;
+   289→  isLoading: boolean;
+   290→  error: string | null;
+   291→}
+   292→
+   293→function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
+   294→  const [email, setEmail] = useState('');
+   295→  const [password, setPassword] = useState('');
+   296→  const [showRecovery, setShowRecovery] = useState(false);
+   297→
+   298→  const handleSubmit = async (e: React.FormEvent) => {
+   299→    e.preventDefault();
+   300→    await onLogin(email, password);
+   301→  };
+   302→
+   303→  return (
+   304→    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
+   305→      <div className="w-full max-w-md">
+   306→        {/* Logo & Title */}
+   307→        <div className="text-center mb-8">
+   308→          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg mb-4">
+   309→            <svg viewBox="0 0 40 40" className="w-10 h-10 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
+   310→              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
+   311→              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
+   312→              <path d="M4 12V28L20 36V20L4 12Z" stroke="currentColor" strokeWidth="2"/>
+   313→              <path d="M36 12V28L20 36V20L36 12Z" stroke="currentColor" strokeWidth="2"/>
+   314→            </svg>
+   315→          </div>
+   316→          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+   317→            Sistema de Nómina y Perfiles de Puestos
+   318→          </h1>
+   319→          <p className="text-slate-500 mt-1 text-sm">
+   320→            República de El Salvador
+   321→          </p>
+   322→        </div>
+   323→
+   324→        {/* Login Card */}
+   325→        <Card className="shadow-xl border-0 shadow-slate-200/60">
+   326→          <CardHeader className="pb-4">
+   327→            <CardTitle className="text-lg">Iniciar Sesión</CardTitle>
+   328→            <CardDescription>Ingrese sus credenciales para acceder al sistema</CardDescription>
+   329→          </CardHeader>
+   330→          <CardContent>
+   331→            <form onSubmit={handleSubmit} className="space-y-4">
+   332→              <div className="space-y-2">
+   333→                <Label htmlFor="email">Correo Electrónico</Label>
+   334→                <Input
+   335→                  id="email"
+   336→                  type="email"
+   337→                  placeholder="usuario@nomina.gob.sv"
+   338→                  value={email}
+   339→                  onChange={(e) => setEmail(e.target.value)}
+   340→                  required
+   341→                  disabled={isLoading}
+   342→                  className="h-11"
+   343→                />
+   344→              </div>
+   345→              <div className="space-y-2">
+   346→                <Label htmlFor="password">Contraseña</Label>
+   347→                <Input
+   348→                  id="password"
+   349→                  type="password"
+   350→                  placeholder="••••••••"
+   351→                  value={password}
+   352→                  onChange={(e) => setPassword(e.target.value)}
+   353→                  required
+   354→                  disabled={isLoading}
+   355→                  className="h-11"
+   356→                />
+   357→              </div>
+   358→
+   359→              {error && (
+   360→                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+   361→                  <AlertCircle className="h-4 w-4 shrink-0" />
+   362→                  <span>{error}</span>
+   363→                </div>
+   364→              )}
+   365→
+   366→              <Button
+   367→                type="submit"
+   368→                className="w-full h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md"
+   369→                disabled={isLoading}
+   370→              >
+   371→                {isLoading ? (
+   372→                  <>
+   373→                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+   374→                    Verificando...
+   375→                  </>
+   376→                ) : (
+   377→                  'Iniciar Sesión'
+   378→                )}
+   379→              </Button>
+   380→
+   381→              <button
+   382→                type="button"
+   383→                onClick={() => setShowRecovery(true)}
+   384→                className="w-full text-sm text-emerald-700 hover:text-emerald-800 hover:underline transition-colors"
+   385→              >
+   386→                ¿Olvidó su contraseña?
+   387→              </button>
+   388→            </form>
+   389→          </CardContent>
+   390→        </Card>
+   391→
+   392→        {/* Demo Credentials */}
+   393→        <Card className="mt-4 bg-amber-50/80 border-amber-200/60 shadow-sm">
+   394→          <CardContent className="p-4">
+   395→            <p className="text-xs font-semibold text-amber-800 mb-2 flex items-center gap-1">
+   396→              <KeyRound className="h-3.5 w-3.5" />
+   397→              Credenciales de Demostración
+   398→            </p>
+   399→            <div className="grid grid-cols-2 gap-1.5 text-xs text-amber-700">
+   400→              <span>admin@nomina.gob.sv</span><span className="text-amber-500">Admin2026!</span>
+   401→              <span>analista@nomina.gob.sv</span><span className="text-amber-500">Analista2026!</span>
+   402→              <span>aprobador@nomina.gob.sv</span><span className="text-amber-500">Aprobador2026!</span>
+   403→              <span>gerencia@nomina.gob.sv</span><span className="text-amber-500">Gerencia2026!</span>
+   404→              <span>auditor@nomina.gob.sv</span><span className="text-amber-500">Auditor2026!</span>
+   405→              <span>empleado@nomina.gob.sv</span><span className="text-amber-500">Empleado2026!</span>
+   406→            </div>
+   407→          </CardContent>
+   408→        </Card>
+   409→
+   410→        {/* Password Recovery Dialog */}
+   411→        <PasswordRecoveryDialog open={showRecovery} onOpenChange={setShowRecovery} />
+   412→      </div>
+   413→    </div>
+   414→  );
+   415→}
+   416→
+   417→// ============================================================
+   418→// PASSWORD RECOVERY DIALOG
+   419→// ============================================================
+   420→interface PasswordRecoveryDialogProps {
+   421→  open: boolean;
+   422→  onOpenChange: (open: boolean) => void;
+   423→}
+   424→
+   425→function PasswordRecoveryDialog({ open, onOpenChange }: PasswordRecoveryDialogProps) {
+   426→  const [step, setStep] = useState(1);
+   427→  const [email, setEmail] = useState('');
+   428→  const [otp, setOtp] = useState('');
+   429→  const [otpId, setOtpId] = useState('');
+   430→  const [newPassword, setNewPassword] = useState('');
+   431→  const [confirmPassword, setConfirmPassword] = useState('');
+   432→  const [demoOtp, setDemoOtp] = useState<string | null>(null);
+   433→  const [isLoading, setIsLoading] = useState(false);
+   434→  const [error, setError] = useState<string | null>(null);
+   435→  const [success, setSuccess] = useState<string | null>(null);
+   436→  const { toast } = useToast();
+   437→
+   438→  const handleReset = () => {
+   439→    setStep(1);
+   440→    setEmail('');
+   441→    setOtp('');
+   442→    setOtpId('');
+   443→    setNewPassword('');
+   444→    setConfirmPassword('');
+   445→    setDemoOtp(null);
+   446→    setIsLoading(false);
+   447→    setError(null);
+   448→    setSuccess(null);
+   449→  };
+   450→
+   451→  const handleClose = (newOpen: boolean) => {
+   452→    if (!newOpen) handleReset();
+   453→    onOpenChange(newOpen);
+   454→  };
+   455→
+   456→  const handleStep1 = async () => {
+   457→    setError(null);
+   458→    setIsLoading(true);
+   459→    try {
+   460→      const res = await fetch('/api/auth/forgot-password', {
+   461→        method: 'POST',
+   462→        headers: { 'Content-Type': 'application/json' },
+   463→        body: JSON.stringify({ email }),
+   464→      });
+   465→      const data = await res.json();
+   466→      if (!res.ok) {
+   467→        setError(data.error || 'Error al solicitar código');
+   468→        return;
+   469→      }
+   470→      setDemoOtp(data.demo_otp);
+   471→      setSuccess('Código enviado. Verifique su correo.');
+   472→      setStep(2);
+   473→    } catch {
+   474→      setError('Error de conexión');
+   475→    } finally {
+   476→      setIsLoading(false);
+   477→    }
+   478→  };
+   479→
+   480→  const handleStep2 = async () => {
+   481→    setError(null);
+   482→    setIsLoading(true);
+   483→    try {
+   484→      const res = await fetch('/api/auth/verify-otp', {
+   485→        method: 'POST',
+   486→        headers: { 'Content-Type': 'application/json' },
+   487→        body: JSON.stringify({ email, otp }),
+   488→      });
+   489→      const data = await res.json();
+   490→      if (!res.ok) {
+   491→        setError(data.error || 'Código inválido');
+   492→        return;
+   493→      }
+   494→      setOtpId(data.otp_id);
+   495→      setSuccess('Código verificado');
+   496→      setStep(3);
+   497→    } catch {
+   498→      setError('Error de conexión');
+   499→    } finally {
+   500→      setIsLoading(false);
+   501→    }
+   502→  };
+   503→
+   504→  const handleStep3 = async () => {
+   505→    setError(null);
+   506→    if (newPassword !== confirmPassword) {
+   507→      setError('Las contraseñas no coinciden');
+   508→      return;
+   509→    }
+   510→    if (newPassword.length < 8) {
+   511→      setError('La contraseña debe tener al menos 8 caracteres');
+   512→      return;
+   513→    }
+   514→    setIsLoading(true);
+   515→    try {
+   516→      const res = await fetch('/api/auth/reset-password', {
+   517→        method: 'POST',
+   518→        headers: { 'Content-Type': 'application/json' },
+   519→        body: JSON.stringify({ otp_id: otpId, email, new_password: newPassword }),
+   520→      });
+   521→      const data = await res.json();
+   522→      if (!res.ok) {
+   523→        setError(data.error || 'Error al actualizar contraseña');
+   524→        return;
+   525→      }
+   526→      toast({
+   527→        title: 'Contraseña actualizada',
+   528→        description: 'Puede iniciar sesión con su nueva contraseña',
+   529→      });
+   530→      handleClose(false);
+   531→    } catch {
+   532→      setError('Error de conexión');
+   533→    } finally {
+   534→      setIsLoading(false);
+   535→    }
+   536→  };
+   537→
+   538→  const stepLabels = ['Email', 'Verificación', 'Nueva Contraseña'];
+   539→  const progressValue = (step / 3) * 100;
+   540→
+   541→  return (
+   542→    <Dialog open={open} onOpenChange={handleClose}>
+   543→      <DialogContent className="sm:max-w-md">
+   544→        <DialogHeader>
+   545→          <DialogTitle className="flex items-center gap-2">
+   546→            <Lock className="h-5 w-5 text-emerald-600" />
+   547→            Recuperar Contraseña
+   548→          </DialogTitle>
+   549→          <DialogDescription>
+   550→            Siga los pasos para restablecer su contraseña
+   551→          </DialogDescription>
+   552→        </DialogHeader>
+   553→
+   554→        {/* Progress indicator */}
+   555→        <div className="space-y-2">
+   556→          <div className="flex justify-between text-xs text-slate-500">
+   557→            {stepLabels.map((label, i) => (
+   558→              <span key={i} className={step > i ? 'text-emerald-600 font-medium' : step === i + 1 ? 'text-slate-900 font-medium' : ''}>
+   559→                {i + 1}. {label}
+   560→              </span>
+   561→            ))}
+   562→          </div>
+   563→          <Progress value={progressValue} className="h-2" />
+   564→        </div>
+   565→
+   566→        <div className="space-y-4">
+   567→          {error && (
+   568→            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+   569→              <AlertCircle className="h-4 w-4 shrink-0" />
+   570→              <span>{error}</span>
+   571→            </div>
+   572→          )}
+   573→
+   574→          {success && step > 1 && (
+   575→            <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg">
+   576→              <CheckCircle className="h-4 w-4 shrink-0" />
+   577→              <span>{success}</span>
+   578→            </div>
+   579→          )}
+   580→
+   581→          {/* Step 1: Email */}
+   582→          {step === 1 && (
+   583→            <div className="space-y-4">
+   584→              <div className="space-y-2">
+   585→                <Label>Correo Electrónico</Label>
+   586→                <Input
+   587→                  type="email"
+   588→                  placeholder="usuario@nomina.gob.sv"
+   589→                  value={email}
+   590→                  onChange={(e) => setEmail(e.target.value)}
+   591→                  disabled={isLoading}
+   592→                />
+   593→              </div>
+   594→              <Button onClick={handleStep1} disabled={isLoading || !email} className="w-full bg-emerald-600 hover:bg-emerald-700">
+   595→                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+   596→                Enviar Código
+   597→              </Button>
+   598→            </div>
+   599→          )}
+   600→
+   601→          {/* Step 2: OTP */}
+   602→          {step === 2 && (
+   603→            <div className="space-y-4">
+   604→              <div className="space-y-2">
+   605→                <Label>Código de Verificación</Label>
+   606→                <Input
+   607→                  placeholder="000000"
+   608→                  value={otp}
+   609→                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+   610→                  disabled={isLoading}
+   611→                  className="text-center text-lg tracking-[0.5em] font-mono"
+   612→                  maxLength={6}
+   613→                />
+   614→              </div>
+   615→              {demoOtp && (
+   616→                <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded">
+   617→                  Demo - Código: <strong>{demoOtp}</strong>
+   618→                </p>
+   619→              )}
+   620→              <div className="flex gap-2">
+   621→                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+   622→                  <ArrowLeft className="mr-1 h-4 w-4" /> Volver
+   623→                </Button>
+   624→                <Button onClick={handleStep2} disabled={isLoading || otp.length !== 6} className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+   625→                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+   626→                  Verificar
+   627→                </Button>
+   628→              </div>
+   629→            </div>
+   630→          )}
+   631→
+   632→          {/* Step 3: New Password */}
+   633→          {step === 3 && (
+   634→            <div className="space-y-4">
+   635→              <div className="space-y-2">
+   636→                <Label>Nueva Contraseña</Label>
+   637→                <Input
+   638→                  type="password"
+   639→                  placeholder="Mínimo 8 caracteres"
+   640→                  value={newPassword}
+   641→                  onChange={(e) => setNewPassword(e.target.value)}
+   642→                  disabled={isLoading}
+   643→                />
+   644→              </div>
+   645→              <div className="space-y-2">
+   646→                <Label>Confirmar Contraseña</Label>
+   647→                <Input
+   648→                  type="password"
+   649→                  placeholder="Repita la contraseña"
+   650→                  value={confirmPassword}
+   651→                  onChange={(e) => setConfirmPassword(e.target.value)}
+   652→                  disabled={isLoading}
+   653→                />
+   654→              </div>
+   655→              <Button onClick={handleStep3} disabled={isLoading || !newPassword || !confirmPassword} className="w-full bg-emerald-600 hover:bg-emerald-700">
+   656→                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+   657→                Actualizar Contraseña
+   658→              </Button>
+   659→            </div>
+   660→          )}
+   661→        </div>
+   662→      </DialogContent>
+   663→    </Dialog>
+   664→  );
+   665→}
+   666→
+   667→// ============================================================
+   668→// SIDEBAR
+   669→// ============================================================
+   670→interface SidebarProps {
+   671→  user: UserData;
+   672→  currentView: ViewId;
+   673→  onNavigate: (view: ViewId) => void;
+   674→  collapsed: boolean;
+   675→  onToggle: () => void;
+   676→}
+   677→
+   678→function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: SidebarProps) {
+   679→  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+   680→    const initial = new Set<string>();
+   681→    NAV_GROUPS.forEach(g => {
+   682→      if (g.roles.includes(user.rol)) {
+   683→        initial.add(g.title);
+   684→      }
+   685→    });
+   686→    return initial;
+   687→  });
+   688→
+   689→  const toggleGroup = (title: string) => {
+   690→    setExpandedGroups(prev => {
+   691→      const next = new Set(prev);
+   692→      if (next.has(title)) next.delete(title);
+   693→      else next.add(title);
+   694→      return next;
+   695→    });
+   696→  };
+   697→
+   698→  return (
+   699→    <>
+   700→      {/* Mobile overlay */}
+   701→      {!collapsed && (
+   702→        <div
+   703→          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+   704→          onClick={onToggle}
+   705→        />
+   706→      )}
+   707→
+   708→      <aside
+   709→        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 text-white transition-all duration-300 ${
+   710→          collapsed ? '-translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden' : 'w-64 translate-x-0'
+   711→        }`}
+   712→      >
+   713→        {/* Brand */}
+   714→        <div className="flex items-center gap-3 px-4 h-14 border-b border-slate-700/50">
+   715→          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0">
+   716→            <svg viewBox="0 0 40 40" className="w-5 h-5 text-white" fill="none">
+   717→              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
+   718→              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
+   719→            </svg>
+   720→          </div>
+   721→          <div className="overflow-hidden">
+   722→            <p className="font-bold text-sm leading-tight whitespace-nowrap">Nómina SV</p>
+   723→            <p className="text-[10px] text-slate-400 whitespace-nowrap">El Salvador</p>
+   724→          </div>
+   725→          <button onClick={onToggle} className="ml-auto lg:hidden text-slate-400 hover:text-white">
+   726→            <X className="h-5 w-5" />
+   727→          </button>
+   728→        </div>
+   729→
+   730→        {/* Navigation */}
+   731→        <ScrollArea className="flex-1 py-2">
+   732→          <nav className="space-y-1 px-2">
+   733→            {NAV_GROUPS.map(group => {
+   734→              const visibleItems = getVisibleItems(group, user.rol);
+   735→              if (visibleItems.length === 0) return null;
+   736→
+   737→              const isExpanded = expandedGroups.has(group.title);
+   738→              const GroupIcon = group.icon;
+   739→
+   740→              return (
+   741→                <div key={group.title}>
+   742→                  <button
+   743→                    onClick={() => toggleGroup(group.title)}
+   744→                    className="flex items-center gap-2 w-full px-2 py-2 text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-colors"
+   745→                  >
+   746→                    <GroupIcon className="h-3.5 w-3.5" />
+   747→                    <span className="truncate flex-1 text-left">{group.title}</span>
+   748→                    {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+   749→                  </button>
+   750→
+   751→                  {isExpanded && (
+   752→                    <div className="space-y-0.5 mt-0.5 mb-1">
+   753→                      {visibleItems.map(item => {
+   754→                        const isActive = currentView === item.id;
+   755→                        const ItemIcon = item.icon;
+   756→                        return (
+   757→                          <button
+   758→                            key={item.id}
+   759→                            onClick={() => {
+   760→                              onNavigate(item.id);
+   761→                              if (window.innerWidth < 1024) onToggle();
+   762→                            }}
+   763→                            className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm transition-all ${
+   764→                              isActive
+   765→                                ? 'bg-emerald-600/20 text-emerald-400 font-medium'
+   766→                                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+   767→                            }`}
+   768→                          >
+   769→                            <ItemIcon className={`h-4 w-4 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+   770→                            <span>{item.label}</span>
+   771→                            {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+   772→                          </button>
+   773→                        );
+   774→                      })}
+   775→                    </div>
+   776→                  )}
+   777→                </div>
+   778→              );
+   779→            })}
+   780→          </nav>
+   781→        </ScrollArea>
+   782→
+   783→        {/* User info at bottom */}
+   784→        <div className="border-t border-slate-700/50 p-3">
+   785→          <div className="flex items-center gap-2.5">
+   786→            <Avatar className="h-8 w-8 bg-emerald-600">
+   787→              <AvatarFallback className="bg-emerald-600 text-white text-xs">
+   788→                {user.nombre[0]}{user.apellido[0]}
+   789→              </AvatarFallback>
+   790→            </Avatar>
+   791→            <div className="overflow-hidden flex-1">
+   792→              <p className="text-sm font-medium truncate">{user.nombre} {user.apellido}</p>
+   793→              <p className="text-[10px] text-slate-400 truncate">{user.rol}</p>
+   794→            </div>
+   795→          </div>
+   796→        </div>
+   797→      </aside>
+   798→    </>
+   799→  );
+   800→}
+   801→
+   802→// ============================================================
+   803→// TOP HEADER BAR
+   804→// ============================================================
+   805→interface HeaderBarProps {
+   806→  user: UserData;
+   807→  currentView: ViewId;
+   808→  onToggleSidebar: () => void;
+   809→  onLogout: () => void;
+   810→}
+   811→
+   812→function HeaderBar({ user, currentView, onToggleSidebar, onLogout }: HeaderBarProps) {
+   813→  const { toast } = useToast();
+   814→
+   815→  const handleLogout = async () => {
+   816→    try {
+   817→      await fetch('/api/auth/logout', { method: 'POST' });
+   818→    } catch {
+   819→      // ignore
+   820→    }
+   821→    onLogout();
+   822→  };
+   823→
+   824→  return (
+   825→    <header className="h-14 bg-white border-b border-slate-200 shadow-sm flex items-center px-4 gap-4 shrink-0 z-30">
+   826→      {/* Mobile menu toggle */}
+   827→      <button
+   828→        onClick={onToggleSidebar}
+   829→        className="lg:hidden text-slate-600 hover:text-slate-900"
+   830→      >
+   831→        <Menu className="h-5 w-5" />
+   832→      </button>
+   833→
+   834→      {/* Desktop sidebar toggle */}
+   835→      <TooltipProvider>
+   836→        <Tooltip>
+   837→          <TooltipTrigger asChild>
+   838→            <button
+   839→              onClick={onToggleSidebar}
+   840→              className="hidden lg:block text-slate-400 hover:text-slate-600 transition-colors"
+   841→            >
+   842→              <Menu className="h-4 w-4" />
+   843→            </button>
+   844→          </TooltipTrigger>
+   845→          <TooltipContent>Alternar menú</TooltipContent>
+   846→        </Tooltip>
+   847→      </TooltipProvider>
+   848→
+   849→      {/* Current view name */}
+   850→      <div className="flex-1">
+   851→        <h2 className="text-sm font-semibold text-slate-900">
+   852→          {VIEW_LABELS[currentView] || 'Dashboard'}
+   853→        </h2>
+   854→      </div>
+   855→
+   856→      {/* User dropdown */}
+   857→      <DropdownMenu>
+   858→        <DropdownMenuTrigger asChild>
+   859→          <button className="flex items-center gap-2 hover:bg-slate-50 rounded-lg px-2 py-1.5 transition-colors">
+   860→            <Avatar className="h-8 w-8">
+   861→              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs font-medium">
+   862→                {user.nombre[0]}{user.apellido[0]}
+   863→              </AvatarFallback>
+   864→            </Avatar>
+   865→            <div className="hidden sm:block text-left">
+   866→              <p className="text-sm font-medium text-slate-700 leading-tight">{user.nombre} {user.apellido}</p>
+   867→              <p className="text-[10px] text-slate-400 leading-tight">{user.rol}</p>
+   868→            </div>
+   869→            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+   870→          </button>
+   871→        </DropdownMenuTrigger>
+   872→        <DropdownMenuContent align="end" className="w-56">
+   873→          <div className="px-2 py-1.5">
+   874→            <p className="text-sm font-medium">{user.nombre} {user.apellido}</p>
+   875→            <p className="text-xs text-slate-500">{user.email}</p>
+   876→          </div>
+   877→          <DropdownMenuSeparator />
+   878→          <DropdownMenuItem onClick={() => toast({ title: 'Perfil', description: 'Módulo de perfil en desarrollo' })}>
+   879→            <User className="mr-2 h-4 w-4" />
+   880→            Mi Perfil
+   881→          </DropdownMenuItem>
+   882→          <DropdownMenuItem onClick={() => toast({ title: 'Cambiar Contraseña', description: 'Módulo en desarrollo' })}>
+   883→            <Lock className="mr-2 h-4 w-4" />
+   884→            Cambiar Contraseña
+   885→          </DropdownMenuItem>
+   886→          <DropdownMenuSeparator />
+   887→          <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
+   888→            <LogOut className="mr-2 h-4 w-4" />
+   889→            Cerrar Sesión
+   890→          </DropdownMenuItem>
+   891→        </DropdownMenuContent>
+   892→      </DropdownMenu>
+   893→    </header>
+   894→  );
+   895→}
+   896→
+   897→// ============================================================
+   898→// DASHBOARD / WELCOME VIEW
+   899→// ============================================================
+   900→function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; accessToken: string | null; onNavigate: (view: ViewId) => void }) {
+   901→  const [dashboardData, setDashboardData] = useState<{
+   902→    total_empleados_activos: number;
+   903→    nomina_mes: number;
+   904→    cumplimiento_previsional: number;
+   905→    semaforo: string;
+   906→    cumplimientos: { nombre: string; presentado: boolean; peso: number }[];
+   907→    vencimientos: { nombre: string; fecha: string; dias: number }[];
+   908→  } | null>(null);
+   909→  const [totalPerfiles, setTotalPerfiles] = useState(0);
+   910→  const [auditEntries, setAuditEntries] = useState<Array<{
+   911→    id: string;
+   912→    accion: string;
+   913→    tabla_afectada: string | null;
+   914→    fecha_accion: string;
+   915→    nivel_criticidad: string;
+   916→    usuario_email: string | null;
+   917→    usuario: { nombre: string; apellido: string } | null;
+   918→  }>>([]);
+   919→  const [loading, setLoading] = useState(true);
+   920→
+   921→  useEffect(() => {
+   922→    if (!accessToken) return;
+   923→    const fetchData = async () => {
+   924→      try {
+   925→        const headers = { Authorization: `Bearer ${accessToken}` };
+   926→        const [dashRes, perfilesRes, auditRes] = await Promise.all([
+   927→          fetch('/api/nomina/dashboard', { headers }),
+   928→          fetch('/api/perfiles-puesto', { headers }),
+   929→          fetch('/api/admin/bitacora?page=1&page_size=5', { headers }),
+   930→        ]);
+   931→        if (dashRes.ok) {
+   932→          const dashData = await dashRes.json();
+   933→          setDashboardData(dashData.kpis);
+   934→        }
+   935→        if (perfilesRes.ok) {
+   936→          const perfData = await perfilesRes.json();
+   937→          setTotalPerfiles(perfData.data?.length || 0);
+   938→        }
+   939→        if (auditRes.ok) {
+   940→          const auditData = await auditRes.json();
+   941→          setAuditEntries(auditData.entries || []);
+   942→        }
+   943→      } catch (err) {
+   944→        console.error('Error fetching dashboard data:', err);
+   945→      } finally {
+   946→        setLoading(false);
+   947→      }
+   948→    };
+   949→    fetchData();
+   950→  }, [accessToken]);
+   951→
+   952→  const kpis = [
+   953→    { label: 'Empleados Activos', value: dashboardData?.total_empleados_activos ?? 0, icon: Users, color: 'text-teal-600', bg: 'bg-teal-50' },
+   954→    { label: 'Perfiles de Puesto', value: totalPerfiles, icon: Briefcase, color: 'text-violet-600', bg: 'bg-violet-50' },
+   955→    { label: 'Nómina del Mes', value: dashboardData?.nomina_mes ? `$${dashboardData.nomina_mes.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00', icon: Calculator, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+   956→    { label: 'Cumplimiento', value: dashboardData ? `${dashboardData.cumplimiento_previsional}%` : '0%', icon: FileText, color: 'text-amber-600', bg: 'bg-amber-50' },
+   957→  ];
+   958→
+   959→  const semaforoColor = dashboardData?.semaforo === 'verde' ? 'bg-emerald-500' : dashboardData?.semaforo === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
+   960→
+   961→  const quickActions: Array<{ label: string; desc: string; icon: React.ElementType; color: string; bg: string; viewId: ViewId; roles: UserRole[] }> = [
+   962→    { label: 'Directorio Empleados', desc: 'Buscar y gestionar empleados', icon: Users, color: 'text-teal-600', bg: 'bg-teal-50', viewId: '02-01', roles: ['ADMIN', 'ANALISTA', 'AUDITOR'] },
+   963→    { label: 'Dashboard Nómina', desc: 'Ver resumen de nómina', icon: LayoutDashboard, color: 'text-emerald-600', bg: 'bg-emerald-50', viewId: '04-01', roles: ['ADMIN', 'ANALISTA', 'GERENCIA', 'AUDITOR'] },
+   964→    { label: 'Calcular Nómina', desc: 'Iniciar cálculo del período', icon: Calculator, color: 'text-sky-600', bg: 'bg-sky-50', viewId: '04-03', roles: ['ADMIN', 'ANALISTA'] },
+   965→    { label: 'Aprobar Nómina', desc: 'Revisar y aprobar nóminas', icon: CheckCircle, color: 'text-violet-600', bg: 'bg-violet-50', viewId: '04-04', roles: ['ADMIN', 'APROBADOR'] },
+   966→    { label: 'Gestionar Usuarios', desc: 'Crear, editar y desactivar', icon: Users, color: 'text-rose-600', bg: 'bg-rose-50', viewId: '01-03', roles: ['ADMIN'] },
+   967→    { label: 'Reportes', desc: 'Planillas ISSS, AFP, ISR', icon: BarChart3, color: 'text-amber-600', bg: 'bg-amber-50', viewId: '05-01', roles: ['ADMIN', 'GERENCIA', 'AUDITOR'] },
+   968→    { label: 'Mi Portal', desc: 'Vacaciones, recibos, solicitudes', icon: Eye, color: 'text-emerald-600', bg: 'bg-emerald-50', viewId: '06-05', roles: ['EMPLEADO'] },
+   969→  ];
+   970→
+   971→  const visibleActions = quickActions.filter(a => a.roles.includes(user.rol));
+   972→
+   973→  const getAuditIcon = (accion: string) => {
+   974→    if (accion.includes('LOGIN')) return <Shield className="h-3.5 w-3.5" />;
+   975→    if (accion.includes('CREATE')) return <Plus className="h-3.5 w-3.5" />;
+   976→    if (accion.includes('UPDATE')) return <FileText className="h-3.5 w-3.5" />;
+   977→    if (accion.includes('DELETE')) return <AlertCircle className="h-3.5 w-3.5" />;
+   978→    return <ScrollText className="h-3.5 w-3.5" />;
+   979→  };
+   980→
+   981→  const getAuditColor = (nivel: string) => {
+   982→    if (nivel === 'ALTA') return 'text-red-600 bg-red-50';
+   983→    if (nivel === 'MEDIA') return 'text-amber-600 bg-amber-50';
+   984→    return 'text-slate-600 bg-slate-50';
+   985→  };
+   986→
+   987→  return (
+   988→    <div className="space-y-6">
+   989→      {/* Welcome banner */}
+   990→      <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl p-6 text-white shadow-lg">
+   991→        <h1 className="text-2xl font-bold">
+   992→          Bienvenido, {user.nombre}
+   993→        </h1>
+   994→        <p className="text-emerald-100 mt-1">
+   995→          Sistema de Nómina y Perfiles de Puestos — República de El Salvador
+   996→        </p>
+   997→        <div className="flex flex-wrap items-center gap-2 mt-3">
+   998→          <Badge variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30">
+   999→            {user.rol}
+  1000→          </Badge>
+  1001→          <Badge variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30">
+  1002→            {new Date().toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+  1003→          </Badge>
+  1004→        </div>
+  1005→      </div>
+  1006→
+  1007→      {/* KPI Cards */}
+  1008→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+  1009→        {loading ? (
+  1010→          Array.from({ length: 4 }).map((_, i) => (
+  1011→            <Card key={i} className="shadow-sm">
+  1012→              <CardContent className="p-4 sm:p-5">
+  1013→                <div className="animate-pulse">
+  1014→                  <div className="h-4 bg-slate-200 rounded w-24 mb-2" />
+  1015→                  <div className="h-8 bg-slate-200 rounded w-16" />
+  1016→                </div>
+  1017→              </CardContent>
+  1018→            </Card>
+  1019→          ))
+  1020→        ) : (
+  1021→          kpis.map(kpi => (
+  1022→            <Card key={kpi.label} className="shadow-sm hover:shadow-md transition-shadow">
+  1023→              <CardContent className="p-4 sm:p-5">
+  1024→                <div className="flex items-center justify-between">
+  1025→                  <div className="min-w-0">
+  1026→                    <p className="text-xs sm:text-sm text-slate-500">{kpi.label}</p>
+  1027→                    <p className="text-xl sm:text-3xl font-bold text-slate-900 mt-1 truncate">{kpi.value}</p>
+  1028→                  </div>
+  1029→                  <div className={`p-2 sm:p-3 rounded-xl ${kpi.bg} shrink-0`}>
+  1030→                    <kpi.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${kpi.color}`} />
+  1031→                  </div>
+  1032→                </div>
+  1033→              </CardContent>
+  1034→            </Card>
+  1035→          ))
+  1036→        )}
+  1037→      </div>
+  1038→
+  1039→      {/* Compliance Semaphore & Deadlines */}
+  1040→      {dashboardData && (
+  1041→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1042→          <Card className="shadow-sm">
+  1043→            <CardHeader className="pb-3">
+  1044→              <CardTitle className="text-base flex items-center gap-2">
+  1045→                <Shield className="h-4 w-4 text-slate-500" />
+  1046→                Semáforo de Cumplimiento
+  1047→                {/* Traffic light dots */}
+  1048→                <div className="flex items-center gap-1 ml-auto p-1 bg-slate-900 rounded-full">
+  1049→                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'rojo' ? 'bg-red-500 shadow-sm shadow-red-500/50' : 'bg-red-900/40'}`} />
+  1050→                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
+  1051→                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
+  1052→                </div>
+  1053→              </CardTitle>
+  1054→            </CardHeader>
+  1055→            <CardContent className="space-y-2.5">
+  1056→              {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => (
+  1057→                <div key={c.nombre} className="flex items-center justify-between p-2 rounded-lg bg-slate-50/80">
+  1058→                  <div className="flex items-center gap-2">
+  1059→                    {c.presentado ? (
+  1060→                      <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+  1061→                    ) : (
+  1062→                      <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+  1063→                    )}
+  1064→                    <span className="text-sm text-slate-700">{c.nombre}</span>
+  1065→                  </div>
+  1066→                  <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+  1067→                    {c.presentado ? 'Presentado' : 'Pendiente'}
+  1068→                  </Badge>
+  1069→                </div>
+  1070→              ))}
+  1071→            </CardContent>
+  1072→          </Card>
+  1073→
+  1074→          <Card className="shadow-sm">
+  1075→            <CardHeader className="pb-3">
+  1076→              <CardTitle className="text-base flex items-center gap-2">
+  1077→                <Clock className="h-4 w-4 text-slate-500" />
+  1078→                Próximos Vencimientos
+  1079→              </CardTitle>
+  1080→            </CardHeader>
+  1081→            <CardContent className="space-y-2.5">
+  1082→              {dashboardData.vencimientos?.length === 0 ? (
+  1083→                <div className="flex items-center justify-center py-6 text-emerald-600">
+  1084→                  <CheckCircle className="h-5 w-5 mr-2" />
+  1085→                  <span className="text-sm font-medium">Todos los pagos al día</span>
+  1086→                </div>
+  1087→              ) : (
+  1088→                dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => (
+  1089→                  <div key={v.nombre} className={`flex items-center justify-between p-2.5 rounded-lg border ${
+  1090→                    v.dias <= 5 ? 'border-red-200 bg-red-50/50' : 'border-slate-100 bg-slate-50/50'
+  1091→                  }`}>
+  1092→                    <div className="flex items-center gap-2">
+  1093→                      <div className={`w-2 h-2 rounded-full ${v.dias <= 5 ? 'bg-red-500' : v.dias <= 10 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+  1094→                      <span className="text-sm font-medium text-slate-700">{v.nombre}</span>
+  1095→                    </div>
+  1096→                    <div className="text-right">
+  1097→                      <p className="text-sm font-medium text-slate-900">{new Date(v.fecha).toLocaleDateString('es-SV')}</p>
+  1098→                      <p className={`text-xs ${v.dias <= 5 ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+  1099→                        {v.dias > 0 ? `${v.dias} días` : 'Vencido'}
+  1100→                      </p>
+  1101→                    </div>
+  1102→                  </div>
+  1103→                ))
+  1104→              )}
+  1105→            </CardContent>
+  1106→          </Card>
+  1107→        </div>
+  1108→      )}
+  1109→
+  1110→      {/* Quick actions and recent activity */}
+  1111→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1112→        <Card className="shadow-sm">
+  1113→          <CardHeader className="pb-3">
+  1114→            <CardTitle className="text-base flex items-center gap-2">
+  1115→              <ListChecks className="h-4 w-4 text-slate-500" />
+  1116→              Acciones Rápidas
+  1117→            </CardTitle>
+  1118→          </CardHeader>
+  1119→          <CardContent>
+  1120→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+  1121→              {visibleActions.map(action => (
+  1122→                <button
+  1123→                  key={action.viewId + action.label}
+  1124→                  onClick={() => onNavigate(action.viewId)}
+  1125→                  className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/80 hover:bg-slate-100 transition-all cursor-pointer text-left border border-transparent hover:border-slate-200 group"
+  1126→                >
+  1127→                  <div className={`p-2 rounded-lg ${action.bg} group-hover:scale-110 transition-transform`}>
+  1128→                    <action.icon className={`h-4 w-4 ${action.color}`} />
+  1129→                  </div>
+  1130→                  <div className="min-w-0">
+  1131→                    <p className="text-sm font-medium text-slate-800">{action.label}</p>
+  1132→                    <p className="text-xs text-slate-500 truncate">{action.desc}</p>
+  1133→                  </div>
+  1134→                </button>
+  1135→              ))}
+  1136→            </div>
+  1137→          </CardContent>
+  1138→        </Card>
+  1139→
+  1140→        <Card className="shadow-sm">
+  1141→          <CardHeader className="pb-3">
+  1142→            <CardTitle className="text-base flex items-center gap-2">
+  1143→              <ScrollText className="h-4 w-4 text-slate-500" />
+  1144→              Actividad Reciente
+  1145→            </CardTitle>
+  1146→          </CardHeader>
+  1147→          <CardContent>
+  1148→            {auditEntries.length === 0 ? (
+  1149→              <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+  1150→                <ScrollText className="h-8 w-8 mb-2" />
+  1151→                <p className="text-sm">Sin actividad reciente</p>
+  1152→              </div>
+  1153→            ) : (
+  1154→              <div className="space-y-2 max-h-64 overflow-y-auto">
+  1155→                {auditEntries.map((entry) => (
+  1156→                  <div key={entry.id} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50/80 border border-slate-100">
+  1157→                    <div className={`p-1.5 rounded-md shrink-0 mt-0.5 ${getAuditColor(entry.nivel_criticidad)}`}>
+  1158→                      {getAuditIcon(entry.accion)}
+  1159→                    </div>
+  1160→                    <div className="min-w-0 flex-1">
+  1161→                      <p className="text-xs font-medium text-slate-700 truncate">
+  1162→                        {entry.accion.replace(/_/g, ' ')}
+  1163→                        {entry.tabla_afectada && (
+  1164→                          <span className="text-slate-400 font-normal"> · {entry.tabla_afectada}</span>
+  1165→                        )}
+  1166→                      </p>
+  1167→                      <p className="text-[10px] text-slate-500 mt-0.5">
+  1168→                        {entry.usuario?.nombre ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : entry.usuario_email || 'Sistema'}
+  1169→                        <span className="mx-1">·</span>
+  1170→                        {new Date(entry.fecha_accion).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+  1171→                      </p>
+  1172→                    </div>
+  1173→                  </div>
+  1174→                ))}
+  1175→              </div>
+  1176→            )}
+  1177→          </CardContent>
+  1178→        </Card>
+  1179→      </div>
+  1180→    </div>
+  1181→  );
+  1182→}
+  1183→
+  1184→// ============================================================
+  1185→// PLACEHOLDER VIEW
+  1186→// ============================================================
+  1187→function PlaceholderView({ viewId }: { viewId: ViewId }) {
+  1188→  const label = VIEW_LABELS[viewId] || 'Vista';
+  1189→  return (
+  1190→    <Card className="shadow-sm">
+  1191→      <CardContent className="p-12 text-center">
+  1192→        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 mb-4">
+  1193→          <LayoutDashboard className="h-8 w-8 text-slate-400" />
+  1194→        </div>
+  1195→        <h2 className="text-xl font-semibold text-slate-900">{label}</h2>
+  1196→        <p className="text-slate-500 mt-2 max-w-md mx-auto">
+  1197→          Este módulo se encuentra en desarrollo. Pronto estará disponible con todas sus funcionalidades.
+  1198→        </p>
+  1199→        <Badge variant="secondary" className="mt-4">
+  1200→          Vista {viewId}
+  1201→        </Badge>
+  1202→      </CardContent>
+  1203→    </Card>
+  1204→  );
+  1205→}
+  1206→
+  1207→// ============================================================
+  1208→// MAIN APPLICATION LAYOUT
+  1209→// ============================================================
+  1210→interface AppLayoutProps {
+  1211→  user: UserData;
+  1212→  accessToken: string | null;
+  1213→  onLogout: () => void;
+  1214→}
+  1215→
+  1216→function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
+  1217→  const [currentView, setCurrentView] = useState<ViewId>('dashboard');
+  1218→  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  1219→  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  1220→
+  1221→  const renderView = () => {
+  1222→    if (currentView === 'dashboard') {
+  1223→      return <WelcomeDashboard user={user} accessToken={accessToken} onNavigate={setCurrentView} />;
+  1224→    }
+  1225→    switch (currentView) {
+  1226→      case '02-01':
+  1227→        return <EmployeeDirectory accessToken={accessToken} userRole={user.rol} onNavigateToDetail={(id) => { setSelectedEmployeeId(id); setCurrentView('02-02'); }} onNavigateToNew={() => setCurrentView('02-03')} />;
+  1228→      case '02-02':
+  1229→        return selectedEmployeeId ? <EmployeeDetail empleadoId={selectedEmployeeId} onBack={() => setCurrentView('02-01')} userRole={user.rol} accessToken={accessToken} /> : <PlaceholderView viewId={currentView} />;
+  1230→      case '02-03':
+  1231→        return <NewEmployeeForm accessToken={accessToken} userRole={user.rol} onBack={() => setCurrentView('02-01')} onSuccess={() => setCurrentView('02-01')} />;
+  1232→      case '02-04':
+  1233→        return <IncidenceManager accessToken={accessToken} userRole={user.rol} />;
+  1234→      case '01-03':
+  1235→        return <UserManagement accessToken={accessToken} />;
+  1236→      case '04-01':
+  1237→        return <PayrollDashboard accessToken={accessToken || ''} userRole={user.rol} />;
+  1238→      case '04-02':
+  1239→        return <PayrollPeriods accessToken={accessToken || ''} userRole={user.rol} />;
+  1240→      case '04-03':
+  1241→        return <PayrollCalculation accessToken={accessToken || ''} userRole={user.rol} />;
+  1242→      case '04-04':
+  1243→        return <PayrollApproval accessToken={accessToken || ''} userRole={user.rol} />;
+  1244→      case '04-05':
+  1245→        return <BankDispersion accessToken={accessToken || ''} userRole={user.rol} />;
+  1246→      case '04-06':
+  1247→        return <AguinaldoView accessToken={accessToken || ''} userRole={user.rol} />;
+  1248→      case '04-07':
+  1249→        return <LiquidationView accessToken={accessToken || ''} userRole={user.rol} />;
+  1250→      case '03-01':
+  1251→        return <ProfileCatalog accessToken={accessToken || ''} userRole={user.rol} />;
+  1252→      case '03-02':
+  1253→        return <PlaceholderView viewId={currentView} />;
+  1254→      case '03-03':
+  1255→        return <SalaryBands accessToken={accessToken || ''} userRole={user.rol} />;
+  1256→      case '05-01':
+  1257→        return <IsssReport accessToken={accessToken || ''} userRole={user.rol} />;
+  1258→      case '05-02':
+  1259→        return <AfpReport accessToken={accessToken || ''} userRole={user.rol} />;
+  1260→      case '05-03':
+  1261→        return <IsrReport accessToken={accessToken || ''} userRole={user.rol} />;
+  1262→      case '05-04':
+  1263→        return <TalentReport accessToken={accessToken || ''} userRole={user.rol} />;
+  1264→      case '06-01':
+  1265→        return <LegalParameters accessToken={accessToken || ''} userRole={user.rol} />;
+  1266→      case '06-02':
+  1267→        return <OrgChart accessToken={accessToken || ''} userRole={user.rol} />;
+  1268→      case '06-03':
+  1269→        return <Integrations accessToken={accessToken || ''} userRole={user.rol} />;
+  1270→      case '06-04':
+  1271→        return <AuditLog accessToken={accessToken || ''} userRole={user.rol} />;
+  1272→      case '06-05':
+  1273→        return <SelfServicePortal accessToken={accessToken || ''} userRole={user.rol} />;
+  1274→      default:
+  1275→        return <PlaceholderView viewId={currentView} />;
+  1276→    }
+  1277→  };
+  1278→
+  1279→  return (
+  1280→    <div className="flex h-screen bg-gray-50 overflow-hidden">
+  1281→      <Sidebar
+  1282→        user={user}
+  1283→        currentView={currentView}
+  1284→        onNavigate={setCurrentView}
+  1285→        collapsed={sidebarCollapsed}
+  1286→        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+  1287→      />
+  1288→
+  1289→      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+  1290→        <HeaderBar
+  1291→          user={user}
+  1292→          currentView={currentView}
+  1293→          onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+  1294→          onLogout={onLogout}
+  1295→        />
+  1296→
+  1297→        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+  1298→          {renderView()}
+  1299→        </main>
+  1300→      </div>
+  1301→    </div>
+  1302→  );
+  1303→}
+  1304→
+  1305→// ============================================================
+  1306→// AUTH PROVIDER
+  1307→// ============================================================
+  1308→function AuthProvider({ children }: { children: React.ReactNode }) {
+  1309→  const [user, setUser] = useState<UserData | null>(null);
+  1310→  const [accessToken, setAccessToken] = useState<string | null>(null);
+  1311→  const [isLoading, setIsLoading] = useState(true);
+  1312→
+  1313→  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+  1314→    try {
+  1315→      const res = await fetch('/api/auth/refresh', { method: 'POST' });
+  1316→      if (!res.ok) return null;
+  1317→      const data = await res.json();
+  1318→      setAccessToken(data.accessToken);
+  1319→      setUser(data.user);
+  1320→      return data.accessToken;
+  1321→    } catch {
+  1322→      return null;
+  1323→    }
+  1324→  }, []);
+  1325→
+  1326→  // Check for existing session on mount
+  1327→  useEffect(() => {
+  1328→    const init = async () => {
+  1329→      const token = await refreshAccessToken();
+  1330→      if (!token) {
+  1331→        setUser(null);
+  1332→        setAccessToken(null);
+  1333→      }
+  1334→      setIsLoading(false);
+  1335→    };
+  1336→    init();
+  1337→  }, [refreshAccessToken]);
+  1338→
+  1339→  // Auto refresh token before expiry
+  1340→  useEffect(() => {
+  1341→    if (!accessToken) return;
+  1342→    const interval = setInterval(async () => {
+  1343→      const newToken = await refreshAccessToken();
+  1344→      if (!newToken) {
+  1345→        setUser(null);
+  1346→        setAccessToken(null);
+  1347→      }
+  1348→    }, 55 * 60 * 1000); // Refresh every 55 minutes (token expires in 1h)
+  1349→    return () => clearInterval(interval);
+  1350→  }, [accessToken, refreshAccessToken]);
+  1351→
+  1352→  const login = useCallback(async (email: string, password: string) => {
+  1353→    const res = await fetch('/api/auth/login', {
+  1354→      method: 'POST',
+  1355→      headers: { 'Content-Type': 'application/json' },
+  1356→      body: JSON.stringify({ email, password }),
+  1357→    });
+  1358→    const data = await res.json();
+  1359→    if (!res.ok) throw new Error(data.error || 'Error al iniciar sesión');
+  1360→    setAccessToken(data.accessToken);
+  1361→    setUser(data.user);
+  1362→  }, []);
+  1363→
+  1364→  const logout = useCallback(async () => {
+  1365→    try {
+  1366→      await fetch('/api/auth/logout', { method: 'POST' });
+  1367→    } catch {
+  1368→      // ignore
+  1369→    }
+  1370→    setAccessToken(null);
+  1371→    setUser(null);
+  1372→  }, []);
+  1373→
+  1374→  return (
+  1375→    <AuthContext.Provider value={{ user, accessToken, login, logout, refreshAccessToken, isLoading }}>
+  1376→      {children}
+  1377→    </AuthContext.Provider>
+  1378→  );
+  1379→}
+  1380→
+  1381→// ============================================================
+  1382→// MAIN PAGE
+  1383→// ============================================================
+  1384→export default function HomePage() {
+  1385→  const [loginError, setLoginError] = useState<string | null>(null);
+  1386→  const [isLoginLoading, setIsLoginLoading] = useState(false);
+  1387→
+  1388→  return (
+  1389→    <AuthProvider>
+  1390→      <AuthGate
+  1391→        loginError={loginError}
+  1392→        setLoginError={setLoginError}
+  1393→        isLoginLoading={isLoginLoading}
+  1394→        setIsLoginLoading={setIsLoginLoading}
+  1395→      />
+  1396→    </AuthProvider>
+  1397→  );
+  1398→}
+  1399→
+  1400→function AuthGate({
+  1401→  loginError,
+  1402→  setLoginError,
+  1403→  isLoginLoading,
+  1404→  setIsLoginLoading,
+  1405→}: {
+  1406→  loginError: string | null;
+  1407→  setLoginError: React.Dispatch<React.SetStateAction<string | null>>;
+  1408→  isLoginLoading: boolean;
+  1409→  setIsLoginLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  1410→}) {
+  1411→  const { user, accessToken, login, logout, isLoading } = useAuth();
+  1412→
+  1413→  const handleLogin = async (email: string, password: string) => {
+  1414→    setLoginError(null);
+  1415→    setIsLoginLoading(true);
+  1416→    try {
+  1417→      await login(email, password);
+  1418→    } catch (err) {
+  1419→      setLoginError(err instanceof Error ? err.message : 'Error desconocido');
+  1420→    } finally {
+  1421→      setIsLoginLoading(false);
+  1422→    }
+  1423→  };
+  1424→
+  1425→  if (isLoading) {
+  1426→    return (
+  1427→      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+  1428→        <div className="text-center">
+  1429→          <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mx-auto" />
+  1430→          <p className="text-sm text-slate-500 mt-2">Cargando...</p>
+  1431→        </div>
+  1432→      </div>
+  1433→    );
+  1434→  }
+  1435→
+  1436→  if (!user) {
+  1437→    return <LoginScreen onLogin={handleLogin} isLoading={isLoginLoading} error={loginError} />;
+  1438→  }
+  1439→
+  1440→  return <AppLayout user={user} accessToken={accessToken} onLogout={logout} />;
+  1441→}
+  1442→

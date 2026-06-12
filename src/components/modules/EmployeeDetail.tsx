@@ -62,11 +62,11 @@ interface EmpleadoDetail {
   salario_base: number;
   estado: string;
   area: { id: string; nombre: string; codigo: string } | null;
-  perfilPuesto: { id: string; nombre_puesto: string; codigo: string; bandaSalarial: { nombre: string; salario_minimo: number; salario_maximo: number } | null } | null;
+  perfil_puesto: { id: string; nombre_puesto: string; codigo: string; banda_salarial: { nombre: string; salario_minimo: number; salario_maximo: number } | null } | null;
   contratos: Array<{
     id: string; tipo_contrato: string; salario_base_contrato: number; tipo_jornada: string;
     fecha_inicio: string; fecha_fin: string | null; activo: boolean; observaciones: string | null;
-    perfilPuesto: { nombre_puesto: string } | null;
+    perfil_puesto: { nombre_puesto: string } | null;
   }>;
   vacaciones: Array<{
     id: string; anio: number; dias_derecho: number; dias_tomados: number;
@@ -374,7 +374,7 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
                     <InfoField label="Jornada" value={activeContract.tipo_jornada} />
                     <InfoField label="Fecha Inicio" value={formatDate(activeContract.fecha_inicio)} />
                     <InfoField label="Fecha Fin" value={activeContract.fecha_fin ? formatDate(activeContract.fecha_fin) : 'Indefinido'} />
-                    <InfoField label="Puesto" value={activeContract.perfilPuesto?.nombre_puesto || '—'} />
+                    <InfoField label="Puesto" value={activeContract.perfil_puesto?.nombre_puesto || '—'} />
                     <div className="sm:col-span-2 lg:col-span-3"><InfoField label="Observaciones" value={activeContract.observaciones} /></div>
                   </div>
                 ) : (
@@ -451,8 +451,8 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
               <CardContent>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <InfoField label="Salario Base" value={formatSalary(empleado.salario_base)} />
-                  <InfoField label="Puesto" value={empleado.perfilPuesto?.nombre_puesto} />
-                  <InfoField label="Banda Salarial" value={empleado.perfilPuesto?.bandaSalarial?.nombre} />
+                  <InfoField label="Puesto" value={empleado.perfil_puesto?.nombre_puesto} />
+                  <InfoField label="Banda Salarial" value={empleado.perfil_puesto?.banda_salarial?.nombre} />
                 </div>
               </CardContent>
             </Card>

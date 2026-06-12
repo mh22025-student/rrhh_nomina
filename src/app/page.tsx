@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronRight, LogOut, Lock, Menu, X, LayoutDashboard,
   DollarSign, CheckCircle, Send, Gift, ClipboardList, ListChecks,
   BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye,
-  AlertCircle, Loader2, KeyRound, ArrowLeft
+  AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle, Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +46,7 @@ import OrgChart from '@/components/modules/OrgChart';
 import Integrations from '@/components/modules/Integrations';
 import AuditLog from '@/components/modules/AuditLog';
 import SelfServicePortal from '@/components/modules/SelfServicePortal';
+import ProfileDescriptiveForm from '@/components/modules/ProfileDescriptiveForm';
 
 // ============================================================
 // Types
@@ -88,7 +89,7 @@ function useAuth() {
 type ViewId =
   | 'dashboard'
   | '02-01' | '02-02' | '02-03' | '02-04'
-  | '03-01' | '03-03'
+  | '03-01' | '03-02' | '03-03'
   | '04-01' | '04-02' | '04-03' | '04-04' | '04-05' | '04-06' | '04-07'
   | '05-01' | '05-02' | '05-03' | '05-04'
   | '06-01' | '06-02' | '06-03' | '06-04' | '06-05'
@@ -135,6 +136,7 @@ const NAV_GROUPS: NavGroup[] = [
     roles: ['ADMIN', 'ANALISTA', 'APROBADOR', 'AUDITOR'],
     items: [
       { id: '03-01', label: 'Catálogo', icon: BookOpen },
+      { id: '03-02', label: 'Formulario de Perfil', icon: FileText },
       { id: '03-03', label: 'Bandas Salariales', icon: DollarSign },
     ],
   },
@@ -190,7 +192,7 @@ function getVisibleItems(group: NavGroup, role: UserRole): NavItem[] {
     ADMIN: {
       'Seguridad': ['01-03'],
       'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
-      'Módulo 03 - Perfiles': ['03-01', '03-03'],
+      'Módulo 03 - Perfiles': ['03-01', '03-02', '03-03'],
       'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-04', '04-05', '04-06', '04-07'],
       'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
       'Módulo 06 - Admin': ['06-01', '06-02', '06-03', '06-04'],
@@ -198,7 +200,7 @@ function getVisibleItems(group: NavGroup, role: UserRole): NavItem[] {
     },
     ANALISTA: {
       'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
-      'Módulo 03 - Perfiles': ['03-01'],
+      'Módulo 03 - Perfiles': ['03-01', '03-02'],
       'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-06'],
     },
     APROBADOR: {
@@ -260,6 +262,7 @@ const VIEW_LABELS: Record<ViewId, string> = {
   '02-03': 'Nuevo Empleado',
   '02-04': 'Incidencias',
   '03-01': 'Catálogo de Perfiles',
+  '03-02': 'Formulario de Perfil',
   '03-03': 'Bandas Salariales',
   '04-01': 'Dashboard Nómina',
   '04-02': 'Períodos de Nómina',
@@ -895,7 +898,7 @@ function HeaderBar({ user, currentView, onToggleSidebar, onLogout }: HeaderBarPr
 // ============================================================
 // DASHBOARD / WELCOME VIEW
 // ============================================================
-function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: string | null }) {
+function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; accessToken: string | null; onNavigate: (view: ViewId) => void }) {
   const [dashboardData, setDashboardData] = useState<{
     total_empleados_activos: number;
     nomina_mes: number;
@@ -905,6 +908,15 @@ function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: 
     vencimientos: { nombre: string; fecha: string; dias: number }[];
   } | null>(null);
   const [totalPerfiles, setTotalPerfiles] = useState(0);
+  const [auditEntries, setAuditEntries] = useState<Array<{
+    id: string;
+    accion: string;
+    tabla_afectada: string | null;
+    fecha_accion: string;
+    nivel_criticidad: string;
+    usuario_email: string | null;
+    usuario: { nombre: string; apellido: string } | null;
+  }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -912,9 +924,10 @@ function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: 
     const fetchData = async () => {
       try {
         const headers = { Authorization: `Bearer ${accessToken}` };
-        const [dashRes, perfilesRes] = await Promise.all([
+        const [dashRes, perfilesRes, auditRes] = await Promise.all([
           fetch('/api/nomina/dashboard', { headers }),
           fetch('/api/perfiles-puesto', { headers }),
+          fetch('/api/admin/bitacora?page=1&page_size=5', { headers }),
         ]);
         if (dashRes.ok) {
           const dashData = await dashRes.json();
@@ -923,6 +936,10 @@ function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: 
         if (perfilesRes.ok) {
           const perfData = await perfilesRes.json();
           setTotalPerfiles(perfData.data?.length || 0);
+        }
+        if (auditRes.ok) {
+          const auditData = await auditRes.json();
+          setAuditEntries(auditData.entries || []);
         }
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
@@ -934,13 +951,39 @@ function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: 
   }, [accessToken]);
 
   const kpis = [
-    { label: 'Empleados Activos', value: dashboardData?.total_empleados_activos ?? 0, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Perfiles de Puesto', value: totalPerfiles, icon: Briefcase, color: 'text-purple-600', bg: 'bg-purple-50' },
+    { label: 'Empleados Activos', value: dashboardData?.total_empleados_activos ?? 0, icon: Users, color: 'text-teal-600', bg: 'bg-teal-50' },
+    { label: 'Perfiles de Puesto', value: totalPerfiles, icon: Briefcase, color: 'text-violet-600', bg: 'bg-violet-50' },
     { label: 'Nómina del Mes', value: dashboardData?.nomina_mes ? `$${dashboardData.nomina_mes.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00', icon: Calculator, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { label: 'Cumplimiento', value: dashboardData ? `${dashboardData.cumplimiento_previsional}%` : '0%', icon: FileText, color: 'text-amber-600', bg: 'bg-amber-50' },
   ];
 
   const semaforoColor = dashboardData?.semaforo === 'verde' ? 'bg-emerald-500' : dashboardData?.semaforo === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
+
+  const quickActions: Array<{ label: string; desc: string; icon: React.ElementType; color: string; bg: string; viewId: ViewId; roles: UserRole[] }> = [
+    { label: 'Directorio Empleados', desc: 'Buscar y gestionar empleados', icon: Users, color: 'text-teal-600', bg: 'bg-teal-50', viewId: '02-01', roles: ['ADMIN', 'ANALISTA', 'AUDITOR'] },
+    { label: 'Dashboard Nómina', desc: 'Ver resumen de nómina', icon: LayoutDashboard, color: 'text-emerald-600', bg: 'bg-emerald-50', viewId: '04-01', roles: ['ADMIN', 'ANALISTA', 'GERENCIA', 'AUDITOR'] },
+    { label: 'Calcular Nómina', desc: 'Iniciar cálculo del período', icon: Calculator, color: 'text-sky-600', bg: 'bg-sky-50', viewId: '04-03', roles: ['ADMIN', 'ANALISTA'] },
+    { label: 'Aprobar Nómina', desc: 'Revisar y aprobar nóminas', icon: CheckCircle, color: 'text-violet-600', bg: 'bg-violet-50', viewId: '04-04', roles: ['ADMIN', 'APROBADOR'] },
+    { label: 'Gestionar Usuarios', desc: 'Crear, editar y desactivar', icon: Users, color: 'text-rose-600', bg: 'bg-rose-50', viewId: '01-03', roles: ['ADMIN'] },
+    { label: 'Reportes', desc: 'Planillas ISSS, AFP, ISR', icon: BarChart3, color: 'text-amber-600', bg: 'bg-amber-50', viewId: '05-01', roles: ['ADMIN', 'GERENCIA', 'AUDITOR'] },
+    { label: 'Mi Portal', desc: 'Vacaciones, recibos, solicitudes', icon: Eye, color: 'text-emerald-600', bg: 'bg-emerald-50', viewId: '06-05', roles: ['EMPLEADO'] },
+  ];
+
+  const visibleActions = quickActions.filter(a => a.roles.includes(user.rol));
+
+  const getAuditIcon = (accion: string) => {
+    if (accion.includes('LOGIN')) return <Shield className="h-3.5 w-3.5" />;
+    if (accion.includes('CREATE')) return <Plus className="h-3.5 w-3.5" />;
+    if (accion.includes('UPDATE')) return <FileText className="h-3.5 w-3.5" />;
+    if (accion.includes('DELETE')) return <AlertCircle className="h-3.5 w-3.5" />;
+    return <ScrollText className="h-3.5 w-3.5" />;
+  };
+
+  const getAuditColor = (nivel: string) => {
+    if (nivel === 'ALTA') return 'text-red-600 bg-red-50';
+    if (nivel === 'MEDIA') return 'text-amber-600 bg-amber-50';
+    return 'text-slate-600 bg-slate-50';
+  };
 
   return (
     <div className="space-y-6">
@@ -952,7 +995,7 @@ function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: 
         <p className="text-emerald-100 mt-1">
           Sistema de Nómina y Perfiles de Puestos — República de El Salvador
         </p>
-        <div className="flex items-center gap-2 mt-3">
+        <div className="flex flex-wrap items-center gap-2 mt-3">
           <Badge variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30">
             {user.rol}
           </Badge>
@@ -963,11 +1006,11 @@ function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: 
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="shadow-sm">
-              <CardContent className="p-5">
+              <CardContent className="p-4 sm:p-5">
                 <div className="animate-pulse">
                   <div className="h-4 bg-slate-200 rounded w-24 mb-2" />
                   <div className="h-8 bg-slate-200 rounded w-16" />
@@ -978,14 +1021,14 @@ function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: 
         ) : (
           kpis.map(kpi => (
             <Card key={kpi.label} className="shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="p-5">
+              <CardContent className="p-4 sm:p-5">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-slate-500">{kpi.label}</p>
-                    <p className="text-3xl font-bold text-slate-900 mt-1">{kpi.value}</p>
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm text-slate-500">{kpi.label}</p>
+                    <p className="text-xl sm:text-3xl font-bold text-slate-900 mt-1 truncate">{kpi.value}</p>
                   </div>
-                  <div className={`p-3 rounded-xl ${kpi.bg}`}>
-                    <kpi.icon className={`h-6 w-6 ${kpi.color}`} />
+                  <div className={`p-2 sm:p-3 rounded-xl ${kpi.bg} shrink-0`}>
+                    <kpi.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${kpi.color}`} />
                   </div>
                 </div>
               </CardContent>
@@ -1000,15 +1043,28 @@ function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: 
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
+                <Shield className="h-4 w-4 text-slate-500" />
                 Semáforo de Cumplimiento
-                <span className={`inline-block w-3 h-3 rounded-full ${semaforoColor}`} />
+                {/* Traffic light dots */}
+                <div className="flex items-center gap-1 ml-auto p-1 bg-slate-900 rounded-full">
+                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'rojo' ? 'bg-red-500 shadow-sm shadow-red-500/50' : 'bg-red-900/40'}`} />
+                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
+                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
+                </div>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2.5">
               {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => (
-                <div key={c.nombre} className="flex items-center justify-between">
-                  <span className="text-sm">{c.nombre}</span>
-                  <Badge variant={c.presentado ? 'default' : 'destructive'} className={c.presentado ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}>
+                <div key={c.nombre} className="flex items-center justify-between p-2 rounded-lg bg-slate-50/80">
+                  <div className="flex items-center gap-2">
+                    {c.presentado ? (
+                      <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                    )}
+                    <span className="text-sm text-slate-700">{c.nombre}</span>
+                  </div>
+                  <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                     {c.presentado ? 'Presentado' : 'Pendiente'}
                   </Badge>
                 </div>
@@ -1018,20 +1074,35 @@ function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: 
 
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Próximos Vencimientos</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4 text-slate-500" />
+                Próximos Vencimientos
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => (
-                <div key={v.nombre} className="flex items-center justify-between">
-                  <span className="text-sm">{v.nombre}</span>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">{new Date(v.fecha).toLocaleDateString('es-SV')}</p>
-                    <p className={`text-xs ${v.dias <= 5 ? 'text-red-500' : 'text-slate-400'}`}>
-                      {v.dias > 0 ? `${v.dias} días` : 'Vencido'}
-                    </p>
-                  </div>
+            <CardContent className="space-y-2.5">
+              {dashboardData.vencimientos?.length === 0 ? (
+                <div className="flex items-center justify-center py-6 text-emerald-600">
+                  <CheckCircle className="h-5 w-5 mr-2" />
+                  <span className="text-sm font-medium">Todos los pagos al día</span>
                 </div>
-              ))}
+              ) : (
+                dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => (
+                  <div key={v.nombre} className={`flex items-center justify-between p-2.5 rounded-lg border ${
+                    v.dias <= 5 ? 'border-red-200 bg-red-50/50' : 'border-slate-100 bg-slate-50/50'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${v.dias <= 5 ? 'bg-red-500' : v.dias <= 10 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                      <span className="text-sm font-medium text-slate-700">{v.nombre}</span>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-slate-900">{new Date(v.fecha).toLocaleDateString('es-SV')}</p>
+                      <p className={`text-xs ${v.dias <= 5 ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                        {v.dias > 0 ? `${v.dias} días` : 'Vencido'}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1041,64 +1112,69 @@ function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Acciones Rápidas</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-slate-500" />
+              Acciones Rápidas
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {user.rol === 'ADMIN' && (
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
-                <div className="p-2 rounded-lg bg-emerald-50">
-                  <Users className="h-4 w-4 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Gestionar Usuarios</p>
-                  <p className="text-xs text-slate-500">Crear, editar y desactivar cuentas</p>
-                </div>
-              </div>
-            )}
-            {(user.rol === 'ADMIN' || user.rol === 'ANALISTA') && (
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
-                <div className="p-2 rounded-lg bg-blue-50">
-                  <Calculator className="h-4 w-4 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Calcular Nómina</p>
-                  <p className="text-xs text-slate-500">Iniciar cálculo del período actual</p>
-                </div>
-              </div>
-            )}
-            {(user.rol === 'ADMIN' || user.rol === 'APROBADOR') && (
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
-                <div className="p-2 rounded-lg bg-purple-50">
-                  <CheckCircle className="h-4 w-4 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Aprobar Nómina</p>
-                  <p className="text-xs text-slate-500">Revisar y aprobar nóminas pendientes</p>
-                </div>
-              </div>
-            )}
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
-              <div className="p-2 rounded-lg bg-amber-50">
-                <FileText className="h-4 w-4 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">Generar Reportes</p>
-                <p className="text-xs text-slate-500">Planillas ISSS, AFP, retenciones ISR</p>
-              </div>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {visibleActions.map(action => (
+                <button
+                  key={action.viewId + action.label}
+                  onClick={() => onNavigate(action.viewId)}
+                  className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/80 hover:bg-slate-100 transition-all cursor-pointer text-left border border-transparent hover:border-slate-200 group"
+                >
+                  <div className={`p-2 rounded-lg ${action.bg} group-hover:scale-110 transition-transform`}>
+                    <action.icon className={`h-4 w-4 ${action.color}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-800">{action.label}</p>
+                    <p className="text-xs text-slate-500 truncate">{action.desc}</p>
+                  </div>
+                </button>
+              ))}
             </div>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Actividad Reciente</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ScrollText className="h-4 w-4 text-slate-500" />
+              Actividad Reciente
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col items-center justify-center py-8 text-slate-400">
-              <ScrollText className="h-10 w-10 mb-2" />
-              <p className="text-sm">No hay actividad reciente</p>
-              <p className="text-xs">Los eventos aparecerán aquí</p>
-            </div>
+            {auditEntries.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                <ScrollText className="h-8 w-8 mb-2" />
+                <p className="text-sm">Sin actividad reciente</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {auditEntries.map((entry) => (
+                  <div key={entry.id} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50/80 border border-slate-100">
+                    <div className={`p-1.5 rounded-md shrink-0 mt-0.5 ${getAuditColor(entry.nivel_criticidad)}`}>
+                      {getAuditIcon(entry.accion)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-slate-700 truncate">
+                        {entry.accion.replace(/_/g, ' ')}
+                        {entry.tabla_afectada && (
+                          <span className="text-slate-400 font-normal"> · {entry.tabla_afectada}</span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        {entry.usuario?.nombre ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : entry.usuario_email || 'Sistema'}
+                        <span className="mx-1">·</span>
+                        {new Date(entry.fecha_accion).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -1145,7 +1221,7 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
 
   const renderView = () => {
     if (currentView === 'dashboard') {
-      return <WelcomeDashboard user={user} accessToken={accessToken} />;
+      return <WelcomeDashboard user={user} accessToken={accessToken} onNavigate={setCurrentView} />;
     }
     switch (currentView) {
       case '02-01':
@@ -1174,6 +1250,8 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
         return <LiquidationView accessToken={accessToken || ''} userRole={user.rol} />;
       case '03-01':
         return <ProfileCatalog accessToken={accessToken || ''} userRole={user.rol} />;
+      case '03-02':
+        return <ProfileDescriptiveForm accessToken={accessToken || ''} userRole={user.rol} />;
       case '03-03':
         return <SalaryBands accessToken={accessToken || ''} userRole={user.rol} />;
       case '05-01':
