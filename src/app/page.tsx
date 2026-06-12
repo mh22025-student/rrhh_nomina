@@ -1,0 +1,1364 @@
+'use client';
+
+import React, { useState, useCallback, useEffect, createContext, useContext } from 'react';
+import {
+  Users, Briefcase, Calculator, FileText, Settings, User, Shield,
+  ChevronDown, ChevronRight, LogOut, Lock, Menu, X, LayoutDashboard,
+  DollarSign, CheckCircle, Send, Gift, ClipboardList, ListChecks,
+  BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye,
+  AlertCircle, Loader2, KeyRound, ArrowLeft
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useToast } from '@/hooks/use-toast';
+
+// Module components
+import EmployeeDirectory from '@/components/modules/EmployeeDirectory';
+import EmployeeDetail from '@/components/modules/EmployeeDetail';
+import NewEmployeeForm from '@/components/modules/NewEmployeeForm';
+import IncidenceManager from '@/components/modules/IncidenceManager';
+import UserManagement from '@/components/modules/UserManagement';
+import PayrollDashboard from '@/components/modules/PayrollDashboard';
+import PayrollPeriods from '@/components/modules/PayrollPeriods';
+import PayrollCalculation from '@/components/modules/PayrollCalculation';
+import PayrollApproval from '@/components/modules/PayrollApproval';
+import BankDispersion from '@/components/modules/BankDispersion';
+import AguinaldoView from '@/components/modules/AguinaldoView';
+import LiquidationView from '@/components/modules/LiquidationView';
+import ProfileCatalog from '@/components/modules/ProfileCatalog';
+import SalaryBands from '@/components/modules/SalaryBands';
+import IsssReport from '@/components/modules/IsssReport';
+import AfpReport from '@/components/modules/AfpReport';
+import IsrReport from '@/components/modules/IsrReport';
+import TalentReport from '@/components/modules/TalentReport';
+import LegalParameters from '@/components/modules/LegalParameters';
+import OrgChart from '@/components/modules/OrgChart';
+import Integrations from '@/components/modules/Integrations';
+import AuditLog from '@/components/modules/AuditLog';
+import SelfServicePortal from '@/components/modules/SelfServicePortal';
+
+// ============================================================
+// Types
+// ============================================================
+type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+
+interface UserData {
+  id: string;
+  email: string;
+  nombre: string;
+  apellido: string;
+  rol: UserRole;
+  debe_cambiar_password: boolean;
+  empleadoId?: string;
+}
+
+interface AuthContextType {
+  user: UserData | null;
+  accessToken: string | null;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshAccessToken: () => Promise<string | null>;
+  isLoading: boolean;
+}
+
+// ============================================================
+// Auth Context
+// ============================================================
+const AuthContext = createContext<AuthContextType | null>(null);
+
+function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
+}
+
+// ============================================================
+// View Types
+// ============================================================
+type ViewId =
+  | 'dashboard'
+  | '02-01' | '02-02' | '02-03' | '02-04'
+  | '03-01' | '03-03'
+  | '04-01' | '04-02' | '04-03' | '04-04' | '04-05' | '04-06' | '04-07'
+  | '05-01' | '05-02' | '05-03' | '05-04'
+  | '06-01' | '06-02' | '06-03' | '06-04' | '06-05'
+  | '01-03';
+
+interface NavItem {
+  id: ViewId;
+  label: string;
+  icon: React.ElementType;
+}
+
+interface NavGroup {
+  title: string;
+  icon: React.ElementType;
+  items: NavItem[];
+  roles: UserRole[];
+}
+
+// ============================================================
+// Navigation Configuration (RBAC)
+// ============================================================
+const NAV_GROUPS: NavGroup[] = [
+  {
+    title: 'Seguridad',
+    icon: Shield,
+    roles: ['ADMIN'],
+    items: [
+      { id: '01-03', label: 'Gestión Usuarios', icon: Users },
+    ],
+  },
+  {
+    title: 'Módulo 02 - Empleados',
+    icon: Users,
+    roles: ['ADMIN', 'ANALISTA', 'AUDITOR'],
+    items: [
+      { id: '02-01', label: 'Directorio', icon: ListChecks },
+      { id: '02-03', label: 'Nuevo Empleado', icon: User },
+      { id: '02-04', label: 'Incidencias', icon: AlertCircle },
+    ],
+  },
+  {
+    title: 'Módulo 03 - Perfiles',
+    icon: Briefcase,
+    roles: ['ADMIN', 'ANALISTA', 'APROBADOR', 'AUDITOR'],
+    items: [
+      { id: '03-01', label: 'Catálogo', icon: BookOpen },
+      { id: '03-03', label: 'Bandas Salariales', icon: DollarSign },
+    ],
+  },
+  {
+    title: 'Módulo 04 - Nómina',
+    icon: Calculator,
+    roles: ['ADMIN', 'ANALISTA', 'APROBADOR', 'GERENCIA', 'AUDITOR'],
+    items: [
+      { id: '04-01', label: 'Dashboard', icon: LayoutDashboard },
+      { id: '04-02', label: 'Períodos', icon: CalendarIcon },
+      { id: '04-03', label: 'Cálculo', icon: Calculator },
+      { id: '04-04', label: 'Aprobación', icon: CheckCircle },
+      { id: '04-05', label: 'Dispersión', icon: Send },
+      { id: '04-06', label: 'Aguinaldo', icon: Gift },
+      { id: '04-07', label: 'Liquidaciones', icon: ClipboardList },
+    ],
+  },
+  {
+    title: 'Módulo 05 - Reportes',
+    icon: FileText,
+    roles: ['ADMIN', 'GERENCIA', 'AUDITOR'],
+    items: [
+      { id: '05-01', label: 'Planilla ISSS', icon: FileText },
+      { id: '05-02', label: 'Planilla AFP', icon: FileText },
+      { id: '05-03', label: 'Retenciones ISR', icon: FileText },
+      { id: '05-04', label: 'Gestión Talento', icon: BarChart3 },
+    ],
+  },
+  {
+    title: 'Módulo 06 - Admin',
+    icon: Settings,
+    roles: ['ADMIN', 'APROBADOR'],
+    items: [
+      { id: '06-01', label: 'Parámetros Legales', icon: ScaleIcon },
+      { id: '06-02', label: 'Organigrama', icon: GitBranch },
+      { id: '06-03', label: 'Integraciones', icon: Plug },
+      { id: '06-04', label: 'Bitácora', icon: ScrollText },
+    ],
+  },
+  {
+    title: 'Vista Empleado',
+    icon: User,
+    roles: ['EMPLEADO'],
+    items: [
+      { id: '06-05', label: 'Mi Portal', icon: Eye },
+    ],
+  },
+];
+
+// Filter items within a group based on more granular RBAC
+function getVisibleItems(group: NavGroup, role: UserRole): NavItem[] {
+  const roleItemMap: Record<UserRole, Record<string, string[]>> = {
+    ADMIN: {
+      'Seguridad': ['01-03'],
+      'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
+      'Módulo 03 - Perfiles': ['03-01', '03-03'],
+      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-04', '04-05', '04-06', '04-07'],
+      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+      'Módulo 06 - Admin': ['06-01', '06-02', '06-03', '06-04'],
+      'Vista Empleado': [],
+    },
+    ANALISTA: {
+      'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
+      'Módulo 03 - Perfiles': ['03-01'],
+      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-06'],
+    },
+    APROBADOR: {
+      'Módulo 03 - Perfiles': ['03-03'],
+      'Módulo 04 - Nómina': ['04-04', '04-05', '04-07'],
+      'Módulo 06 - Admin': ['06-01'],
+    },
+    GERENCIA: {
+      'Módulo 04 - Nómina': ['04-01'],
+      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+    },
+    AUDITOR: {
+      'Módulo 02 - Empleados': ['02-01'],
+      'Módulo 03 - Perfiles': ['03-01'],
+      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03'],
+      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+      'Módulo 06 - Admin': ['06-04'],
+    },
+    EMPLEADO: {
+      'Vista Empleado': ['06-05'],
+    },
+  };
+
+  const allowedIds = roleItemMap[role]?.[group.title] ?? [];
+  return group.items.filter(item => allowedIds.includes(item.id));
+}
+
+// Custom calendar icon since we can't import it from lucide
+function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+      <line x1="16" x2="16" y1="2" y2="6"/>
+      <line x1="8" x2="8" y1="2" y2="6"/>
+      <line x1="3" x2="21" y1="10" y2="10"/>
+    </svg>
+  );
+}
+
+function ScaleIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M16 3h5v5"/>
+      <path d="M8 3H3v5"/>
+      <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/>
+      <path d="m15 9 6-6"/>
+    </svg>
+  );
+}
+
+// ============================================================
+// VIEW LABELS MAP
+// ============================================================
+const VIEW_LABELS: Record<ViewId, string> = {
+  'dashboard': 'Dashboard',
+  '01-03': 'Gestión de Usuarios',
+  '02-01': 'Directorio de Empleados',
+  '02-02': 'Detalle de Empleado',
+  '02-03': 'Nuevo Empleado',
+  '02-04': 'Incidencias',
+  '03-01': 'Catálogo de Perfiles',
+  '03-03': 'Bandas Salariales',
+  '04-01': 'Dashboard Nómina',
+  '04-02': 'Períodos de Nómina',
+  '04-03': 'Cálculo de Nómina',
+  '04-04': 'Aprobación de Nómina',
+  '04-05': 'Dispersión de Pago',
+  '04-06': 'Aguinaldo',
+  '04-07': 'Liquidaciones',
+  '05-01': 'Planilla ISSS',
+  '05-02': 'Planilla AFP',
+  '05-03': 'Retenciones ISR',
+  '05-04': 'Gestión de Talento',
+  '06-01': 'Parámetros Legales',
+  '06-02': 'Organigrama',
+  '06-03': 'Integraciones',
+  '06-04': 'Bitácora',
+  '06-05': 'Mi Portal',
+};
+
+// ============================================================
+// LOGIN SCREEN
+// ============================================================
+interface LoginScreenProps {
+  onLogin: (email: string, password: string) => Promise<void>;
+  isLoading: boolean;
+  error: string | null;
+}
+
+function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showRecovery, setShowRecovery] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onLogin(email, password);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
+      <div className="w-full max-w-md">
+        {/* Logo & Title */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg mb-4">
+            <svg viewBox="0 0 40 40" className="w-10 h-10 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
+              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
+              <path d="M4 12V28L20 36V20L4 12Z" stroke="currentColor" strokeWidth="2"/>
+              <path d="M36 12V28L20 36V20L36 12Z" stroke="currentColor" strokeWidth="2"/>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Sistema de Nómina y Perfiles de Puestos
+          </h1>
+          <p className="text-slate-500 mt-1 text-sm">
+            República de El Salvador
+          </p>
+        </div>
+
+        {/* Login Card */}
+        <Card className="shadow-xl border-0 shadow-slate-200/60">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Iniciar Sesión</CardTitle>
+            <CardDescription>Ingrese sus credenciales para acceder al sistema</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Correo Electrónico</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="usuario@nomina.gob.sv"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="h-11"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Contraseña</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="h-11"
+                />
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  'Iniciar Sesión'
+                )}
+              </Button>
+
+              <button
+                type="button"
+                onClick={() => setShowRecovery(true)}
+                className="w-full text-sm text-emerald-700 hover:text-emerald-800 hover:underline transition-colors"
+              >
+                ¿Olvidó su contraseña?
+              </button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Demo Credentials */}
+        <Card className="mt-4 bg-amber-50/80 border-amber-200/60 shadow-sm">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-amber-800 mb-2 flex items-center gap-1">
+              <KeyRound className="h-3.5 w-3.5" />
+              Credenciales de Demostración
+            </p>
+            <div className="grid grid-cols-2 gap-1.5 text-xs text-amber-700">
+              <span>admin@nomina.gob.sv</span><span className="text-amber-500">Admin2026!</span>
+              <span>analista@nomina.gob.sv</span><span className="text-amber-500">Analista2026!</span>
+              <span>aprobador@nomina.gob.sv</span><span className="text-amber-500">Aprobador2026!</span>
+              <span>gerencia@nomina.gob.sv</span><span className="text-amber-500">Gerencia2026!</span>
+              <span>auditor@nomina.gob.sv</span><span className="text-amber-500">Auditor2026!</span>
+              <span>empleado@nomina.gob.sv</span><span className="text-amber-500">Empleado2026!</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Password Recovery Dialog */}
+        <PasswordRecoveryDialog open={showRecovery} onOpenChange={setShowRecovery} />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PASSWORD RECOVERY DIALOG
+// ============================================================
+interface PasswordRecoveryDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function PasswordRecoveryDialog({ open, onOpenChange }: PasswordRecoveryDialogProps) {
+  const [step, setStep] = useState(1);
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpId, setOtpId] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [demoOtp, setDemoOtp] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const handleReset = () => {
+    setStep(1);
+    setEmail('');
+    setOtp('');
+    setOtpId('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setDemoOtp(null);
+    setIsLoading(false);
+    setError(null);
+    setSuccess(null);
+  };
+
+  const handleClose = (newOpen: boolean) => {
+    if (!newOpen) handleReset();
+    onOpenChange(newOpen);
+  };
+
+  const handleStep1 = async () => {
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Error al solicitar código');
+        return;
+      }
+      setDemoOtp(data.demo_otp);
+      setSuccess('Código enviado. Verifique su correo.');
+      setStep(2);
+    } catch {
+      setError('Error de conexión');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStep2 = async () => {
+    setError(null);
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Código inválido');
+        return;
+      }
+      setOtpId(data.otp_id);
+      setSuccess('Código verificado');
+      setStep(3);
+    } catch {
+      setError('Error de conexión');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStep3 = async () => {
+    setError(null);
+    if (newPassword !== confirmPassword) {
+      setError('Las contraseñas no coinciden');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otp_id: otpId, email, new_password: newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Error al actualizar contraseña');
+        return;
+      }
+      toast({
+        title: 'Contraseña actualizada',
+        description: 'Puede iniciar sesión con su nueva contraseña',
+      });
+      handleClose(false);
+    } catch {
+      setError('Error de conexión');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const stepLabels = ['Email', 'Verificación', 'Nueva Contraseña'];
+  const progressValue = (step / 3) * 100;
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Lock className="h-5 w-5 text-emerald-600" />
+            Recuperar Contraseña
+          </DialogTitle>
+          <DialogDescription>
+            Siga los pasos para restablecer su contraseña
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Progress indicator */}
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs text-slate-500">
+            {stepLabels.map((label, i) => (
+              <span key={i} className={step > i ? 'text-emerald-600 font-medium' : step === i + 1 ? 'text-slate-900 font-medium' : ''}>
+                {i + 1}. {label}
+              </span>
+            ))}
+          </div>
+          <Progress value={progressValue} className="h-2" />
+        </div>
+
+        <div className="space-y-4">
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {success && step > 1 && (
+            <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg">
+              <CheckCircle className="h-4 w-4 shrink-0" />
+              <span>{success}</span>
+            </div>
+          )}
+
+          {/* Step 1: Email */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Correo Electrónico</Label>
+                <Input
+                  type="email"
+                  placeholder="usuario@nomina.gob.sv"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
+                />
+              </div>
+              <Button onClick={handleStep1} disabled={isLoading || !email} className="w-full bg-emerald-600 hover:bg-emerald-700">
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Enviar Código
+              </Button>
+            </div>
+          )}
+
+          {/* Step 2: OTP */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Código de Verificación</Label>
+                <Input
+                  placeholder="000000"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  disabled={isLoading}
+                  className="text-center text-lg tracking-[0.5em] font-mono"
+                  maxLength={6}
+                />
+              </div>
+              {demoOtp && (
+                <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded">
+                  Demo - Código: <strong>{demoOtp}</strong>
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+                  <ArrowLeft className="mr-1 h-4 w-4" /> Volver
+                </Button>
+                <Button onClick={handleStep2} disabled={isLoading || otp.length !== 6} className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Verificar
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: New Password */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Nueva Contraseña</Label>
+                <Input
+                  type="password"
+                  placeholder="Mínimo 8 caracteres"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Confirmar Contraseña</Label>
+                <Input
+                  type="password"
+                  placeholder="Repita la contraseña"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={isLoading}
+                />
+              </div>
+              <Button onClick={handleStep3} disabled={isLoading || !newPassword || !confirmPassword} className="w-full bg-emerald-600 hover:bg-emerald-700">
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Actualizar Contraseña
+              </Button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============================================================
+// SIDEBAR
+// ============================================================
+interface SidebarProps {
+  user: UserData;
+  currentView: ViewId;
+  onNavigate: (view: ViewId) => void;
+  collapsed: boolean;
+  onToggle: () => void;
+}
+
+function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: SidebarProps) {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    NAV_GROUPS.forEach(g => {
+      if (g.roles.includes(user.rol)) {
+        initial.add(g.title);
+      }
+    });
+    return initial;
+  });
+
+  const toggleGroup = (title: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
+  };
+
+  return (
+    <>
+      {/* Mobile overlay */}
+      {!collapsed && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={onToggle}
+        />
+      )}
+
+      <aside
+        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 text-white transition-all duration-300 ${
+          collapsed ? '-translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden' : 'w-64 translate-x-0'
+        }`}
+      >
+        {/* Brand */}
+        <div className="flex items-center gap-3 px-4 h-14 border-b border-slate-700/50">
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0">
+            <svg viewBox="0 0 40 40" className="w-5 h-5 text-white" fill="none">
+              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
+              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
+            </svg>
+          </div>
+          <div className="overflow-hidden">
+            <p className="font-bold text-sm leading-tight whitespace-nowrap">Nómina SV</p>
+            <p className="text-[10px] text-slate-400 whitespace-nowrap">El Salvador</p>
+          </div>
+          <button onClick={onToggle} className="ml-auto lg:hidden text-slate-400 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Navigation */}
+        <ScrollArea className="flex-1 py-2">
+          <nav className="space-y-1 px-2">
+            {NAV_GROUPS.map(group => {
+              const visibleItems = getVisibleItems(group, user.rol);
+              if (visibleItems.length === 0) return null;
+
+              const isExpanded = expandedGroups.has(group.title);
+              const GroupIcon = group.icon;
+
+              return (
+                <div key={group.title}>
+                  <button
+                    onClick={() => toggleGroup(group.title)}
+                    className="flex items-center gap-2 w-full px-2 py-2 text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-colors"
+                  >
+                    <GroupIcon className="h-3.5 w-3.5" />
+                    <span className="truncate flex-1 text-left">{group.title}</span>
+                    {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  </button>
+
+                  {isExpanded && (
+                    <div className="space-y-0.5 mt-0.5 mb-1">
+                      {visibleItems.map(item => {
+                        const isActive = currentView === item.id;
+                        const ItemIcon = item.icon;
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              onNavigate(item.id);
+                              if (window.innerWidth < 1024) onToggle();
+                            }}
+                            className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm transition-all ${
+                              isActive
+                                ? 'bg-emerald-600/20 text-emerald-400 font-medium'
+                                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                            }`}
+                          >
+                            <ItemIcon className={`h-4 w-4 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                            <span>{item.label}</span>
+                            {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+        </ScrollArea>
+
+        {/* User info at bottom */}
+        <div className="border-t border-slate-700/50 p-3">
+          <div className="flex items-center gap-2.5">
+            <Avatar className="h-8 w-8 bg-emerald-600">
+              <AvatarFallback className="bg-emerald-600 text-white text-xs">
+                {user.nombre[0]}{user.apellido[0]}
+              </AvatarFallback>
+            </Avatar>
+            <div className="overflow-hidden flex-1">
+              <p className="text-sm font-medium truncate">{user.nombre} {user.apellido}</p>
+              <p className="text-[10px] text-slate-400 truncate">{user.rol}</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+// ============================================================
+// TOP HEADER BAR
+// ============================================================
+interface HeaderBarProps {
+  user: UserData;
+  currentView: ViewId;
+  onToggleSidebar: () => void;
+  onLogout: () => void;
+}
+
+function HeaderBar({ user, currentView, onToggleSidebar, onLogout }: HeaderBarProps) {
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    onLogout();
+  };
+
+  return (
+    <header className="h-14 bg-white border-b border-slate-200 shadow-sm flex items-center px-4 gap-4 shrink-0 z-30">
+      {/* Mobile menu toggle */}
+      <button
+        onClick={onToggleSidebar}
+        className="lg:hidden text-slate-600 hover:text-slate-900"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* Desktop sidebar toggle */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={onToggleSidebar}
+              className="hidden lg:block text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Alternar menú</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      {/* Current view name */}
+      <div className="flex-1">
+        <h2 className="text-sm font-semibold text-slate-900">
+          {VIEW_LABELS[currentView] || 'Dashboard'}
+        </h2>
+      </div>
+
+      {/* User dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="flex items-center gap-2 hover:bg-slate-50 rounded-lg px-2 py-1.5 transition-colors">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs font-medium">
+                {user.nombre[0]}{user.apellido[0]}
+              </AvatarFallback>
+            </Avatar>
+            <div className="hidden sm:block text-left">
+              <p className="text-sm font-medium text-slate-700 leading-tight">{user.nombre} {user.apellido}</p>
+              <p className="text-[10px] text-slate-400 leading-tight">{user.rol}</p>
+            </div>
+            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <div className="px-2 py-1.5">
+            <p className="text-sm font-medium">{user.nombre} {user.apellido}</p>
+            <p className="text-xs text-slate-500">{user.email}</p>
+          </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => toast({ title: 'Perfil', description: 'Módulo de perfil en desarrollo' })}>
+            <User className="mr-2 h-4 w-4" />
+            Mi Perfil
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => toast({ title: 'Cambiar Contraseña', description: 'Módulo en desarrollo' })}>
+            <Lock className="mr-2 h-4 w-4" />
+            Cambiar Contraseña
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
+            <LogOut className="mr-2 h-4 w-4" />
+            Cerrar Sesión
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </header>
+  );
+}
+
+// ============================================================
+// DASHBOARD / WELCOME VIEW
+// ============================================================
+function WelcomeDashboard({ user, accessToken }: { user: UserData; accessToken: string | null }) {
+  const [dashboardData, setDashboardData] = useState<{
+    total_empleados_activos: number;
+    nomina_mes: number;
+    cumplimiento_previsional: number;
+    semaforo: string;
+    cumplimientos: { nombre: string; presentado: boolean; peso: number }[];
+    vencimientos: { nombre: string; fecha: string; dias: number }[];
+  } | null>(null);
+  const [totalPerfiles, setTotalPerfiles] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    const fetchData = async () => {
+      try {
+        const headers = { Authorization: `Bearer ${accessToken}` };
+        const [dashRes, perfilesRes] = await Promise.all([
+          fetch('/api/nomina/dashboard', { headers }),
+          fetch('/api/perfiles-puesto', { headers }),
+        ]);
+        if (dashRes.ok) {
+          const dashData = await dashRes.json();
+          setDashboardData(dashData.kpis);
+        }
+        if (perfilesRes.ok) {
+          const perfData = await perfilesRes.json();
+          setTotalPerfiles(perfData.data?.length || 0);
+        }
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [accessToken]);
+
+  const kpis = [
+    { label: 'Empleados Activos', value: dashboardData?.total_empleados_activos ?? 0, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Perfiles de Puesto', value: totalPerfiles, icon: Briefcase, color: 'text-purple-600', bg: 'bg-purple-50' },
+    { label: 'Nómina del Mes', value: dashboardData?.nomina_mes ? `$${dashboardData.nomina_mes.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00', icon: Calculator, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Cumplimiento', value: dashboardData ? `${dashboardData.cumplimiento_previsional}%` : '0%', icon: FileText, color: 'text-amber-600', bg: 'bg-amber-50' },
+  ];
+
+  const semaforoColor = dashboardData?.semaforo === 'verde' ? 'bg-emerald-500' : dashboardData?.semaforo === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
+
+  return (
+    <div className="space-y-6">
+      {/* Welcome banner */}
+      <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl p-6 text-white shadow-lg">
+        <h1 className="text-2xl font-bold">
+          Bienvenido, {user.nombre}
+        </h1>
+        <p className="text-emerald-100 mt-1">
+          Sistema de Nómina y Perfiles de Puestos — República de El Salvador
+        </p>
+        <div className="flex items-center gap-2 mt-3">
+          <Badge variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30">
+            {user.rol}
+          </Badge>
+          <Badge variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30">
+            {new Date().toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </Badge>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="shadow-sm">
+              <CardContent className="p-5">
+                <div className="animate-pulse">
+                  <div className="h-4 bg-slate-200 rounded w-24 mb-2" />
+                  <div className="h-8 bg-slate-200 rounded w-16" />
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          kpis.map(kpi => (
+            <Card key={kpi.label} className="shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-500">{kpi.label}</p>
+                    <p className="text-3xl font-bold text-slate-900 mt-1">{kpi.value}</p>
+                  </div>
+                  <div className={`p-3 rounded-xl ${kpi.bg}`}>
+                    <kpi.icon className={`h-6 w-6 ${kpi.color}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
+      {/* Compliance Semaphore & Deadlines */}
+      {dashboardData && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                Semáforo de Cumplimiento
+                <span className={`inline-block w-3 h-3 rounded-full ${semaforoColor}`} />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => (
+                <div key={c.nombre} className="flex items-center justify-between">
+                  <span className="text-sm">{c.nombre}</span>
+                  <Badge variant={c.presentado ? 'default' : 'destructive'} className={c.presentado ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}>
+                    {c.presentado ? 'Presentado' : 'Pendiente'}
+                  </Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Próximos Vencimientos</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => (
+                <div key={v.nombre} className="flex items-center justify-between">
+                  <span className="text-sm">{v.nombre}</span>
+                  <div className="text-right">
+                    <p className="text-sm font-medium">{new Date(v.fecha).toLocaleDateString('es-SV')}</p>
+                    <p className={`text-xs ${v.dias <= 5 ? 'text-red-500' : 'text-slate-400'}`}>
+                      {v.dias > 0 ? `${v.dias} días` : 'Vencido'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Quick actions and recent activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Acciones Rápidas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {user.rol === 'ADMIN' && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+                <div className="p-2 rounded-lg bg-emerald-50">
+                  <Users className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Gestionar Usuarios</p>
+                  <p className="text-xs text-slate-500">Crear, editar y desactivar cuentas</p>
+                </div>
+              </div>
+            )}
+            {(user.rol === 'ADMIN' || user.rol === 'ANALISTA') && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+                <div className="p-2 rounded-lg bg-blue-50">
+                  <Calculator className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Calcular Nómina</p>
+                  <p className="text-xs text-slate-500">Iniciar cálculo del período actual</p>
+                </div>
+              </div>
+            )}
+            {(user.rol === 'ADMIN' || user.rol === 'APROBADOR') && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+                <div className="p-2 rounded-lg bg-purple-50">
+                  <CheckCircle className="h-4 w-4 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Aprobar Nómina</p>
+                  <p className="text-xs text-slate-500">Revisar y aprobar nóminas pendientes</p>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+              <div className="p-2 rounded-lg bg-amber-50">
+                <FileText className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Generar Reportes</p>
+                <p className="text-xs text-slate-500">Planillas ISSS, AFP, retenciones ISR</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Actividad Reciente</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+              <ScrollText className="h-10 w-10 mb-2" />
+              <p className="text-sm">No hay actividad reciente</p>
+              <p className="text-xs">Los eventos aparecerán aquí</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PLACEHOLDER VIEW
+// ============================================================
+function PlaceholderView({ viewId }: { viewId: ViewId }) {
+  const label = VIEW_LABELS[viewId] || 'Vista';
+  return (
+    <Card className="shadow-sm">
+      <CardContent className="p-12 text-center">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 mb-4">
+          <LayoutDashboard className="h-8 w-8 text-slate-400" />
+        </div>
+        <h2 className="text-xl font-semibold text-slate-900">{label}</h2>
+        <p className="text-slate-500 mt-2 max-w-md mx-auto">
+          Este módulo se encuentra en desarrollo. Pronto estará disponible con todas sus funcionalidades.
+        </p>
+        <Badge variant="secondary" className="mt-4">
+          Vista {viewId}
+        </Badge>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================================
+// MAIN APPLICATION LAYOUT
+// ============================================================
+interface AppLayoutProps {
+  user: UserData;
+  accessToken: string | null;
+  onLogout: () => void;
+}
+
+function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
+  const [currentView, setCurrentView] = useState<ViewId>('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+
+  const renderView = () => {
+    if (currentView === 'dashboard') {
+      return <WelcomeDashboard user={user} accessToken={accessToken} />;
+    }
+    switch (currentView) {
+      case '02-01':
+        return <EmployeeDirectory accessToken={accessToken} userRole={user.rol} onNavigateToDetail={(id) => { setSelectedEmployeeId(id); setCurrentView('02-02'); }} onNavigateToNew={() => setCurrentView('02-03')} />;
+      case '02-02':
+        return selectedEmployeeId ? <EmployeeDetail empleadoId={selectedEmployeeId} onBack={() => setCurrentView('02-01')} userRole={user.rol} accessToken={accessToken} /> : <PlaceholderView viewId={currentView} />;
+      case '02-03':
+        return <NewEmployeeForm accessToken={accessToken} userRole={user.rol} onBack={() => setCurrentView('02-01')} onSuccess={() => setCurrentView('02-01')} />;
+      case '02-04':
+        return <IncidenceManager accessToken={accessToken} userRole={user.rol} />;
+      case '01-03':
+        return <UserManagement accessToken={accessToken} />;
+      case '04-01':
+        return <PayrollDashboard accessToken={accessToken || ''} userRole={user.rol} />;
+      case '04-02':
+        return <PayrollPeriods accessToken={accessToken || ''} userRole={user.rol} />;
+      case '04-03':
+        return <PayrollCalculation accessToken={accessToken || ''} userRole={user.rol} />;
+      case '04-04':
+        return <PayrollApproval accessToken={accessToken || ''} userRole={user.rol} />;
+      case '04-05':
+        return <BankDispersion accessToken={accessToken || ''} userRole={user.rol} />;
+      case '04-06':
+        return <AguinaldoView accessToken={accessToken || ''} userRole={user.rol} />;
+      case '04-07':
+        return <LiquidationView accessToken={accessToken || ''} userRole={user.rol} />;
+      case '03-01':
+        return <ProfileCatalog accessToken={accessToken || ''} userRole={user.rol} />;
+      case '03-03':
+        return <SalaryBands accessToken={accessToken || ''} userRole={user.rol} />;
+      case '05-01':
+        return <IsssReport accessToken={accessToken || ''} userRole={user.rol} />;
+      case '05-02':
+        return <AfpReport accessToken={accessToken || ''} userRole={user.rol} />;
+      case '05-03':
+        return <IsrReport accessToken={accessToken || ''} userRole={user.rol} />;
+      case '05-04':
+        return <TalentReport accessToken={accessToken || ''} userRole={user.rol} />;
+      case '06-01':
+        return <LegalParameters accessToken={accessToken || ''} userRole={user.rol} />;
+      case '06-02':
+        return <OrgChart accessToken={accessToken || ''} userRole={user.rol} />;
+      case '06-03':
+        return <Integrations accessToken={accessToken || ''} userRole={user.rol} />;
+      case '06-04':
+        return <AuditLog accessToken={accessToken || ''} userRole={user.rol} />;
+      case '06-05':
+        return <SelfServicePortal accessToken={accessToken || ''} userRole={user.rol} />;
+      default:
+        return <PlaceholderView viewId={currentView} />;
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
+      <Sidebar
+        user={user}
+        currentView={currentView}
+        onNavigate={setCurrentView}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+      />
+
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <HeaderBar
+          user={user}
+          currentView={currentView}
+          onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onLogout={onLogout}
+        />
+
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+          {renderView()}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// AUTH PROVIDER
+// ============================================================
+function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<UserData | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/auth/refresh', { method: 'POST' });
+      if (!res.ok) return null;
+      const data = await res.json();
+      setAccessToken(data.accessToken);
+      setUser(data.user);
+      return data.accessToken;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Check for existing session on mount
+  useEffect(() => {
+    const init = async () => {
+      const token = await refreshAccessToken();
+      if (!token) {
+        setUser(null);
+        setAccessToken(null);
+      }
+      setIsLoading(false);
+    };
+    init();
+  }, [refreshAccessToken]);
+
+  // Auto refresh token before expiry
+  useEffect(() => {
+    if (!accessToken) return;
+    const interval = setInterval(async () => {
+      const newToken = await refreshAccessToken();
+      if (!newToken) {
+        setUser(null);
+        setAccessToken(null);
+      }
+    }, 55 * 60 * 1000); // Refresh every 55 minutes (token expires in 1h)
+    return () => clearInterval(interval);
+  }, [accessToken, refreshAccessToken]);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al iniciar sesión');
+    setAccessToken(data.accessToken);
+    setUser(data.user);
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    setAccessToken(null);
+    setUser(null);
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, accessToken, login, logout, refreshAccessToken, isLoading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// ============================================================
+// MAIN PAGE
+// ============================================================
+export default function HomePage() {
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoginLoading, setIsLoginLoading] = useState(false);
+
+  return (
+    <AuthProvider>
+      <AuthGate
+        loginError={loginError}
+        setLoginError={setLoginError}
+        isLoginLoading={isLoginLoading}
+        setIsLoginLoading={setIsLoginLoading}
+      />
+    </AuthProvider>
+  );
+}
+
+function AuthGate({
+  loginError,
+  setLoginError,
+  isLoginLoading,
+  setIsLoginLoading,
+}: {
+  loginError: string | null;
+  setLoginError: React.Dispatch<React.SetStateAction<string | null>>;
+  isLoginLoading: boolean;
+  setIsLoginLoading: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  const { user, accessToken, login, logout, isLoading } = useAuth();
+
+  const handleLogin = async (email: string, password: string) => {
+    setLoginError(null);
+    setIsLoginLoading(true);
+    try {
+      await login(email, password);
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Error desconocido');
+    } finally {
+      setIsLoginLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mx-auto" />
+          <p className="text-sm text-slate-500 mt-2">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginScreen onLogin={handleLogin} isLoading={isLoginLoading} error={loginError} />;
+  }
+
+  return <AppLayout user={user} accessToken={accessToken} onLogout={logout} />;
+}

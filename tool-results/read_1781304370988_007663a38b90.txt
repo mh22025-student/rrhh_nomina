@@ -1,0 +1,309 @@
+     1→# Sistema de Nómina y Perfiles de Puestos — El Salvador
+     2→
+     3→## Project Status
+     4→- Phase 0: Foundation - IN PROGRESS
+     5→- Reading and analyzing all 5 source documents: COMPLETED
+     6→- All 35 tables identified, 22 ENUMs catalogued, 26 views documented
+     7→
+     8→## Current Goals
+     9→1. Create Prisma schema adapted from 35 PostgreSQL tables to SQLite
+    10→2. Build main application layout with RBAC sidebar navigation
+    11→3. Implement auth module (login, JWT, middleware)
+    12→4. Build all 6 modules / 26 views progressively
+    13→
+    14→## Architecture Decisions
+    15→- Using Next.js 16 with App Router (required)
+    16→- Using Prisma with SQLite (environment constraint) - business logic from PG triggers/functions moved to application layer
+    17→- All 26 views rendered as client-side navigation within single / route
+    18→- JWT-based authentication with role-based access control
+    19→- Payroll calculation engine implemented in TypeScript (matching legal formulas from Manual de Cumplimiento)
+    20→
+    21→## Key Adaptations (PostgreSQL → SQLite)
+    22→- ENUMs → String types with validation
+    23→- UUID → cuid() auto-generated IDs  
+    24→- Triggers → Application-layer middleware/hooks
+    25→- Views → Prisma queries with equivalent logic
+    26→- RLS → API-level filtering by user role
+    27→- pgcrypto → bcrypt for passwords, crypto for OTP
+    28→
+    29→## Unresolved Issues
+    30→- None yet, project is in initial setup phase
+    31→
+    32→---
+    33→
+    34→## Task 2: Auth System + Main Layout (COMPLETED)
+    35→
+    36→### Completed: 2026-06-12
+    37→
+    38→### Files Created/Modified
+    39→
+    40→| File | Description |
+    41→|------|-------------|
+    42→| `/src/lib/auth.ts` | JWT auth utilities: generateAccessToken, generateRefreshToken, verifyAccessToken, verifyRefreshToken, hashPassword, comparePassword |
+    43→| `/src/lib/auth-middleware.ts` | API route auth middleware: verifyAuth, requireRoles |
+    44→| `/src/app/api/auth/login/route.ts` | POST login - rate limiting (10/IP/min), account lockout (5 fails → 15 min), JWT + refresh token, HttpOnly cookie |
+    45→| `/src/app/api/auth/refresh/route.ts` | POST refresh - token rotation, revocation check, new access+refresh tokens |
+    46→| `/src/app/api/auth/logout/route.ts` | POST logout - revoke refresh token, clear cookie |
+    47→| `/src/app/api/auth/forgot-password/route.ts` | POST forgot-password - 6-digit OTP, SHA-256 hash, 15 min TTL, demo_otp in response |
+    48→| `/src/app/api/auth/verify-otp/route.ts` | POST verify-otp - max 3 attempts, mark used on success |
+    49→| `/src/app/api/auth/reset-password/route.ts` | POST reset-password - require verified OTP, bcrypt hash, revoke all refresh tokens |
+    50→| `/src/app/api/auth/me/route.ts` | GET me - verify access token, return user data |
+    51→| `/src/app/page.tsx` | Complete SPA: LoginScreen, PasswordRecoveryDialog (3-step wizard), AppLayout with RBAC sidebar |
+    52→| `/src/app/layout.tsx` | Updated metadata for Sistema de Nómina, lang="es" |
+    53→| `/prisma/seed.ts` | Demo users for all 6 roles + default legal parameters + salary bands |
+    54→
+    55→### Auth System Features
+    56→- **JWT-based authentication**: Access tokens (1h) + Refresh tokens (30d) with rotation
+    57→- **Rate limiting**: 10 login attempts per IP per minute (IntentoLogin table)
+    58→- **Account lockout**: 5 failed attempts → 15 minute lock
+    59→- **Generic error messages**: Never reveals if user exists
+    60→- **Password recovery**: 3-step flow (email → OTP → new password) with 6-digit OTP, SHA-256 hashed, 15-min TTL
+    61→- **Refresh token rotation**: Old tokens revoked on each refresh
+    62→- **RBAC**: 6 roles (ADMIN, ANALISTA, APROBADOR, GERENCIA, AUDITOR, EMPLEADO) with granular view access
+    63→
+    64→### Main Layout Features
+    65→- **Login screen**: Professional design with gradient, demo credentials hint
+    66→- **Password recovery dialog**: 3-step wizard with progress indicator
+    67→- **Sidebar**: Dark slate-900, collapsible module groups, RBAC-filtered navigation
+    68→- **Header bar**: White with user dropdown, mobile hamburger menu
+    69→- **Dashboard**: Welcome banner, KPI cards, quick actions, activity placeholder
+    70→- **Responsive**: Sidebar collapses to hamburger on mobile, overlay menu
+    71→- **Auth context**: React context with auto-refresh (55 min interval)
+    72→
+    73→### Demo Users
+    74→| Email | Password | Role |
+    75→|-------|----------|------|
+    76→| admin@nomina.gob.sv | Admin2026! | ADMIN |
+    77→| analista@nomina.gob.sv | Analista2026! | ANALISTA |
+    78→| aprobador@nomina.gob.sv | Aprobador2026! | APROBADOR |
+    79→| gerencia@nomina.gob.sv | Gerencia2026! | GERENCIA |
+    80→| auditor@nomina.gob.sv | Auditor2026! | AUDITOR |
+    81→| empleado@nomina.gob.sv | Empleado2026! | EMPLEADO |
+    82→
+    83→### RBAC Navigation Matrix
+    84→- **ADMIN**: All modules and views
+    85→- **ANALISTA**: Empleados (all), Perfiles (03-01), Nómina (04-01 to 04-03, 04-06)
+    86→- **APROBADOR**: Perfiles (03-03), Nómina (04-04, 04-05, 04-07), Admin (06-01)
+    87→- **GERENCIA**: Nómina Dashboard (04-01), Reportes (all)
+    88→- **AUDITOR**: Empleados (02-01), Perfiles (03-01), Nómina (04-01 to 04-03), Reportes (all), Bitácora (06-04)
+    89→- **EMPLEADO**: Mi Portal (06-05) only
+    90→
+    91→---
+    92→
+    93→## Task 3: Employee Management Module (Módulo 02) (COMPLETED)
+    94→
+    95→### Completed: 2026-06-12
+    96→
+    97→### Summary
+    98→Implemented the complete Employee Management module (Módulo 02) with 5 views and supporting API routes. Also implemented User Management (View 01-03). All views are fully integrated into the main app's client-side navigation.
+    99→
+   100→### Files Created/Modified
+   101→
+   102→| File | Description |
+   103→|------|-------------|
+   104→| `/src/app/api/empleados/route.ts` | GET: List employees with pagination, search (name/DUI/código), filters (area/estado/perfil). POST: Create employee with auto-generated EMP-XXXXX code, simultaneous contract + vacation creation, salary mínimo validation, bitácora logging. |
+   105→| `/src/app/api/empleados/[id]/route.ts` | GET: Single employee with ALL related data (contratos, vacaciones, documentos, incidencias, cambios_salariales, cambios_cargo, usuario). PUT: Update employee (EMPLEADO limited fields, ADMIN/ANALISTA all fields). DELETE: Deactivate employee (sets INACTIVO + fecha_salida, deactivates contracts). |
+   106→| `/src/app/api/empleados/[id]/contratos/route.ts` | GET: List contracts for employee. POST: Create contract with salary validation, deactivate other contracts when new one is active, sync salario_base on empleado, create HistorialCambioSalarial. |
+   107→| `/src/app/api/incidencias/route.ts` | GET: List incidencias with filters (empleado/tipo/estado/periodo). POST: Create incidencia with type-conditional validation, HORAS_EXTRA max 10h/week (Art. 169 CT), INCAPACIDAD_ISSS numero required, COMISION/BONO/DESCUENTO_ESPECIAL monto required. |
+   108→| `/src/app/api/incidencias/[id]/route.ts` | PUT: Approve/Reject (APROBADOR/ADMIN), Edit pending (ANALISTA/ADMIN), bitácora logging. |
+   109→| `/src/app/api/usuarios/route.ts` | GET: List users (ADMIN only). POST: Create user (ADMIN, bcrypt password). |
+   110→| `/src/app/api/usuarios/[id]/route.ts` | PUT: Update role/estado, reset password (ADMIN only). DELETE: Deactivate user, revoke refresh tokens (ADMIN only). |
+   111→| `/src/app/api/areas/route.ts` | GET: List active areas with employee/perfil counts. |
+   112→| `/src/app/api/perfiles-puesto/route.ts` | GET: List approved perfiles de puesto with optional area filter. |
+   113→| `/src/components/modules/EmployeeDirectory.tsx` | View 02-01: Professional employee directory with search bar, filter dropdowns (Area/Estado/Puesto), data table (desktop) + card layout (mobile), pagination, CSV export, "Nuevo Empleado" button (ADMIN/ANALISTA only). |
+   114→| `/src/components/modules/EmployeeDetail.tsx` | View 02-02: Employee detail with 6 tabs (Personal, Contrato, Previsional, Nómina, Vacaciones, Expediente). Edit dialog with role-based field access. New contract dialog with salary validation. Contract history table. Vacation balance table. Document list. |
+   115→| `/src/components/modules/NewEmployeeForm.tsx` | View 02-03: Two-step wizard (Step 1: Personal/Labor data, Step 2: Contract data). Progress indicator. DUI auto-formatting. Perfil filtered by area. Salary mínimo validation. Auto-generates EMP-XXXXX code on submit. |
+   116→| `/src/components/modules/IncidenceManager.tsx` | View 02-04: Summary cards (Total/Pendientes/Aprobadas/Rechazadas). Filter bar. Incidence table with approve/reject buttons (APROBADOR). New incidence dialog with conditional fields by type, HORAS_EXTRA 10h/week validation with Art. 169 CT reference. |
+   117→| `/src/components/modules/UserManagement.tsx` | View 01-03: User table with role badges (color-coded). Create/Edit/Reset password dialogs. Deactivate user. ADMIN only. |
+   118→| `/src/app/page.tsx` | Updated: Added imports for all module components, added '02-02' ViewId, added selectedEmployeeId state, updated renderView switch-case for 02-01/02-02/02-03/02-04/01-03, passed accessToken to AppLayout and components. |
+   119→| `/src/components/modules/PayrollApproval.tsx` | Fixed missing Input import. |
+   120→
+   121→### Key Features Implemented
+   122→- **Employee CRUD**: Full lifecycle management with role-based access control
+   123→- **Auto-generated employee codes**: EMP-XXXXX format with sequential numbering
+   124→- **Contract management**: Active contract syncs to empleado.salario_base, salary change history tracked
+   125→- **Salary validation**: Checked against salario mínimo legal by sector from ParametroLegal
+   126→- **Incidence management**: Type-conditional fields, HORAS_EXTRA weekly cap (Art. 169 CT), approve/reject workflow
+   127→- **Audit trail**: All create/update/delete operations logged to BitacoraAuditoria
+   128→- **RBAC enforcement**: API-level role checks (ADMIN/ANALISTA for CUD, EMPLEADO read-only own record, AUDITOR read-only)
+   129→- **Responsive design**: Card layout on mobile, table on desktop, proper spacing and alignment
+   130→- **Spanish UI**: All labels, messages, and error descriptions in Spanish
+   131→- **DUI formatting**: Auto-formats to ########-# pattern
+   132→- **Monetary formatting**: USD with 2 decimal places ($1,234.56)
+   133→
+   134→---
+   135→
+   136→## Task 5: Payroll Core Module (Módulo 04) (COMPLETED)
+   137→
+   138→### Completed: 2026-06-12
+   139→
+   140→### Summary
+   141→Implemented the complete Payroll Core module (Módulo 04) with 7 views and 8 API routes. The payroll calculation engine follows El Salvador labor law exactly, including ISSS/AFP deductions, ISR tramos, aguinaldo calculations (Arts. 196-202 CT), and liquidation formulas (Art. 58 CT, Ley 523).
+   142→
+   143→### Files Created/Modified
+   144→
+   145→| File | Description |
+   146→|------|-------------|
+   147→| `/src/app/api/nomina/calcular/route.ts` | POST: Complete payroll calculation engine following El Salvador law — 8-step process: (1) Salario Base from active contract, (2) ISSS Laboral = MIN(Bruto, $1,000) × 3%, (3) AFP Laboral = Bruto × 7.25%, (4) Renta Imponible = Bruto - ISSS - AFP, (5) ISR from tramos table, (6) Descuentos especiales (cuota alimenticia > préstamo > seguro > otros), (7) Salario Neto = Bruto - all deductions, (8) Cargas patronales (ISSS 7.5%, AFP 8.75%, INSAFORP 1%). Anomaly detection: salary change >20%, net ≤0, overtime >10h/week, missing ISSS/AFP, no contract, duplicate incidences. Creates Planilla + DetallePlanilla + EmpleadoPlanilla + Checklist + BitacoraAuditoria. |
+   148→| `/src/app/api/nomina/planillas/route.ts` | GET: List planillas with filters (estado, tipo, limit, offset). Includes calculated_by and approved_by names. EMPLEADO role: only own details. |
+   149→| `/src/app/api/nomina/planillas/[id]/route.ts` | GET: Full planilla detail with all detalles, checklist, retornos bancarios. EMPLEADO: filtered to own record. PUT: Update estado — APROBADA (requires all checklist + APROBADOR role + segregation), PAGADA (APROBADOR only, immutable amounts), EN_CORRECCION (for complementarias). Inmutabilidad enforcement. Bitacora logging for all transitions. |
+   150→| `/src/app/api/nomina/planillas/[id]/checklist/route.ts` | GET: Checklist items for planilla approval. POST: Complete/uncomplete checklist item with user tracking. Only CALCULADA/EN_CORRECCION states. 5 items: Headcount verificado, Cálculos ISR validados, Incidencias revisadas, Totales coinciden, Retenciones previsionales. |
+   151→| `/src/app/api/nomina/planillas/[id]/dispersion/route.ts` | POST: Generate bank dispersion file per bank. Groups employees by bank, creates CSV format, creates RetornoBancario records. Only for APROBADA planillas. APROBADOR role only. |
+   152→| `/src/app/api/nomina/aguinaldo/route.ts` | POST: Calculate aguinaldo planilla (Arts. 196-202 CT). Years of service: <3yr=15d, 3-10yr=19d, 10+yr=21d. Proportional if <1 year. ISR exemption: up to 2× salario mínimo sector. Creates AGUINALDO type planilla. |
+   153→| `/src/app/api/nomina/liquidaciones/route.ts` | GET: List liquidaciones. POST: Calculate liquidación — DESPEDO_INJUSTIFICADO (Art. 58 CT: 30d/yr × years, max 4yr salary), RENUNCIA_VOLUNTARIA (Ley 523: 15d/yr), FIN_CONTRATO, DESPEDO_JUSTIFICADO. All include vacación proporcional + aguinaldo proporcional + salario pendiente. Returns detailed breakdown with legal article references and formulas. |
+   154→| `/src/app/api/nomina/dashboard/route.ts` | GET: Dashboard KPIs — total empleados activos (with trend), nómina del mes, cumplimiento previsional (ISSS/AFP/ISR semaphore: green≥95%, yellow≥80%, red<80%), próximos vencimientos, recent planillas, monthly trend (6 months), department cost distribution, alerts (missing data, pending approvals, no contracts). |
+   155→| `/src/components/modules/PayrollDashboard.tsx` | View 04-01: Professional dashboard with 4 KPI cards (Empleados Activos with trend, Nómina del Mes, Cumplimiento Previsional with semaphore, Próximo Vencimiento), recent planillas table, compliance semaphore panel (ISSS/AFP/ISR status), alerts section, monthly payroll trend bar chart, department cost distribution horizontal bars. Loading skeletons, error handling, responsive grid. |
+   156→| `/src/components/modules/PayrollPeriods.tsx` | View 04-02: Current period card with status badge, create new period dialog (tipo MENSUAL/QUINCENAL, fecha inicio/fin), period history table with estado badges and calculated_by info. Executes calculation on create. |
+   157→| `/src/components/modules/PayrollCalculation.tsx` | View 04-03: 8-step wizard (Seleccionar Período → Verificar Empleados → Cargar Incidencias → Salarios Brutos → Deducciones → Descuentos Adicionales → Salarios Netos → Revisar y Confirmar). Step indicator with progress. Steps 4-7 show formulas and legal references. Step 8: summary totals, anomaly alerts (color-coded by severity), expandable employee detail rows, export CSV. |
+   158→| `/src/components/modules/PayrollApproval.tsx` | View 04-04: Planilla selector (CALCULADA/EN_CORRECCION only), 5-item checklist with toggle, planilla summary card, inmutabilidad warning, digital signature (name + confirmation checkbox), approve button (disabled until all checks complete). Segregation enforcement at API level. |
+   159→| `/src/components/modules/BankDispersion.tsx` | View 04-05: Select approved planilla, generate dispersion, bank summary table (bank name, employees, total, filename), download CSV buttons, retorno bancario tracking with status badges. |
+   160→| `/src/components/modules/AguinaldoView.tsx` | View 04-06: Year selection, calculate button, legal references (Arts. 196-202 CT), employee table with years of service, aguinaldo days (15/19/21), base salary, bruto, ISR exemption, ISR, neto. Summary totals. CSV export. Parameters info. |
+   161→| `/src/components/modules/LiquidationView.tsx` | View 04-07: Nueva Liquidación dialog (employee ID, type with legal references, date), detail view with component breakdown (indemnización, prestación económica, vacación, aguinaldo, salario) each with base_legal and formula, liquidaciones history table with estado badges. |
+   162→| `/src/app/page.tsx` | Updated: Added imports for all 7 payroll components, added view mappings for 04-01 through 04-07 in renderView switch. |
+   163→
+   164→### Payroll Calculation Engine Details
+   165→
+   166→**Step-by-step calculation following El Salvador law:**
+   167→1. **Salario Base** = contrato.salario_base_contrato + incidencias aprobadas
+   168→   - HORAS_EXTRA: hourly_rate (salario/30/8) × horas × multiplier (DIURNA=2.0, NOCTURNA=2.5, DESCANSO=3.0, ASUETO=3.0)
+   169→   - COMISION, BONO: monto directo
+   170→2. **ISSS Laboral** = MIN(Salario Bruto, $1,000) × 3.00% = máx $30.00/mes
+   171→3. **AFP Laboral** = Salario Bruto × 7.25% (sin tope)
+   172→4. **Renta Imponible** = Bruto − ISSS − AFP
+   173→5. **ISR** = Apply tramos from parametros_legales/tramos_isr table
+   174→6. **Descuentos especiales** (priority order): cuota alimenticia > préstamo patronal > seguro complementario > otros
+   175→7. **Salario Neto** = Bruto − ISSS − AFP − ISR − Descuentos
+   176→8. **Cargas Patronales**: ISSS 7.50%, AFP 8.75%, INSAFORP 1.00% (if ≥10 employees)
+   177→
+   178→**Anomaly Detection:**
+   179→- Salary change >20% vs previous period
+   180→- Net pay = 0 or negative
+   181→- Overtime >10h/week (Art. 169 CT)
+   182→- Missing ISSS/AFP number
+   183→- Employee without active contract
+   184→- Duplicate incidences
+   185→
+   186→**Aguinaldo (Arts. 196-202 CT):**
+   187→- 1-3 años: 15 días | 3-10 años: 19 días | 10+ años: 21 días
+   188→- Proportional: (días/360) × salario_diario × días_aguinaldo
+   189→- ISR exemption: up to 2× salario mínimo del sector
+   190→
+   191→**Liquidación (Art. 58 CT, Ley 523):**
+   192→- Despido Injustificado: Indemnización = 30d/año (máx 4 años)
+   193→- Renuncia Voluntaria: Prestación económica = 15d/año
+   194→- Both include: Vacación proporcional + Aguinaldo proporcional + Salario pendiente
+   195→
+   196→### Key Features
+   197→- **Segregation of duties**: Analyst who calculates cannot approve (enforced at API level)
+   198→- **Inmutabilidad**: Cannot modify APROBADA or PAGADA planilla amounts
+   199→- **Checklist approval**: All 5 items must be completed before approval
+   200→- **Digital signature**: Name + confirmation checkbox required
+   201→- **Bitácora audit trail**: All payroll operations logged with criticidad level
+   202→- **Professional ERP-style design**: Consistent color scheme, responsive, loading states
+   203→- **Spanish UI**: All labels, messages, error descriptions in Spanish
+   204→- **Legal article references**: Art. 169 CT, Art. 58 CT, Arts. 196-202 CT, Ley 523
+   205→
+   206→---
+   207→
+   208→## Task 4/6/7: Admin, Reports, and Job Profiles Modules (Módulos 03, 05, 06) (COMPLETED)
+   209→
+   210→### Completed: 2026-06-12
+   211→
+   212→### Summary
+   213→Implemented the complete Admin, Reports, and Job Profiles modules with 11 views and 14 API routes. This covers Profile Catalog (03-01), Salary Bands (03-03), ISSS/AFP/ISR Reports (05-01 to 05-03), Talent Management (05-04), Legal Parameters (06-01), Org Chart (06-02), Integrations (06-03), Audit Log (06-04), and Employee Self-Service Portal (06-05).
+   214→
+   215→### API Routes Created
+   216→
+   217→| File | Description |
+   218→|------|-------------|
+   219→| `/src/app/api/perfiles/route.ts` | GET: List perfiles with area/banda info, search, filters (area/estado/banda). POST: Create perfil (ADMIN/ANALISTA), auto-creates first version, unique código check, bitácora logging. |
+   220→| `/src/app/api/perfiles/[id]/route.ts` | GET: Perfil with versiones + creator info. PUT: Update perfil (auto-increment version, creates VersionPerfilPuesto). DELETE: Deactivate perfil (set estado=OBSOLETO, ADMIN only). |
+   221→| `/src/app/api/bandas/route.ts` | GET: List bandas with employee counts per band. PUT: Update banda salary ranges (ADMIN/APROBADOR), validates min≤mid≤max and min ≥ minimum wage. |
+   222→| `/src/app/api/areas/route.ts` | GET: List areas with hierarchy (padre/hijas + employee/perfil counts). POST: Create area (ADMIN only), unique código check. PUT: Update area (ADMIN only). |
+   223→| `/src/app/api/admin/parametros/route.ts` | GET: List all parametros_legales with tramos and salarios_minimos. POST: Create new parametro (INMUTABILIDAD: never UPDATE, only INSERT with future fecha_vigencia_desde), previous ACTIVE param marked as REEMPLAZADO. ADMIN/APROBADOR only. Includes tramos_isr + salarios_minimos_sector. Bitácora CRITICO level. |
+   224→| `/src/app/api/admin/parametros/[id]/route.ts` | GET: Single parametro with tramos, salarios_minimos, creator info. |
+   225→| `/src/app/api/admin/parametros/vigente/route.ts` | GET: Currently active parametro_legal with all details. |
+   226→| `/src/app/api/reportes/isss/route.ts` | GET: ISSS report for period (mes/anio). Calculates: salario_cotizable = MIN(base, tope), cotización laboral (3%), patronal (7.5%). Uses planilla details if available. Includes submission tracking (HistorialPresentacionISSS). |
+   227→| `/src/app/api/reportes/afp/route.ts` | GET: AFP report for period. IBC = salario_base, cotización laboral (7.25%), patronal (8.75%). Separated by administradora (CRECER/CONFIA). Submission tracking (HistorialPresentacionAFP). |
+   228→| `/src/app/api/reportes/isr/route.ts` | GET: ISR retentions report. Calculates: deductions (ISSS+AFP), renta_imponible, ISR from tramos. Includes F-910 tracking (HistorialEnteroISR). Uses planilla details if available. |
+   229→| `/src/app/api/reportes/talento/route.ts` | GET: Talent management report — Cost by department, Gender pay equity (brecha salarial %), Turnover rate, Labor liabilities (vacation + aguinaldo + indemnization reserves). |
+   230→| `/src/app/api/admin/bitacora/route.ts` | GET: Immutable audit log with filters (usuario/accion/tabla/fecha range/criticidad), pagination (50/page), CSV export. READ-ONLY enforcement. |
+   231→| `/src/app/api/admin/integraciones/route.ts` | GET: List integraciones with last 10 logs. POST: Create integración (ADMIN). PUT: Update integración + test connection simulation (80% success rate, LogIntegracion created). |
+   232→| `/src/app/api/selfservice/route.ts` | GET: Employee self-service data (personal info, vacation balance, last 6 pay slips, documents, solicitudes). RLS: Only own data. POST: Create solicitud (vacation, constancy types). EMPLEADO/ADMIN only. |
+   233→
+   234→### View Components Created
+   235→
+   236→| File | View | Description |
+   237→|------|------|-------------|
+   238→| `/src/components/modules/ProfileCatalog.tsx` | 03-01 | Job profile catalog: Grid/list view, search (código/nombre), filters (area/estado/banda), cards with badges, detail dialog (all fields + version history), "Nuevo Perfil" button (ADMIN/ANALISTA), deactivate (ADMIN). |
+   239→| `/src/components/modules/SalaryBands.tsx` | 03-03 | Salary band management: Table (Grado/Nombre/Min/Mid/Max/Employees), CSS bar chart showing ranges, edit dialog (ADMIN/APROBADOR) with minimum wage validation, preview bar. |
+   240→| `/src/components/modules/IsssReport.tsx` | 05-01 | ISSS report: Period selector, parameter cards (3%/7.5%/tope), employee data table with totals, generate OIS file button, submission tracking with status badges (PENDIENTE/PRESENTADA/RECTIFICADA). |
+   241→| `/src/components/modules/AfpReport.tsx` | 05-02 | AFP report: Period selector, parameter cards, employee table, separated by administradora (CRECER/CONFIA), generate SEPP buttons for each AFP, submission tracking. |
+   242→| `/src/components/modules/IsrReport.tsx` | 05-03 | ISR report: Period selector, tramos ISR table, employee table (Bruto/Deducciones/Renta Imponible/ISR Retenido), generate F-910 button, per-employee constancy generation, entero tracking. |
+   243→| `/src/components/modules/TalentReport.tsx` | 05-04 | 4-card dashboard: (1) Cost by dept with bar chart + totals, (2) Gender equity with M/F counts + brecha salarial % + band distribution, (3) Turnover rate with hires/terminations, (4) Labor liabilities with vacation/aguinaldo/indemnization reserves + progress bars. CSV export per section. |
+   244→| `/src/components/modules/LegalParameters.tsx` | 06-01 | Current active parameter card (all rates + tramos + salarios mínimos), inmutabilidad warning, historical timeline with dots (ACTIVO=green, REEMPLAZADO=gray), "Nuevo Parámetro" form (ADMIN/APROBADOR) with pre-filled values, ISR tramos editor, salarios mínimos editor, future date validation. |
+   245→| `/src/components/modules/OrgChart.tsx` | 06-02 | Visual tree/org chart using CSS: expandable/collapsible nodes, connection lines, area cards (nombre/código/nivel/empleados), "Nueva Área" + edit dialogs (ADMIN), child area creation from parent, summary cards. |
+   246→| `/src/components/modules/Integrations.tsx` | 06-03 | Integration cards by type (BANCO/ISSS/AFP/SMTP/MH) with emoji icons, test connection button with loading state, estado_test badges, activity log (last 5 entries), edit/create dialogs (ADMIN) with JSON config editor. |
+   247→| `/src/components/modules/AuditLog.tsx` | 06-04 | Immutable audit log: 6-filter panel (usuario/accion/tabla/fechas/criticidad), color-coded criticidad (NORMAL=gray/ALTO=orange/CRITICO=red), expandable rows showing formatted JSON valor_anterior/valor_nuevo, pagination (50/page), CSV export, READ-ONLY notice. |
+   248→| `/src/components/modules/SelfServicePortal.tsx` | 06-05 | Employee self-service (mobile-first): Personal info header with gradient, vacation balance card, recent pay slips list, request buttons (Vacaciones/Constancia Empleo/Constancia Salarial/Constancia ISR), solicitudes history with status badges, request dialog. RLS: Only own data. |
+   249→
+   250→### Updated Files
+   251→
+   252→| File | Description |
+   253→|------|-------------|
+   254→| `/src/app/page.tsx` | Added imports for all 11 new components, added view mappings in renderView switch for 03-01, 03-03, 05-01 through 05-04, 06-01 through 06-05. |
+   255→
+   256→### Key Features Implemented
+   257→- **Profile versioning**: Auto-increment version on update, VersionPerfilPuesto records, version history in detail dialog
+   258→- **Salary band validation**: min ≤ medio ≤ max, minimum wage enforcement
+   259→- **Legal parameter inmutabilidad**: Never UPDATE, only INSERT new with future fecha_vigencia_desde, previous marked REEMPLAZADO
+   260→- **ISR tramos calculation**: Employee ISR computed from active tramos in API, used in both ISR report and self-service
+   261→- **Report file generation**: OIS (ISSS), SEPP per AFP admin (CRECER/CONFIA), F-910 (ISR), individual ISR constancies
+   262→- **Talent dashboard**: Cost by department, gender pay gap analysis, turnover rate, labor liability reserves
+   263→- **Org chart with CSS**: Collapsible tree with connection lines, area cards with employee counts
+   264→- **Integration test simulation**: 80% success rate simulation, LogIntegracion creation, activity log display
+   265→- **Immutable audit log**: 6-filter panel, color-coded criticidad, expandable JSON diffs, CSV export, pagination
+   266→- **Self-service portal**: Mobile-first design, vacation balance, pay slips, 4 request types, solicitudes tracking
+   267→- **Full audit trail**: All CUD operations logged to BitacoraAuditoria with appropriate criticidad levels
+   268→- **RBAC enforcement**: ADMIN/ANALISTA for profile CUD, ADMIN/APROBADOR for salary bands and legal params, GERENCIA/AUDITOR read-only for reports, EMPLEADO self-service only
+   269→
+   270→---
+   271→
+   272→## Task: seed-update — Comprehensive Demo Data (COMPLETED)
+   273→
+   274→### Completed: 2026-06-12
+   275→
+   276→### Summary
+   277→Updated `prisma/seed.ts` with comprehensive demo data covering all required entities. The seed includes idempotent cleanup logic that handles duplicate data from previous seed runs (migrates old area codes, deletes stale users/integrations, deduplicates permissions).
+   278→
+   279→### Seed Data Created
+   280→
+   281→| Entity | Count | Details |
+   282→|--------|-------|---------|
+   283→| Banks | 8 | BAC Credomatic, Banco Agrícola, Banco Cuscatlán, Banco Davivienda, Banco Promérica, Scotiabank, Banco Atlántida, Banco ABANK |
+   284→| Areas | 7 | GG (root), RRHH, FIN, OPS, TEC (level 2 under GG), CON (under FIN), VEN (under OPS) |
+   285→| Salary Bands | 7 | Banda 1-Operativo ($365-$600) through Banda 7-Alta Gerencia ($3,500-$7,000) |
+   286→| Legal Parameters | 1 | Active 2026 params with 4 ISR tramos + 6 salarios mínimos por sector |
+   287→| Job Profiles | 7 | CARGO-001 through CARGO-007, estado: VIGENTE, one per area |
+   288→| Employees | 7 | EMP-00001 through EMP-00007, each with INDEFINIDO contract + 2026 vacation |
+   289→| Integrations | 5 | BAC ACH, ISSS OIS, AFP CRECER SEPP, AFP CONFIA SEPP, SMTP |
+   290→| ADMIN Permissions | 43 | Granular permissions covering all modules (EMPLEADOS, PERFILES, NOMINA, REPORTES, ADMIN, SELFSERVICE) |
+   291→| User-Employee Link | 1 | Laura Gómez Peña (EMP-00006) → empleado@nomina.gob.sv |
+   292→
+   293→### Cleanup Logic
+   294→- Migrates old area codes (GER-GEN→GG, OPE→OPS, CONT→CON, VTA→VEN)
+   295→- Deletes stale bank records with old code format
+   296→- Removes old integrations not in target list (with their logs)
+   297→- Deletes stale users not in target email list (admin@nomina.sv etc.)
+   298→- Deduplicates granular permissions by (usuario_id, modulo, vista, permiso)
+   299→- Updates employee area_id and perfil_puesto_id if pointing to old areas
+   300→- Creates missing contracts and vacation records for existing employees
+   301→
+   302→### Verification Results
+   303→```
+   304→Banks: 8 ✅ | Areas: 7 ✅ | Bands: 7 ✅ | Profiles: 7 ✅
+   305→Employees: 7 ✅ | Contracts: 7 ✅ | Vacations: 7 ✅
+   306→ISR Tramos: 4 ✅ | Salarios Mínimos: 6 ✅
+   307→Integrations: 5 ✅ | Permissions: 43 ✅
+   308→```
+   309→

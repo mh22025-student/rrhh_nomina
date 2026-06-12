@@ -1,0 +1,676 @@
+     1→=== bancos ===
+     2→id                  UUID            NOT NULL DEFAULT gen_random_uuid(),
+     3→codigo              VARCHAR(10)     NOT NULL,
+     4→nombre              VARCHAR(100)    NOT NULL,
+     5→codigo_ach          VARCHAR(20),                          -- Código ACH para archivo de dispersión
+     6→formato_cuenta      VARCHAR(50),                          -- Descripción del formato de número de cuenta
+     7→activo              BOOLEAN         NOT NULL DEFAULT TRUE,
+     8→fecha_creacion      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+     9→CONSTRAINT pk_bancos PRIMARY KEY (id),
+    10→CONSTRAINT uq_bancos_codigo UNIQUE (codigo)
+    11→
+    12→=== parametros_legales ===
+    13→id                          UUID            NOT NULL DEFAULT gen_random_uuid(),
+    14→descripcion_cambio          VARCHAR(255)    NOT NULL,                   -- Ej: "Actualización salario mínimo Decreto #123"
+    15→decreto_norma_origen        VARCHAR(100)    NOT NULL,                   -- Referencia legal: número de decreto, Diario Oficial
+    16→-- Tasas ISSS (Ley del Seguro Social)
+    17→tasa_isss_laboral           NUMERIC(5,4)    NOT NULL DEFAULT 0.0300     CHECK (tasa_isss_laboral     BETWEEN 0 AND 1),
+    18→tasa_isss_patronal          NUMERIC(5,4)    NOT NULL DEFAULT 0.0750     CHECK (tasa_isss_patronal    BETWEEN 0 AND 1),
+    19→tope_cotizacion_isss        NUMERIC(10,2)   NOT NULL DEFAULT 1000.00    CHECK (tope_cotizacion_isss  > 0),
+    20→-- Tasas AFP (Ley del Sistema de Ahorro para Pensiones)
+    21→tasa_afp_laboral            NUMERIC(5,4)    NOT NULL DEFAULT 0.0725     CHECK (tasa_afp_laboral      BETWEEN 0 AND 1),
+    22→tasa_afp_patronal           NUMERIC(5,4)    NOT NULL DEFAULT 0.0875     CHECK (tasa_afp_patronal     BETWEEN 0 AND 1),
+    23→-- INSAFORP (Ley de Formación Profesional — aplica para patronos con ≥ 10 empleados)
+    24→tasa_insaforp               NUMERIC(5,4)    NOT NULL DEFAULT 0.0100     CHECK (tasa_insaforp         BETWEEN 0 AND 1),
+    25→empleados_minimos_insaforp  SMALLINT        NOT NULL DEFAULT 10         CHECK (empleados_minimos_insaforp > 0),
+    26→-- Control de vigencia y estado (inmutabilidad retroactiva)
+    27→fecha_vigencia_desde        DATE            NOT NULL,
+    28→fecha_vigencia_hasta        DATE,                                       -- NULL = actualmente vigente
+    29→estado                      tipo_estado_parametro NOT NULL DEFAULT 'PROGRAMADO',
+    30→creado_por_usuario_id       UUID,                                       -- FK se agrega después (dependencia circular)
+    31→fecha_creacion              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    32→CONSTRAINT pk_parametros_legales PRIMARY KEY (id),
+    33→-- Solo puede existir un registro VIGENTE a la vez
+    34→CONSTRAINT uq_parametros_un_vigente UNIQUE (estado) DEFERRABLE INITIALLY DEFERRED,
+    35→CONSTRAINT ck_parametros_fechas CHECK (
+    36→fecha_vigencia_hasta IS NULL OR fecha_vigencia_hasta > fecha_vigencia_desde
+    37→)
+    38→
+    39→=== tramos_isr ===
+    40→id                      UUID            NOT NULL DEFAULT gen_random_uuid(),
+    41→parametro_legal_id      UUID            NOT NULL,
+    42→numero_tramo            SMALLINT        NOT NULL CHECK (numero_tramo BETWEEN 1 AND 10),
+    43→limite_inferior         NUMERIC(10,2)   NOT NULL CHECK (limite_inferior >= 0),
+    44→limite_superior         NUMERIC(10,2),                  -- NULL en el último tramo (sin límite superior)
+    45→cuota_fija              NUMERIC(10,2)   NOT NULL DEFAULT 0.00 CHECK (cuota_fija >= 0),
+    46→tasa_marginal           NUMERIC(5,4)    NOT NULL CHECK (tasa_marginal BETWEEN 0 AND 1),
+    47→exceso_calculado_sobre  NUMERIC(10,2)   NOT NULL DEFAULT 0.00 CHECK (exceso_calculado_sobre >= 0),
+    48→CONSTRAINT pk_tramos_isr PRIMARY KEY (id),
+    49→CONSTRAINT fk_tramos_isr_parametros FOREIGN KEY (parametro_legal_id)
+    50→REFERENCES parametros_legales(id) ON DELETE RESTRICT,
+    51→CONSTRAINT uq_tramo_por_parametro UNIQUE (parametro_legal_id, numero_tramo),
+    52→CONSTRAINT ck_tramos_limites CHECK (
+    53→limite_superior IS NULL OR limite_superior > limite_inferior
+    54→)
+    55→
+    56→=== salarios_minimos_sector ===
+    57→id                  UUID                NOT NULL DEFAULT gen_random_uuid(),
+    58→parametro_legal_id  UUID                NOT NULL,
+    59→sector              tipo_sector_laboral NOT NULL,
+    60→salario_mensual     NUMERIC(10,2)       NOT NULL CHECK (salario_mensual > 0),
+    61→CONSTRAINT pk_salarios_minimos PRIMARY KEY (id),
+    62→CONSTRAINT fk_salarios_minimos_parametros FOREIGN KEY (parametro_legal_id)
+    63→REFERENCES parametros_legales(id) ON DELETE RESTRICT,
+    64→CONSTRAINT uq_salario_por_sector_parametro UNIQUE (parametro_legal_id, sector)
+    65→
+    66→=== usuarios ===
+    67→id                          UUID                NOT NULL DEFAULT gen_random_uuid(),
+    68→email                       VARCHAR(100)        NOT NULL,
+    69→password_hash               VARCHAR(255)        NOT NULL,   -- SIEMPRE bcrypt factor ≥ 12. NUNCA texto plano.
+    70→primer_nombre               VARCHAR(50)         NOT NULL,
+    71→primer_apellido             VARCHAR(50)         NOT NULL,
+    72→segundo_nombre              VARCHAR(50),
+    73→segundo_apellido            VARCHAR(50),
+    74→rol                         tipo_rol_sistema    NOT NULL,
+    75→estado                      tipo_estado_usuario NOT NULL DEFAULT 'ACTIVO',
+    76→debe_cambiar_contrasena     BOOLEAN             NOT NULL DEFAULT FALSE,  -- Flag para forzar cambio en próximo login
+    77→empleado_id                 UUID,               -- FK se agrega después (dependencia con empleados)
+    78→ultimo_login_exitoso_at     TIMESTAMPTZ,
+    79→ultimo_login_fallido_at     TIMESTAMPTZ,
+    80→contador_intentos_fallidos  SMALLINT            NOT NULL DEFAULT 0 CHECK (contador_intentos_fallidos >= 0),
+    81→bloqueado_hasta             TIMESTAMPTZ,                    -- Bloqueo temporal por intentos fallidos (15 min)
+    82→fecha_creacion              TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+    83→fecha_actualizacion         TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+    84→creado_por_id               UUID,               -- FK self-referencing: quién creó este usuario
+    85→motivo_eliminacion          TEXT,               -- Obligatorio en soft-delete
+    86→CONSTRAINT pk_usuarios PRIMARY KEY (id),
+    87→CONSTRAINT uq_usuarios_email UNIQUE (email),
+    88→CONSTRAINT ck_usuarios_email_formato CHECK (email ~* '^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$')
+    89→
+    90→=== areas ===
+    91→id                          UUID            NOT NULL DEFAULT gen_random_uuid(),
+    92→codigo                      VARCHAR(20)     NOT NULL,
+    93→nombre                      VARCHAR(100)    NOT NULL,
+    94→descripcion                 TEXT,
+    95→area_padre_id               UUID,           -- NULL = área raíz (ej: empresa misma)
+    96→nivel                       SMALLINT        NOT NULL DEFAULT 1 CHECK (nivel BETWEEN 1 AND 10),
+    97→aprobador_nomina_id         UUID,           -- FK a usuarios: aprobador de nómina asignado al área
+    98→jefe_id                     UUID,           -- FK a empleados (DEFERRABLE — se agrega post-creación de empleados)
+    99→activo                      BOOLEAN         NOT NULL DEFAULT TRUE,
+   100→fecha_creacion              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   101→fecha_actualizacion         TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   102→CONSTRAINT pk_areas PRIMARY KEY (id),
+   103→CONSTRAINT uq_areas_codigo UNIQUE (codigo),
+   104→CONSTRAINT uq_areas_nombre_padre UNIQUE (nombre, area_padre_id),
+   105→CONSTRAINT fk_areas_padre FOREIGN KEY (area_padre_id)
+   106→REFERENCES areas(id) ON DELETE RESTRICT,
+   107→CONSTRAINT fk_areas_aprobador FOREIGN KEY (aprobador_nomina_id)
+   108→REFERENCES usuarios(id) ON DELETE SET NULL
+   109→
+   110→=== bandas_salariales ===
+   111→id                  UUID                NOT NULL DEFAULT gen_random_uuid(),
+   112→nombre              VARCHAR(80)         NOT NULL,
+   113→descripcion         TEXT,
+   114→sector              tipo_sector_laboral NOT NULL DEFAULT 'COMERCIO',
+   115→puntuacion_min      INTEGER             NOT NULL CHECK (puntuacion_min >= 0),
+   116→puntuacion_max      INTEGER             NOT NULL CHECK (puntuacion_max > 0),
+   117→salario_minimo      NUMERIC(10,2)       NOT NULL CHECK (salario_minimo > 0),     -- Extremo inferior de la banda
+   118→salario_midpoint    NUMERIC(10,2)       NOT NULL CHECK (salario_midpoint > 0),   -- Punto medio / referencia de mercado
+   119→salario_maximo      NUMERIC(10,2)       NOT NULL CHECK (salario_maximo > 0),     -- Extremo superior de la banda
+   120→activo              BOOLEAN             NOT NULL DEFAULT TRUE,
+   121→fecha_creacion      TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+   122→fecha_actualizacion TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+   123→CONSTRAINT pk_bandas_salariales PRIMARY KEY (id),
+   124→CONSTRAINT uq_bandas_nombre_sector UNIQUE (nombre, sector),
+   125→CONSTRAINT ck_bandas_puntuacion CHECK (puntuacion_max > puntuacion_min),
+   126→CONSTRAINT ck_bandas_salarios CHECK (
+   127→salario_minimo < salario_midpoint AND salario_midpoint < salario_maximo
+   128→)
+   129→
+   130→=== perfiles_puesto ===
+   131→id                          UUID                    NOT NULL DEFAULT gen_random_uuid(),
+   132→codigo                      VARCHAR(20)             NOT NULL,           -- Auto-generado: CARGO-XXX
+   133→nombre_cargo                VARCHAR(80)             NOT NULL,
+   134→area_id                     UUID                    NOT NULL,
+   135→superior_jerarquico_id      UUID,                                       -- FK self-referencing (perfil padre en el organigrama)
+   136→banda_salarial_id           UUID,                                       -- Asignada al aprobar el descriptivo valorado
+   137→nivel_jerarquico            tipo_nivel_jerarquico   NOT NULL,
+   138→tipo_jornada_cargo          tipo_jornada            NOT NULL DEFAULT 'DIURNA',
+   139→sector_laboral              tipo_sector_laboral     NOT NULL DEFAULT 'COMERCIO',
+   140→plazas_presupuestadas       SMALLINT                NOT NULL DEFAULT 1 CHECK (plazas_presupuestadas > 0),
+   141→puntuacion_valuacion        INTEGER                 CHECK (puntuacion_valuacion >= 0),
+   142→estado                      tipo_estado_perfil      NOT NULL DEFAULT 'BORRADOR',
+   143→fecha_creacion              TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+   144→fecha_actualizacion         TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+   145→creado_por_id               UUID,
+   146→CONSTRAINT pk_perfiles_puesto PRIMARY KEY (id),
+   147→CONSTRAINT uq_perfiles_codigo UNIQUE (codigo),
+   148→CONSTRAINT uq_perfiles_nombre_area UNIQUE (nombre_cargo, area_id),
+   149→CONSTRAINT fk_perfiles_area FOREIGN KEY (area_id)
+   150→REFERENCES areas(id) ON DELETE RESTRICT,
+   151→CONSTRAINT fk_perfiles_superior FOREIGN KEY (superior_jerarquico_id)
+   152→REFERENCES perfiles_puesto(id) ON DELETE SET NULL,
+   153→CONSTRAINT fk_perfiles_banda FOREIGN KEY (banda_salarial_id)
+   154→REFERENCES bandas_salariales(id) ON DELETE RESTRICT,
+   155→CONSTRAINT fk_perfiles_creador FOREIGN KEY (creado_por_id)
+   156→  ... (26 total lines)
+   157→
+   158→=== versiones_perfil_puesto ===
+   159→id                          UUID                NOT NULL DEFAULT gen_random_uuid(),
+   160→perfil_puesto_id            UUID                NOT NULL,
+   161→numero_version              SMALLINT            NOT NULL DEFAULT 1 CHECK (numero_version > 0),
+   162→-- Sección A: Identificación (redundante con perfiles_puesto pero necesario por versionado)
+   163→proposito_principal         TEXT                NOT NULL,
+   164→-- Secciones B-D almacenadas como JSONB para flexibilidad (estructura definida en capa de aplicación)
+   165→
+   166→funciones_esenciales        JSONB               NOT NULL DEFAULT '[]'::JSONB,   -- Array de strings
+   167→funciones_secundarias       JSONB               NOT NULL DEFAULT '[]'::JSONB,   -- Array de strings
+   168→requisitos                  JSONB               NOT NULL DEFAULT '{}'::JSONB,   -- educación, experiencia, idiomas, etc.
+   169→responsabilidades           JSONB               NOT NULL DEFAULT '{}'::JSONB,   -- supervisión, fondos, confidencialidad
+   170→condiciones_trabajo         JSONB               NOT NULL DEFAULT '{}'::JSONB,   -- ambiente, riesgos, esfuerzo
+   171→competencias_conductuales   JSONB               NOT NULL DEFAULT '[]'::JSONB,   -- Array de competencias
+   172→indicadores_kpi             JSONB               NOT NULL DEFAULT '[]'::JSONB,   -- Metas y KPIs (¡Corregido con coma!)
+   173→
+   174→-- Resultado de la valuación (método de puntos por factor)
+   175→puntos_habilidades          NUMERIC(6,2)        CHECK (puntos_habilidades >= 0),
+   176→puntos_esfuerzo             NUMERIC(6,2)        CHECK (puntos_esfuerzo >= 0),
+   177→puntos_responsabilidad      NUMERIC(6,2)        CHECK (puntos_responsabilidad >= 0),
+   178→puntos_condiciones          NUMERIC(6,2)        CHECK (puntos_condiciones >= 0),
+   179→puntuacion_total            NUMERIC(7,2)        CHECK (puntuacion_total >= 0),
+   180→banda_sugerida_id           UUID,
+   181→estado                      tipo_estado_perfil  NOT NULL DEFAULT 'BORRADOR',
+   182→-- Flujo de aprobación
+   183→fecha_envio_revision        TIMESTAMPTZ,
+   184→  ... (42 total lines)
+   185→
+   186→=== empleados ===
+   187→id                          UUID                    NOT NULL DEFAULT gen_random_uuid(),
+   188→codigo_empleado             VARCHAR(20)             NOT NULL,               -- Auto-generado: EMP-XXXXX
+   189→-- Datos de identidad
+   190→primer_nombre               VARCHAR(50)             NOT NULL,
+   191→segundo_nombre              VARCHAR(50),
+   192→primer_apellido             VARCHAR(50)             NOT NULL,
+   193→segundo_apellido            VARCHAR(50),
+   194→fecha_nacimiento            DATE                    NOT NULL,
+   195→genero                      tipo_genero             NOT NULL,
+   196→-- Documentos de identidad salvadoreños — UNIQUE obligatorio por ley
+   197→dui                         VARCHAR(10)             NOT NULL,               -- Formato: ########-#
+   198→nit                         VARCHAR(17)             NOT NULL,               -- Formato: ####-######-###-#
+   199→-- Previsional — UNIQUE obligatorio; se completa en Paso 2 del registro
+   200→afp                         tipo_afp,
+   201→nup_afp                     VARCHAR(30),                                    -- Número Único Previsional AFP
+   202→numero_afiliado_isss        VARCHAR(20),                                    -- Número de afiliación ISSS
+   203→-- Datos de contacto
+   204→email_personal              VARCHAR(100)            NOT NULL,
+   205→telefono_principal          VARCHAR(9)              NOT NULL,               -- Formato: ####-####
+   206→telefono_alternativo        VARCHAR(9),
+   207→nombre_contacto_emergencia  VARCHAR(100)            NOT NULL,
+   208→telefono_emergencia         VARCHAR(9)              NOT NULL,
+   209→direccion_residencia        TEXT                    NOT NULL,
+   210→-- Datos laborales
+   211→fecha_ingreso               DATE                    NOT NULL,
+   212→  ... (57 total lines)
+   213→
+   214→=== contratos ===
+   215→id                      UUID                NOT NULL DEFAULT gen_random_uuid(),
+   216→empleado_id             UUID                NOT NULL,
+   217→perfil_puesto_id        UUID,
+   218→banda_salarial_id       UUID,
+   219→banco_id                UUID,
+   220→tipo_contrato           tipo_contrato       NOT NULL,
+   221→tipo_jornada            tipo_jornada        NOT NULL,
+   222→fecha_inicio            DATE                NOT NULL,
+   223→fecha_fin               DATE,                                           -- NULL para contratos indefinidos
+   224→salario_base_contrato   NUMERIC(10,2)       NOT NULL                    CHECK (salario_base_contrato >= 0),
+   225→forma_pago              tipo_forma_pago     NOT NULL DEFAULT 'MENSUAL',
+   226→numero_cuenta_bancaria  TEXT,                                           -- Cifrado en capa de aplicación (AES-256)
+   227→tipo_cuenta             tipo_cuenta_bancaria,
+   228→activo                  BOOLEAN             NOT NULL DEFAULT TRUE,
+   229→fecha_creacion          TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+   230→registrado_por_id       UUID,
+   231→CONSTRAINT pk_contratos PRIMARY KEY (id),
+   232→CONSTRAINT fk_contratos_empleado FOREIGN KEY (empleado_id)
+   233→REFERENCES empleados(id) ON DELETE RESTRICT,
+   234→CONSTRAINT fk_contratos_perfil FOREIGN KEY (perfil_puesto_id)
+   235→REFERENCES perfiles_puesto(id) ON DELETE RESTRICT,
+   236→CONSTRAINT fk_contratos_banda FOREIGN KEY (banda_salarial_id)
+   237→REFERENCES bandas_salariales(id) ON DELETE RESTRICT,
+   238→CONSTRAINT fk_contratos_banco FOREIGN KEY (banco_id)
+   239→REFERENCES bancos(id) ON DELETE RESTRICT,
+   240→  ... (31 total lines)
+   241→
+   242→=== planillas ===
+   243→id                          UUID                    NOT NULL DEFAULT gen_random_uuid(),
+   244→codigo_planilla             VARCHAR(30)             NOT NULL,               -- Ej: NOMINA-2026-01-M
+   245→descripcion                 VARCHAR(200)            NOT NULL,
+   246→tipo                        tipo_planilla           NOT NULL DEFAULT 'MENSUAL',
+   247→estado                      tipo_estado_planilla    NOT NULL DEFAULT 'BORRADOR',
+   248→fecha_inicio_periodo        DATE                    NOT NULL,
+   249→fecha_fin_periodo           DATE                    NOT NULL,
+   250→fecha_pago_programada       DATE,
+   251→fecha_pago_confirmada       DATE,
+   252→-- Parámetros legales usados para el cálculo (snapshot de la versión vigente al calcular)
+   253→parametro_legal_id          UUID,
+   254→-- Planilla de referencia para complementarias
+   255→planilla_padre_id           UUID,                                           -- FK self: solo para tipo=COMPLEMENTARIA
+   256→-- Totales calculados (se llenan al ejecutar el motor de cálculo)
+   257→total_empleados             INTEGER                 DEFAULT 0               CHECK (total_empleados >= 0),
+   258→total_salarios_brutos       NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_salarios_brutos >= 0),
+   259→total_isss_laboral          NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_isss_laboral >= 0),
+   260→total_afp_laboral           NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_afp_laboral >= 0),
+   261→total_isr_retenido          NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_isr_retenido >= 0),
+   262→total_otros_descuentos      NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_otros_descuentos >= 0),
+   263→total_neto_a_pagar          NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_neto_a_pagar >= 0),
+   264→total_isss_patronal         NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_isss_patronal >= 0),
+   265→total_afp_patronal          NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_afp_patronal >= 0),
+   266→total_insaforp              NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_insaforp >= 0),
+   267→-- Control de flujo
+   268→  ... (52 total lines)
+   269→
+   270→=== empleados_planilla ===
+   271→id                  UUID        NOT NULL DEFAULT gen_random_uuid(),
+   272→planilla_id         UUID        NOT NULL,
+   273→empleado_id         UUID        NOT NULL,
+   274→contrato_id         UUID,                       -- Snapshot del contrato vigente al momento de inclusión
+   275→excluido            BOOLEAN     NOT NULL DEFAULT FALSE,
+   276→justificacion_excl  TEXT,                       -- Obligatorio si excluido=TRUE
+   277→fecha_inclusion     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   278→incluido_por_id     UUID,
+   279→CONSTRAINT pk_empleados_planilla PRIMARY KEY (id),
+   280→CONSTRAINT uq_empleado_por_planilla UNIQUE (planilla_id, empleado_id),
+   281→CONSTRAINT fk_ep_planilla FOREIGN KEY (planilla_id)
+   282→REFERENCES planillas(id) ON DELETE CASCADE,     -- Si se elimina una planilla BORRADOR, se eliminan sus empleados
+   283→CONSTRAINT fk_ep_empleado FOREIGN KEY (empleado_id)
+   284→REFERENCES empleados(id) ON DELETE RESTRICT,
+   285→CONSTRAINT fk_ep_contrato FOREIGN KEY (contrato_id)
+   286→REFERENCES contratos(id) ON DELETE SET NULL,
+   287→CONSTRAINT fk_ep_inclusor FOREIGN KEY (incluido_por_id)
+   288→REFERENCES usuarios(id) ON DELETE SET NULL
+   289→
+   290→=== incidencias_nomina ===
+   291→id                          UUID                        NOT NULL DEFAULT gen_random_uuid(),
+   292→empleado_id                 UUID                        NOT NULL,
+   293→planilla_id                 UUID                        NOT NULL,
+   294→tipo                        tipo_incidencia             NOT NULL,
+   295→estado                      tipo_estado_incidencia      NOT NULL DEFAULT 'PENDIENTE',
+   296→-- Datos del evento
+   297→fecha_inicio                DATE                        NOT NULL,
+   298→fecha_fin                   DATE,                                       -- NULL para incidencias de un solo día
+   299→descripcion                 VARCHAR(500),
+   300→documento_url               TEXT,                                       -- URL firmada del respaldo adjunto
+   301→-- Campos específicos por tipo (algunos son NULL según el tipo)
+   302→tipo_hora_extra             tipo_hora_extra,                            -- Para tipo=HORAS_EXTRA
+   303→cantidad_horas              NUMERIC(5,2)                CHECK (cantidad_horas IS NULL OR cantidad_horas > 0),
+   304→tipo_incapacidad            tipo_incapacidad_isss,                      -- Para tipo=INCAPACIDAD_ISSS
+   305→numero_certificado_isss     VARCHAR(50),
+   306→tipo_ausencia               tipo_ausencia,                              -- Para tipo=AUSENCIA
+   307→tipo_permiso                tipo_permiso,                               -- Para tipo=PERMISO
+   308→gravado_isr                 BOOLEAN,                                    -- Para tipo=BONO
+   309→es_comision_habitual        BOOLEAN,                                    -- Para tipo=COMISION (Art. 180 CT)
+   310→-- Montos calculados (NUMERIC(10,2) — PROHIBIDO float)
+   311→monto_incidencia            NUMERIC(10,2)               CHECK (monto_incidencia IS NULL OR monto_incidencia >= 0),
+   312→monto_patrono               NUMERIC(10,2)               CHECK (monto_patrono IS NULL OR monto_patrono >= 0),  -- Días pagados por patrono (incapacidades)
+   313→monto_isss_subsidio         NUMERIC(10,2)               CHECK (monto_isss_subsidio IS NULL OR monto_isss_subsidio >= 0),
+   314→-- Flujo de aprobación
+   315→aprobada_por_id             UUID,
+   316→  ... (47 total lines)
+   317→
+   318→=== detalles_planilla ===
+   319→id                              UUID            NOT NULL DEFAULT gen_random_uuid(),
+   320→planilla_id                     UUID            NOT NULL,
+   321→empleado_id                     UUID            NOT NULL,
+   322→contrato_id                     UUID,                                       -- Snapshot del contrato usado en el cálculo
+   323→-- ─── DEVENGADOS (INGRESOS) ───────────────────────────────
+   324→salario_nominal                 NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (salario_nominal >= 0),
+   325→monto_horas_extras_diurnas      NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_horas_extras_diurnas >= 0),
+   326→monto_horas_extras_nocturnas    NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_horas_extras_nocturnas >= 0),
+   327→monto_recargo_dia_descanso      NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_recargo_dia_descanso >= 0),
+   328→monto_recargo_dia_asueto        NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_recargo_dia_asueto >= 0),
+   329→monto_comisiones                NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_comisiones >= 0),
+   330→monto_bonos_gravados            NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_bonos_gravados >= 0),
+   331→monto_otros_ingresos            NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_otros_ingresos >= 0),
+   332→-- ─── SALARIO BRUTO (calculado = suma de devengados) ──────
+   333→salario_bruto                   NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (salario_bruto >= 0),
+   334→-- ─── DESCUENTOS LABORALES (de cargo del trabajador) ──────
+   335→-- ISSS laboral: MIN(salario_bruto, tope_isss) × tasa_isss_laboral
+   336→base_isss                       NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (base_isss >= 0),  -- MIN(bruto, $1,000)
+   337→descuento_isss                  NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (descuento_isss >= 0),
+   338→-- AFP laboral: salario_bruto × tasa_afp_laboral (sin tope)
+   339→base_afp                        NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (base_afp >= 0),
+   340→descuento_afp                   NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (descuento_afp >= 0),
+   341→-- ISR: aplicado sobre la renta imponible = bruto - isss - afp (Art. 37 Ley ISR)
+   342→renta_imponible                 NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (renta_imponible >= 0),
+   343→tramo_isr_aplicado              SMALLINT        CHECK (tramo_isr_aplicado BETWEEN 1 AND 10),
+   344→  ... (51 total lines)
+   345→
+   346→=== vacaciones_empleado ===
+   347→id                      UUID                    NOT NULL DEFAULT gen_random_uuid(),
+   348→empleado_id             UUID                    NOT NULL,
+   349→periodo_vacacional      VARCHAR(20)             NOT NULL,           -- Ej: "2025-2026" (año de derecho)
+   350→fecha_inicio            DATE                    NOT NULL,
+   351→fecha_fin               DATE                    NOT NULL,
+   352→dias_habiles            SMALLINT                NOT NULL            CHECK (dias_habiles > 0),
+   353→tipo                    VARCHAR(20)             NOT NULL,           -- PROGRAMADA / TOMADA
+   354→estado                  tipo_estado_vacacion    NOT NULL DEFAULT 'PROGRAMADA',
+   355→autorizado_por_id       UUID,
+   356→planilla_id             UUID,                                       -- Si se incluyó en una nómina
+   357→fecha_cancelacion       DATE,
+   358→motivo_cancelacion      TEXT,
+   359→liquidacion_id          UUID,                                       -- FK se agrega después de crear liquidaciones
+   360→fecha_creacion          TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+   361→registrada_por_id       UUID,
+   362→CONSTRAINT pk_vacaciones PRIMARY KEY (id),
+   363→CONSTRAINT fk_vac_empleado FOREIGN KEY (empleado_id)
+   364→REFERENCES empleados(id) ON DELETE RESTRICT,
+   365→CONSTRAINT fk_vac_autorizador FOREIGN KEY (autorizado_por_id)
+   366→REFERENCES usuarios(id) ON DELETE SET NULL,
+   367→CONSTRAINT fk_vac_planilla FOREIGN KEY (planilla_id)
+   368→REFERENCES planillas(id) ON DELETE SET NULL,
+   369→CONSTRAINT fk_vac_registrador FOREIGN KEY (registrada_por_id)
+   370→REFERENCES usuarios(id) ON DELETE SET NULL,
+   371→CONSTRAINT ck_vacaciones_fechas CHECK (fecha_fin >= fecha_inicio)
+   372→
+   373→=== liquidaciones ===
+   374→id                              UUID                        NOT NULL DEFAULT gen_random_uuid(),
+   375→empleado_id                     UUID                        NOT NULL,
+   376→tipo_terminacion                tipo_terminacion            NOT NULL,
+   377→estado                          tipo_estado_liquidacion     NOT NULL DEFAULT 'BORRADOR',
+   378→fecha_terminacion               DATE                        NOT NULL,
+   379→fecha_inicio_relacion           DATE                        NOT NULL,   -- Snapshot desde contratos
+   380→-- Cálculo de antigüedad
+   381→anios_servicio_exactos          NUMERIC(5,2)                CHECK (anios_servicio_exactos >= 0),
+   382→anios_computables               SMALLINT                    CHECK (anios_computables >= 0),
+   383→-- Rubros calculados (todos NUMERIC(10,2) — PROHIBIDO float)
+   384→indemnizacion_bruta             NUMERIC(10,2)   DEFAULT 0.00    CHECK (indemnizacion_bruta >= 0),
+   385→vacacion_proporcional           NUMERIC(10,2)   DEFAULT 0.00    CHECK (vacacion_proporcional >= 0),
+   386→aguinaldo_proporcional          NUMERIC(10,2)   DEFAULT 0.00    CHECK (aguinaldo_proporcional >= 0),
+   387→aguinaldo_exento_isr            NUMERIC(10,2)   DEFAULT 0.00    CHECK (aguinaldo_exento_isr >= 0),
+   388→aguinaldo_gravado_isr           NUMERIC(10,2)   DEFAULT 0.00    CHECK (aguinaldo_gravado_isr >= 0),
+   389→ultimo_salario_bruto            NUMERIC(10,2)   DEFAULT 0.00    CHECK (ultimo_salario_bruto >= 0),
+   390→-- Deducciones sobre la liquidación
+   391→isr_sobre_liquidacion           NUMERIC(10,2)   DEFAULT 0.00    CHECK (isr_sobre_liquidacion >= 0),
+   392→descuentos_varios               NUMERIC(10,2)   DEFAULT 0.00    CHECK (descuentos_varios >= 0),
+   393→-- Totales
+   394→total_bruto_liquidacion         NUMERIC(10,2)   DEFAULT 0.00    CHECK (total_bruto_liquidacion >= 0),
+   395→total_neto_liquidacion          NUMERIC(10,2)   DEFAULT 0.00    CHECK (total_neto_liquidacion >= 0),
+   396→-- Documentación y control
+   397→fundamento_legal                TEXT,                                   -- Síntesis del articulado aplicado
+   398→acta_liquidacion_url            TEXT,                                   -- URL del acta firmada (cifrada)
+   399→  ... (43 total lines)
+   400→
+   401→=== historial_cambios_salariales ===
+   402→id                  UUID            NOT NULL DEFAULT gen_random_uuid(),
+   403→empleado_id         UUID            NOT NULL,
+   404→contrato_id         UUID,
+   405→salario_anterior    NUMERIC(10,2)   NOT NULL CHECK (salario_anterior >= 0),
+   406→salario_nuevo       NUMERIC(10,2)   NOT NULL CHECK (salario_nuevo >= 0),
+   407→porcentaje_cambio   NUMERIC(6,2),   -- Calculado: ((nuevo-anterior)/anterior)*100
+   408→fecha_efectividad   DATE            NOT NULL,
+   409→motivo              VARCHAR(50)     NOT NULL,   -- 'EVALUACION_DESEMPENIO', 'AJUSTE_BANDA', 'NUEVO_CARGO', 'MERCADO', 'OTRO'
+   410→detalle_motivo      TEXT,
+   411→documento_url       TEXT,
+   412→aprobado_por_id     UUID,
+   413→fecha_registro      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   414→CONSTRAINT pk_historial_salarios PRIMARY KEY (id),
+   415→CONSTRAINT fk_hs_empleado FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE RESTRICT,
+   416→CONSTRAINT fk_hs_contrato FOREIGN KEY (contrato_id) REFERENCES contratos(id) ON DELETE SET NULL,
+   417→CONSTRAINT fk_hs_aprobador FOREIGN KEY (aprobado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+   418→
+   419→=== historial_cambios_cargo ===
+   420→id                      UUID            NOT NULL DEFAULT gen_random_uuid(),
+   421→empleado_id             UUID            NOT NULL,
+   422→perfil_anterior_id      UUID,
+   423→perfil_nuevo_id         UUID,
+   424→area_anterior_id        UUID,
+   425→area_nueva_id           UUID,
+   426→fecha_efectividad       DATE            NOT NULL,
+   427→motivo                  TEXT            NOT NULL,
+   428→alerta_salario_fuera_rango BOOLEAN      NOT NULL DEFAULT FALSE,
+   429→aprobado_por_id         UUID,
+   430→fecha_registro          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   431→CONSTRAINT pk_historial_cargo PRIMARY KEY (id),
+   432→CONSTRAINT fk_hc_empleado        FOREIGN KEY (empleado_id)       REFERENCES empleados(id)       ON DELETE RESTRICT,
+   433→CONSTRAINT fk_hc_perfil_ant      FOREIGN KEY (perfil_anterior_id) REFERENCES perfiles_puesto(id) ON DELETE SET NULL,
+   434→CONSTRAINT fk_hc_perfil_nuevo    FOREIGN KEY (perfil_nuevo_id)    REFERENCES perfiles_puesto(id) ON DELETE SET NULL,
+   435→CONSTRAINT fk_hc_area_ant        FOREIGN KEY (area_anterior_id)   REFERENCES areas(id)           ON DELETE SET NULL,
+   436→CONSTRAINT fk_hc_area_nueva      FOREIGN KEY (area_nueva_id)      REFERENCES areas(id)           ON DELETE SET NULL,
+   437→CONSTRAINT fk_hc_aprobador       FOREIGN KEY (aprobado_por_id)    REFERENCES usuarios(id)        ON DELETE SET NULL
+   438→
+   439→=== historial_presentaciones_isss ===
+   440→id                          UUID                        NOT NULL DEFAULT gen_random_uuid(),
+   441→planilla_id                 UUID                        NOT NULL,
+   442→fecha_vencimiento_legal     DATE                        NOT NULL,   -- Último día del mes siguiente al período
+   443→fecha_presentacion          DATE,
+   444→referencia_ois              VARCHAR(100),
+   445→monto_cuotas_laborales      NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_cuotas_laborales >= 0),
+   446→monto_cuotas_patronales     NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_cuotas_patronales >= 0),
+   447→monto_mora                  NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_mora >= 0),
+   448→monto_total_pagado          NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_total_pagado >= 0),
+   449→estado                      tipo_estado_cumplimiento    NOT NULL DEFAULT 'PENDIENTE',
+   450→comprobante_url             TEXT,
+   451→hash_archivo_ois            VARCHAR(64),
+   452→registrado_por_id           UUID,
+   453→fecha_registro              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   454→CONSTRAINT pk_presentaciones_isss PRIMARY KEY (id),
+   455→CONSTRAINT uq_isss_por_planilla UNIQUE (planilla_id),
+   456→CONSTRAINT fk_pi_planilla FOREIGN KEY (planilla_id) REFERENCES planillas(id) ON DELETE RESTRICT,
+   457→CONSTRAINT fk_pi_registrador FOREIGN KEY (registrado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+   458→
+   459→=== historial_presentaciones_afp ===
+   460→id                          UUID                        NOT NULL DEFAULT gen_random_uuid(),
+   461→planilla_id                 UUID                        NOT NULL,
+   462→afp                         tipo_afp                    NOT NULL,
+   463→fecha_vencimiento_legal     DATE                        NOT NULL,
+   464→fecha_presentacion          DATE,
+   465→numero_lote_sepp            VARCHAR(100),
+   466→monto_cuotas_laborales      NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_cuotas_laborales >= 0),
+   467→monto_cuotas_patronales     NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_cuotas_patronales >= 0),
+   468→monto_total_acreditado      NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_total_acreditado >= 0),
+   469→estado                      tipo_estado_cumplimiento    NOT NULL DEFAULT 'PENDIENTE',
+   470→comprobante_url             TEXT,
+   471→registrado_por_id           UUID,
+   472→fecha_registro              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   473→CONSTRAINT pk_presentaciones_afp PRIMARY KEY (id),
+   474→CONSTRAINT uq_afp_por_planilla_afp UNIQUE (planilla_id, afp),
+   475→CONSTRAINT fk_pa_planilla FOREIGN KEY (planilla_id) REFERENCES planillas(id) ON DELETE RESTRICT,
+   476→CONSTRAINT fk_pa_registrador FOREIGN KEY (registrado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+   477→
+   478→=== historial_enteros_isr ===
+   479→id                          UUID                        NOT NULL DEFAULT gen_random_uuid(),
+   480→planilla_id                 UUID                        NOT NULL,
+   481→fecha_vencimiento_legal     DATE                        NOT NULL,   -- 10 días hábiles siguientes (Art. 62 Ley ISR)
+   482→fecha_entero                DATE,
+   483→formulario_f910             VARCHAR(50),                            -- Número del formulario presentado al MH
+   484→monto_isr_total             NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_isr_total >= 0),
+   485→monto_mora_multa            NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_mora_multa >= 0),
+   486→monto_total_pagado          NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_total_pagado >= 0),
+   487→banco_entero                VARCHAR(100),
+   488→referencia_transaccion      VARCHAR(100),
+   489→estado                      tipo_estado_cumplimiento    NOT NULL DEFAULT 'PENDIENTE',
+   490→comprobante_url             TEXT,
+   491→registrado_por_id           UUID,
+   492→fecha_registro              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   493→CONSTRAINT pk_enteros_isr PRIMARY KEY (id),
+   494→CONSTRAINT uq_isr_por_planilla UNIQUE (planilla_id),
+   495→CONSTRAINT fk_ei_planilla FOREIGN KEY (planilla_id) REFERENCES planillas(id) ON DELETE RESTRICT,
+   496→CONSTRAINT fk_ei_registrador FOREIGN KEY (registrado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+   497→
+   498→=== refresh_tokens ===
+   499→id              UUID        NOT NULL DEFAULT gen_random_uuid(),
+   500→usuario_id      UUID        NOT NULL,
+   501→token_hash      VARCHAR(64) NOT NULL,   -- SHA-256 del token real (nunca el token en claro)
+   502→expira_en       TIMESTAMPTZ NOT NULL,
+   503→activo          BOOLEAN     NOT NULL DEFAULT TRUE,
+   504→creado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   505→ultimo_uso_en   TIMESTAMPTZ,
+   506→ip_creacion     INET,
+   507→user_agent      TEXT,
+   508→CONSTRAINT pk_refresh_tokens PRIMARY KEY (id),
+   509→CONSTRAINT uq_refresh_token_hash UNIQUE (token_hash),
+   510→CONSTRAINT fk_rt_usuario FOREIGN KEY (usuario_id)
+   511→REFERENCES usuarios(id) ON DELETE CASCADE
+   512→
+   513→=== otp_tokens ===
+   514→id              UUID        NOT NULL DEFAULT gen_random_uuid(),
+   515→usuario_id      UUID        NOT NULL,
+   516→otp_hash        VARCHAR(64) NOT NULL,   -- SHA-256 del código OTP de 6 dígitos
+   517→reset_token     VARCHAR(64),            -- UUID v4 de un solo uso para el step 3 del flujo
+   518→expira_en       TIMESTAMPTZ NOT NULL,
+   519→intentos        SMALLINT    NOT NULL DEFAULT 0 CHECK (intentos >= 0),
+   520→usado           BOOLEAN     NOT NULL DEFAULT FALSE,
+   521→creado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   522→CONSTRAINT pk_otp_tokens PRIMARY KEY (id),
+   523→CONSTRAINT fk_otp_usuario FOREIGN KEY (usuario_id)
+   524→REFERENCES usuarios(id) ON DELETE CASCADE
+   525→
+   526→=== tokens_bloqueados ===
+   527→token_hash      VARCHAR(64) NOT NULL,
+   528→bloqueado_en    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   529→motivo          VARCHAR(100),
+   530→CONSTRAINT pk_tokens_bloqueados PRIMARY KEY (token_hash)
+   531→
+   532→=== intentos_login ===
+   533→id              UUID        NOT NULL DEFAULT gen_random_uuid(),
+   534→email           VARCHAR(100) NOT NULL,
+   535→ip_origen       INET        NOT NULL,
+   536→user_agent      TEXT,
+   537→exitoso         BOOLEAN     NOT NULL,
+   538→intentado_en    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   539→CONSTRAINT pk_intentos_login PRIMARY KEY (id)
+   540→
+   541→=== permisos_granulares_usuario ===
+   542→id          UUID            NOT NULL DEFAULT gen_random_uuid(),
+   543→usuario_id  UUID            NOT NULL,
+   544→modulo      VARCHAR(50)     NOT NULL,   -- 'M-01', 'M-02', ..., 'M-06'
+   545→accion      VARCHAR(100)    NOT NULL,   -- Nombre de la función/endpoint
+   546→permitido   BOOLEAN         NOT NULL,   -- TRUE = conceder; FALSE = denegar explícitamente
+   547→vigente     BOOLEAN         NOT NULL DEFAULT TRUE,
+   548→otorgado_por_id UUID,
+   549→fecha_otorgamiento TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   550→CONSTRAINT pk_permisos_granulares PRIMARY KEY (id),
+   551→CONSTRAINT uq_permiso_por_usuario_modulo_accion UNIQUE (usuario_id, modulo, accion),
+   552→CONSTRAINT fk_pg_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+   553→CONSTRAINT fk_pg_otorgador FOREIGN KEY (otorgado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+   554→
+   555→=== historial_contrasenas ===
+   556→id              UUID        NOT NULL DEFAULT gen_random_uuid(),
+   557→usuario_id      UUID        NOT NULL,
+   558→password_hash   VARCHAR(255) NOT NULL,  -- bcrypt hash de la contraseña antigua
+   559→cambiada_en     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   560→CONSTRAINT pk_historial_contrasenas PRIMARY KEY (id),
+   561→CONSTRAINT fk_hc_usuario FOREIGN KEY (usuario_id)
+   562→REFERENCES usuarios(id) ON DELETE CASCADE
+   563→
+   564→=== documentos_empleado ===
+   565→id                  UUID                        NOT NULL DEFAULT gen_random_uuid(),
+   566→empleado_id         UUID                        NOT NULL,
+   567→categoria           tipo_documento_expediente   NOT NULL,
+   568→tipo_documento      VARCHAR(100)                NOT NULL,   -- De catálogo predefinido por categoría
+   569→nombre_archivo      VARCHAR(255)                NOT NULL,
+   570→url_almacenamiento  TEXT                        NOT NULL,   -- URL interna (nunca pública directamente)
+   571→hash_sha256         VARCHAR(64)                 NOT NULL,   -- Integridad del archivo original
+   572→tamano_bytes        INTEGER                     NOT NULL CHECK (tamano_bytes > 0),
+   573→formato_mime        VARCHAR(50)                 NOT NULL,
+   574→fecha_vigencia      DATE,                                   -- NULL para documentos sin vencimiento
+   575→estado              VARCHAR(20)                 NOT NULL DEFAULT 'VIGENTE',  -- VIGENTE, VENCIDO, PENDIENTE
+   576→eliminado           BOOLEAN                     NOT NULL DEFAULT FALSE,      -- Soft delete (requerimiento legal)
+   577→motivo_eliminacion  TEXT,
+   578→fecha_carga         TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+   579→cargado_por_id      UUID,
+   580→CONSTRAINT pk_documentos_empleado PRIMARY KEY (id),
+   581→CONSTRAINT fk_de_empleado FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE RESTRICT,
+   582→CONSTRAINT fk_de_usuario FOREIGN KEY (cargado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+   583→CONSTRAINT ck_de_tamano CHECK (tamano_bytes <= 10485760)   -- Máx 10 MB por archivo
+   584→
+   585→=== solicitudes_self_service ===
+   586→id                  UUID            NOT NULL DEFAULT gen_random_uuid(),
+   587→empleado_id         UUID            NOT NULL,
+   588→tipo_solicitud      VARCHAR(50)     NOT NULL DEFAULT 'ACTUALIZACION_DATOS',
+   589→campos_solicitados  JSONB           NOT NULL DEFAULT '{}'::JSONB,   -- { campo: valor_nuevo }
+   590→estado              VARCHAR(20)     NOT NULL DEFAULT 'PENDIENTE',   -- PENDIENTE, APROBADA, RECHAZADA
+   591→revisado_por_id     UUID,
+   592→comentarios         TEXT,
+   593→fecha_solicitud     TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   594→fecha_resolucion    TIMESTAMPTZ,
+   595→CONSTRAINT pk_solicitudes_ss PRIMARY KEY (id),
+   596→CONSTRAINT fk_ss_empleado FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE RESTRICT,
+   597→CONSTRAINT fk_ss_revisor FOREIGN KEY (revisado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+   598→
+   599→=== retornos_bancarios ===
+   600→id                  UUID        NOT NULL DEFAULT gen_random_uuid(),
+   601→planilla_id         UUID        NOT NULL,
+   602→empleado_id         UUID        NOT NULL,
+   603→motivo_banco        TEXT        NOT NULL,
+   604→accion_tomada       VARCHAR(30) NOT NULL DEFAULT 'PENDIENTE',   -- PENDIENTE, CUENTA_CORREGIDA, CHEQUE_EMITIDO, PAGO_MANUAL
+   605→nueva_cuenta        TEXT,                   -- Si accion=CUENTA_CORREGIDA (cifrada)
+   606→fecha_retorno       DATE        NOT NULL,
+   607→procesado_en        TIMESTAMPTZ,
+   608→procesado_por_id    UUID,
+   609→CONSTRAINT pk_retornos PRIMARY KEY (id),
+   610→CONSTRAINT fk_ret_planilla  FOREIGN KEY (planilla_id)  REFERENCES planillas(id)  ON DELETE RESTRICT,
+   611→CONSTRAINT fk_ret_empleado  FOREIGN KEY (empleado_id)  REFERENCES empleados(id)  ON DELETE RESTRICT,
+   612→CONSTRAINT fk_ret_procesador FOREIGN KEY (procesado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+   613→
+   614→=== integraciones_externas ===
+   615→id                      UUID        NOT NULL DEFAULT gen_random_uuid(),
+   616→nombre                  VARCHAR(80) NOT NULL,
+   617→tipo                    VARCHAR(30) NOT NULL,    -- 'BANCO_ACH', 'ISSS_OIS', 'AFP_SEPP', 'SMTP', 'FIRMA_DIGITAL'
+   618→url_endpoint            TEXT,
+   619→version_protocolo       VARCHAR(20),
+   620→credenciales_cifradas   TEXT,                   -- AES-256; NUNCA en texto plano
+   621→configuracion           JSONB       DEFAULT '{}'::JSONB,  -- Parámetros no sensibles
+   622→activa                  BOOLEAN     NOT NULL DEFAULT FALSE,
+   623→ultima_operacion_ok_at  TIMESTAMPTZ,
+   624→estado_salud            VARCHAR(20) DEFAULT 'DESCONOCIDO',  -- OK, ERROR, DESCONOCIDO
+   625→fecha_creacion          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   626→fecha_actualizacion     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   627→CONSTRAINT pk_integraciones PRIMARY KEY (id),
+   628→CONSTRAINT uq_integraciones_nombre UNIQUE (nombre)
+   629→
+   630→=== log_integraciones ===
+   631→id                      UUID        NOT NULL DEFAULT gen_random_uuid(),
+   632→integracion_id          UUID        NOT NULL,
+   633→tipo_operacion          VARCHAR(50) NOT NULL,
+   634→exitoso                 BOOLEAN     NOT NULL,
+   635→registros_procesados    INTEGER     DEFAULT 0,
+   636→mensaje_error           TEXT,
+   637→detalle_tecnico         TEXT,       -- Solo visible para ADMIN
+   638→tiempo_respuesta_ms     INTEGER,
+   639→ejecutado_en            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   640→CONSTRAINT pk_log_integraciones PRIMARY KEY (id),
+   641→CONSTRAINT fk_li_integracion FOREIGN KEY (integracion_id)
+   642→REFERENCES integraciones_externas(id) ON DELETE CASCADE
+   643→
+   644→=== checklist_aprobacion_planilla ===
+   645→id              UUID        NOT NULL DEFAULT gen_random_uuid(),
+   646→planilla_id     UUID        NOT NULL,
+   647→item_codigo     VARCHAR(30) NOT NULL,
+   648→descripcion     TEXT        NOT NULL,
+   649→marcado         BOOLEAN     NOT NULL DEFAULT FALSE,
+   650→marcado_por_id  UUID,
+   651→marcado_en      TIMESTAMPTZ,
+   652→CONSTRAINT pk_checklist PRIMARY KEY (id),
+   653→CONSTRAINT uq_checklist_item UNIQUE (planilla_id, item_codigo),
+   654→CONSTRAINT fk_ck_planilla FOREIGN KEY (planilla_id) REFERENCES planillas(id) ON DELETE CASCADE,
+   655→CONSTRAINT fk_ck_usuario FOREIGN KEY (marcado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+   656→
+   657→=== bitacora_auditoria ===
+   658→id                  UUID                    NOT NULL DEFAULT gen_random_uuid(),
+   659→usuario_id          UUID,                               -- NULL si acción del sistema; SET NULL en soft-delete del usuario
+   660→usuario_email       VARCHAR(100),                       -- Snapshot del email al momento del evento (para histórico)
+   661→usuario_rol         tipo_rol_sistema,                   -- Snapshot del rol al momento del evento
+   662→timestamp_evento    TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+   663→direccion_ip        INET,
+   664→user_agent          TEXT,
+   665→modulo              VARCHAR(20),                        -- M-01 a M-06
+   666→accion              tipo_accion_auditoria   NOT NULL,
+   667→tabla_afectada      VARCHAR(100),
+   668→registro_id         UUID,                               -- ID del registro afectado
+   669→valor_anterior      JSONB,                              -- Estado antes del cambio (para UPDATE/DELETE)
+   670→valor_nuevo         JSONB,                              -- Estado después del cambio (para INSERT/UPDATE)
+   671→resultado           VARCHAR(20)             NOT NULL DEFAULT 'EXITOSO',  -- EXITOSO, FALLIDO, RECHAZADO
+   672→nivel_criticidad    VARCHAR(10)             NOT NULL DEFAULT 'NORMAL',   -- NORMAL, ALTO, CRITICO
+   673→detalle_adicional   TEXT,
+   674→CONSTRAINT pk_bitacora PRIMARY KEY (id),
+   675→CONSTRAINT fk_bit_usuario FOREIGN KEY (usuario_id)
+   676→REFERENCES usuarios(id) ON DELETE SET NULL          -- ON DELETE SET NULL: el log se preserva aunque el usuario se elimine

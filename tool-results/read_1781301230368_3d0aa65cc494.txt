@@ -1,0 +1,1976 @@
+     1→-- ============================================================================================================================
+     2→-- SISTEMA DE NÓMINA Y PERFILES DE PUESTOS — REPÚBLICA DE EL SALVADOR
+     3→-- PARTE 2: TRIGGERS · RBAC (Roles PostgreSQL) · RLS · VISTAS · ÍNDICES DE RENDIMIENTO
+     4→-- Prerequisito: Ejecutar nomina_sv_schema.sql (Parte 1) antes de este script.
+     5→-- PostgreSQL 15+
+     6→--
+     7→-- ESTRUCTURA DE ESTE SCRIPT:
+     8→--   SECCIÓN A — Triggers de automatización (timestamps, códigos, sincronización)
+     9→--   SECCIÓN B — Triggers de auditoría automática (bitácora)
+    10→--   SECCIÓN C — RBAC: Roles de PostgreSQL y GRANTS granulares
+    11→--   SECCIÓN D — Row Level Security (RLS): el empleado solo ve sus propios datos
+    12→--   SECCIÓN E — Vistas SQL (soporte a los 6 módulos del sistema)
+    13→--   SECCIÓN F — Índices de rendimiento adicionales
+    14→--   SECCIÓN G — Funciones de negocio reutilizables
+    15→-- ============================================================================================================================
+    16→
+    17→BEGIN;
+    18→
+    19→-- ============================================================================================================================
+    20→-- SECCIÓN A: TRIGGERS DE AUTOMATIZACIÓN
+    21→-- ============================================================================================================================
+    22→
+    23→-- ─────────────────────────────────────────────────────────────
+    24→-- A-1: Función genérica para actualizar fecha_actualizacion en UPDATE
+    25→-- Se reutiliza como trigger en todas las tablas que tienen ese campo.
+    26→-- ─────────────────────────────────────────────────────────────
+    27→CREATE OR REPLACE FUNCTION fn_set_fecha_actualizacion()
+    28→RETURNS TRIGGER AS $$
+    29→BEGIN
+    30→    NEW.fecha_actualizacion := NOW();
+    31→    RETURN NEW;
+    32→END;
+    33→$$ LANGUAGE plpgsql;
+    34→
+    35→-- Aplicar el trigger a todas las tablas con fecha_actualizacion
+    36→DO $$
+    37→DECLARE
+    38→    t TEXT;
+    39→BEGIN
+    40→    FOREACH t IN ARRAY ARRAY[
+    41→        'usuarios', 'areas', 'bandas_salariales', 'perfiles_puesto',
+    42→        'versiones_perfil_puesto', 'empleados', 'integraciones_externas'
+    43→    ] LOOP
+    44→        EXECUTE format(
+    45→            'CREATE TRIGGER trg_%1$s_set_updated
+    46→             BEFORE UPDATE ON %1$s
+    47→             FOR EACH ROW EXECUTE FUNCTION fn_set_fecha_actualizacion()',
+    48→            t
+    49→        );
+    50→    END LOOP;
+    51→END;
+    52→$$;
+    53→
+    54→COMMENT ON FUNCTION fn_set_fecha_actualizacion IS
+    55→    'Trigger genérico: actualiza fecha_actualizacion = NOW() en cada UPDATE. '
+    56→    'Aplicado a: usuarios, areas, bandas_salariales, perfiles_puesto, versiones_perfil_puesto, empleados, integraciones_externas.';
+    57→
+    58→-- ─────────────────────────────────────────────────────────────
+    59→-- A-2: Auto-generación de codigo_empleado (EMP-XXXXX)
+    60→-- Formato: EMP-00001, EMP-00002, ..., EMP-99999
+    61→-- ─────────────────────────────────────────────────────────────
+    62→CREATE SEQUENCE IF NOT EXISTS seq_codigo_empleado
+    63→    START 1 INCREMENT 1 MINVALUE 1 MAXVALUE 99999 CACHE 1;
+    64→
+    65→CREATE OR REPLACE FUNCTION fn_generar_codigo_empleado()
+    66→RETURNS TRIGGER AS $$
+    67→BEGIN
+    68→    -- Solo asignar si no viene un código manual (el Admin puede asignarlo manualmente)
+    69→    IF NEW.codigo_empleado IS NULL OR NEW.codigo_empleado = '' THEN
+    70→        NEW.codigo_empleado := 'EMP-' || LPAD(nextval('seq_codigo_empleado')::TEXT, 5, '0');
+    71→    END IF;
+    72→    RETURN NEW;
+    73→END;
+    74→$$ LANGUAGE plpgsql;
+    75→
+    76→CREATE TRIGGER trg_empleados_codigo_auto
+    77→    BEFORE INSERT ON empleados
+    78→    FOR EACH ROW EXECUTE FUNCTION fn_generar_codigo_empleado();
+    79→
+    80→COMMENT ON FUNCTION fn_generar_codigo_empleado IS
+    81→    'Auto-genera codigo_empleado en formato EMP-XXXXX si no se suministra manualmente. '
+    82→    'El Admin puede asignar un código personalizado suministrando el valor en el INSERT.';
+    83→
+    84→-- ─────────────────────────────────────────────────────────────
+    85→-- A-3: Auto-generación de codigo_planilla
+    86→-- Formato: NOMINA-2026-01-M (tipo: M=Mensual, Q=Quincenal, A=Aguinaldo, L=Liquidación, C=Complementaria)
+    87→-- ─────────────────────────────────────────────────────────────
+    88→CREATE OR REPLACE FUNCTION fn_generar_codigo_planilla()
+    89→RETURNS TRIGGER AS $$
+    90→DECLARE
+    91→    v_sufijo    CHAR(1);
+    92→    v_seq       INTEGER;
+    93→    v_año       TEXT;
+    94→    v_mes       TEXT;
+    95→BEGIN
+    96→    IF NEW.codigo_planilla IS NOT NULL AND NEW.codigo_planilla <> '' THEN
+    97→        RETURN NEW;
+    98→    END IF;
+    99→
+   100→    v_sufijo := CASE NEW.tipo
+   101→        WHEN 'MENSUAL'        THEN 'M'
+   102→        WHEN 'QUINCENAL'      THEN 'Q'
+   103→        WHEN 'AGUINALDO'      THEN 'A'
+   104→        WHEN 'LIQUIDACION'    THEN 'L'
+   105→        WHEN 'COMPLEMENTARIA' THEN 'C'
+   106→        ELSE 'X'
+   107→    END;
+   108→
+   109→    v_año := TO_CHAR(NEW.fecha_inicio_periodo, 'YYYY');
+   110→    v_mes := TO_CHAR(NEW.fecha_inicio_periodo, 'MM');
+   111→
+   112→    -- Secuencia por tipo y mes para permitir complementarias en el mismo período
+   113→    SELECT COALESCE(MAX(
+   114→        CAST(SPLIT_PART(codigo_planilla, '-', 5) AS INTEGER)
+   115→    ), 0) + 1
+   116→    INTO v_seq
+   117→    FROM planillas
+   118→    WHERE tipo = NEW.tipo
+   119→      AND TO_CHAR(fecha_inicio_periodo, 'YYYY-MM') = v_año || '-' || v_mes;
+   120→
+   121→    NEW.codigo_planilla := 'NOMINA-' || v_año || '-' || v_mes || '-' || v_sufijo
+   122→                          || CASE WHEN v_seq > 1 THEN '-' || v_seq::TEXT ELSE '' END;
+   123→    RETURN NEW;
+   124→END;
+   125→$$ LANGUAGE plpgsql;
+   126→
+   127→CREATE TRIGGER trg_planillas_codigo_auto
+   128→    BEFORE INSERT ON planillas
+   129→    FOR EACH ROW EXECUTE FUNCTION fn_generar_codigo_planilla();
+   130→
+   131→-- ─────────────────────────────────────────────────────────────
+   132→-- A-4: Auto-generación de codigo de perfiles de puesto (CARGO-XXX)
+   133→-- ─────────────────────────────────────────────────────────────
+   134→CREATE SEQUENCE IF NOT EXISTS seq_codigo_perfil
+   135→    START 1 INCREMENT 1 MINVALUE 1 MAXVALUE 9999 CACHE 1;
+   136→
+   137→CREATE OR REPLACE FUNCTION fn_generar_codigo_perfil()
+   138→RETURNS TRIGGER AS $$
+   139→BEGIN
+   140→    IF NEW.codigo IS NULL OR NEW.codigo = '' THEN
+   141→        NEW.codigo := 'CARGO-' || LPAD(nextval('seq_codigo_perfil')::TEXT, 3, '0');
+   142→    END IF;
+   143→    RETURN NEW;
+   144→END;
+   145→$$ LANGUAGE plpgsql;
+   146→
+   147→CREATE TRIGGER trg_perfiles_codigo_auto
+   148→    BEFORE INSERT ON perfiles_puesto
+   149→    FOR EACH ROW EXECUTE FUNCTION fn_generar_codigo_perfil();
+   150→
+   151→-- ─────────────────────────────────────────────────────────────
+   152→-- A-5: Sincronización salario_base en empleados cuando se activa un nuevo contrato
+   153→-- Al marcar un contrato como activo=TRUE, actualiza el salario en el expediente.
+   154→-- ─────────────────────────────────────────────────────────────
+   155→CREATE OR REPLACE FUNCTION fn_sincronizar_salario_empleado()
+   156→RETURNS TRIGGER AS $$
+   157→BEGIN
+   158→    -- Solo actuar cuando un contrato se marca como activo
+   159→    IF NEW.activo = TRUE AND (OLD.activo IS DISTINCT FROM TRUE) THEN
+   160→        -- Desactivar los contratos anteriores del mismo empleado
+   161→        UPDATE contratos
+   162→           SET activo = FALSE
+   163→         WHERE empleado_id = NEW.empleado_id
+   164→           AND id <> NEW.id
+   165→           AND activo = TRUE;
+   166→
+   167→        -- Sincronizar salario_base en el expediente del empleado
+   168→        UPDATE empleados
+   169→           SET salario_base        = NEW.salario_base_contrato,
+   170→               fecha_actualizacion = NOW()
+   171→         WHERE id = NEW.empleado_id;
+   172→    END IF;
+   173→    RETURN NEW;
+   174→END;
+   175→$$ LANGUAGE plpgsql;
+   176→
+   177→CREATE TRIGGER trg_contratos_salario_sync
+   178→    AFTER INSERT OR UPDATE OF activo ON contratos
+   179→    FOR EACH ROW EXECUTE FUNCTION fn_sincronizar_salario_empleado();
+   180→
+   181→COMMENT ON FUNCTION fn_sincronizar_salario_empleado IS
+   182→    'Al activar un contrato (activo=TRUE): desactiva contratos anteriores y sincroniza '
+   183→    'el salario_base en empleados con el salario_base_contrato del nuevo contrato. '
+   184→    'Garantiza consistencia entre el expediente y el historial contractual.';
+   185→
+   186→-- ─────────────────────────────────────────────────────────────
+   187→-- A-6: Bloqueo de modificaciones en planillas APROBADAS o PAGADAS
+   188→-- Hace cumplir la inmutabilidad a nivel de base de datos.
+   189→-- ─────────────────────────────────────────────────────────────
+   190→CREATE OR REPLACE FUNCTION fn_proteger_planilla_aprobada()
+   191→RETURNS TRIGGER AS $$
+   192→BEGIN
+   193→    -- Permitir solo actualizaciones de estado de pago en planillas APROBADAS
+   194→    IF OLD.estado IN ('APROBADA', 'PAGADA') THEN
+   195→        -- Únicamente se permite avanzar el estado de pago o registrar referencias bancarias
+   196→        IF (NEW.estado NOT IN ('PAGADA', 'EN_CORRECCION'))
+   197→           AND (OLD.total_neto_a_pagar <> NEW.total_neto_a_pagar
+   198→                OR OLD.total_salarios_brutos <> NEW.total_salarios_brutos
+   199→                OR OLD.total_isr_retenido <> NEW.total_isr_retenido) THEN
+   200→            RAISE EXCEPTION
+   201→                'PLANILLA INMUTABLE: No se pueden modificar los montos de una planilla en estado %. '
+   202→                'Para correcciones, cree una planilla COMPLEMENTARIA vinculada al período original. '
+   203→                'Planilla ID: %', OLD.estado, OLD.id;
+   204→        END IF;
+   205→    END IF;
+   206→    RETURN NEW;
+   207→END;
+   208→$$ LANGUAGE plpgsql;
+   209→
+   210→CREATE TRIGGER trg_planillas_inmutabilidad
+   211→    BEFORE UPDATE ON planillas
+   212→    FOR EACH ROW EXECUTE FUNCTION fn_proteger_planilla_aprobada();
+   213→
+   214→-- ─────────────────────────────────────────────────────────────
+   215→-- A-7: Bloqueo de modificaciones en detalles_planilla una vez aprobada la planilla
+   216→-- ─────────────────────────────────────────────────────────────
+   217→CREATE OR REPLACE FUNCTION fn_proteger_detalle_planilla_aprobada()
+   218→RETURNS TRIGGER AS $$
+   219→DECLARE
+   220→    v_estado tipo_estado_planilla;
+   221→BEGIN
+   222→    SELECT estado INTO v_estado FROM planillas WHERE id = OLD.planilla_id;
+   223→    IF v_estado IN ('APROBADA', 'PAGADA') THEN
+   224→        RAISE EXCEPTION
+   225→            'DETALLE INMUTABLE: La planilla % está en estado %. '
+   226→            'Los detalles de nómina no se pueden modificar post-aprobación.',
+   227→            OLD.planilla_id, v_estado;
+   228→    END IF;
+   229→    RETURN NEW;
+   230→END;
+   231→$$ LANGUAGE plpgsql;
+   232→
+   233→CREATE TRIGGER trg_detalles_inmutabilidad
+   234→    BEFORE UPDATE OR DELETE ON detalles_planilla
+   235→    FOR EACH ROW EXECUTE FUNCTION fn_proteger_detalle_planilla_aprobada();
+   236→
+   237→-- ─────────────────────────────────────────────────────────────
+   238→-- A-8: Validación de horas extra semanales (máx. 10h/semana — Art. 169 CT)
+   239→-- ─────────────────────────────────────────────────────────────
+   240→CREATE OR REPLACE FUNCTION fn_validar_horas_extra_semana()
+   241→RETURNS TRIGGER AS $$
+   242→DECLARE
+   243→    v_horas_semana NUMERIC;
+   244→    v_inicio_semana DATE;
+   245→    v_fin_semana    DATE;
+   246→BEGIN
+   247→    IF NEW.tipo <> 'HORAS_EXTRA' OR NEW.cantidad_horas IS NULL THEN
+   248→        RETURN NEW;
+   249→    END IF;
+   250→
+   251→    -- Calcular el lunes de la semana del evento
+   252→    v_inicio_semana := DATE_TRUNC('week', NEW.fecha_inicio)::DATE;
+   253→    v_fin_semana    := v_inicio_semana + INTERVAL '6 days';
+   254→
+   255→    SELECT COALESCE(SUM(cantidad_horas), 0)
+   256→    INTO v_horas_semana
+   257→    FROM incidencias_nomina
+   258→    WHERE empleado_id   = NEW.empleado_id
+   259→      AND tipo          = 'HORAS_EXTRA'
+   260→      AND estado        NOT IN ('RECHAZADA', 'ANULADA')
+   261→      AND fecha_inicio BETWEEN v_inicio_semana AND v_fin_semana
+   262→      AND id <> COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::UUID);
+   263→
+   264→    IF (v_horas_semana + NEW.cantidad_horas) > 10 THEN
+   265→        RAISE EXCEPTION
+   266→            'LÍMITE SEMANAL: El empleado ya tiene %.2f horas extra registradas esta semana '
+   267→            '(semana del % al %). El máximo legal es 10 horas/semana (Art. 169 CT). '
+   268→            'Horas intentadas a agregar: %.2f. Total resultante: %.2f',
+   269→            v_horas_semana,
+   270→            v_inicio_semana, v_fin_semana,
+   271→            NEW.cantidad_horas,
+   272→            v_horas_semana + NEW.cantidad_horas;
+   273→    END IF;
+   274→
+   275→    RETURN NEW;
+   276→END;
+   277→$$ LANGUAGE plpgsql;
+   278→
+   279→CREATE TRIGGER trg_incidencias_horas_extra_semana
+   280→    BEFORE INSERT OR UPDATE ON incidencias_nomina
+   281→    FOR EACH ROW EXECUTE FUNCTION fn_validar_horas_extra_semana();
+   282→
+   283→COMMENT ON FUNCTION fn_validar_horas_extra_semana IS
+   284→    'Valida que un empleado no supere 10 horas extra semanales (Art. 169 CT). '
+   285→    'Se ejecuta en INSERT y UPDATE de incidencias tipo HORAS_EXTRA.';
+   286→
+   287→-- ─────────────────────────────────────────────────────────────
+   288→-- A-9: Validación de salario mínimo al registrar/modificar un contrato
+   289→-- ─────────────────────────────────────────────────────────────
+   290→CREATE OR REPLACE FUNCTION fn_validar_salario_minimo()
+   291→RETURNS TRIGGER AS $$
+   292→DECLARE
+   293→    v_salario_min   NUMERIC(10,2);
+   294→    v_sector        tipo_sector_laboral;
+   295→    v_param_id      UUID;
+   296→BEGIN
+   297→    -- Obtener el sector del perfil de puesto del contrato
+   298→    SELECT pp.sector_laboral INTO v_sector
+   299→    FROM perfiles_puesto pp
+   300→    WHERE pp.id = NEW.perfil_puesto_id;
+   301→
+   302→    IF NOT FOUND OR v_sector IS NULL THEN
+   303→        v_sector := 'COMERCIO';  -- Sector por defecto si no hay perfil
+   304→    END IF;
+   305→
+   306→    -- Obtener el parámetro legal vigente hoy
+   307→    v_param_id := fn_parametro_vigente_en_fecha(CURRENT_DATE);
+   308→
+   309→    IF v_param_id IS NULL THEN
+   310→        RETURN NEW;  -- Sin parámetros configurados, permite continuar con advertencia
+   311→    END IF;
+   312→
+   313→    SELECT salario_mensual INTO v_salario_min
+   314→    FROM salarios_minimos_sector
+   315→    WHERE parametro_legal_id = v_param_id
+   316→      AND sector = v_sector;
+   317→
+   318→    IF FOUND AND NEW.salario_base_contrato < v_salario_min THEN
+   319→        RAISE EXCEPTION
+   320→            'SALARIO BAJO MÍNIMO LEGAL: El salario $%.2f es inferior al salario mínimo '
+   321→            'del sector % ($%.2f). No se puede crear ni modificar el contrato. '
+   322→            'Base legal: Decreto de Salarios Mínimos vigente.',
+   323→            NEW.salario_base_contrato, v_sector, v_salario_min;
+   324→    END IF;
+   325→
+   326→    RETURN NEW;
+   327→END;
+   328→$$ LANGUAGE plpgsql;
+   329→
+   330→CREATE TRIGGER trg_contratos_salario_minimo
+   331→    BEFORE INSERT OR UPDATE OF salario_base_contrato ON contratos
+   332→    FOR EACH ROW EXECUTE FUNCTION fn_validar_salario_minimo();
+   333→
+   334→
+   335→-- ============================================================================================================================
+   336→-- SECCIÓN B: TRIGGERS DE AUDITORÍA AUTOMÁTICA (BITÁCORA)
+   337→-- ============================================================================================================================
+   338→
+   339→-- ─────────────────────────────────────────────────────────────
+   340→-- B-1: Función genérica de auditoría para INSERT / UPDATE / DELETE
+   341→-- Se configura por tabla con el nombre de tabla y nivel de criticidad.
+   342→-- Captura el estado anterior y nuevo en JSONB para trazabilidad completa.
+   343→-- ─────────────────────────────────────────────────────────────
+   344→CREATE OR REPLACE FUNCTION fn_auditar_cambios()
+   345→RETURNS TRIGGER AS $$
+   346→DECLARE
+   347→    v_accion        tipo_accion_auditoria;
+   348→    v_anterior      JSONB;
+   349→    v_nuevo         JSONB;
+   350→    v_criticidad    TEXT;
+   351→    v_tabla         TEXT := TG_TABLE_NAME;
+   352→BEGIN
+   353→    -- Determinar la acción
+   354→    v_accion := TG_OP::tipo_accion_auditoria;
+   355→
+   356→    -- Capturar valores
+   357→    IF TG_OP = 'DELETE' THEN
+   358→        v_anterior := TO_JSONB(OLD);
+   359→        v_nuevo    := NULL;
+   360→    ELSIF TG_OP = 'INSERT' THEN
+   361→        v_anterior := NULL;
+   362→        v_nuevo    := TO_JSONB(NEW);
+   363→    ELSE -- UPDATE
+   364→        v_anterior := TO_JSONB(OLD);
+   365→        v_nuevo    := TO_JSONB(NEW);
+   366→        -- Si no hay cambio real, no registrar (evita ruido de triggers en cadena)
+   367→        IF v_anterior = v_nuevo THEN
+   368→            RETURN NEW;
+   369→        END IF;
+   370→    END IF;
+   371→
+   372→    -- Nivel de criticidad según tabla
+   373→    v_criticidad := CASE v_tabla
+   374→        WHEN 'usuarios'           THEN 'ALTO'
+   375→        WHEN 'parametros_legales' THEN 'CRITICO'
+   376→        WHEN 'planillas'          THEN 'ALTO'
+   377→        WHEN 'liquidaciones'      THEN 'ALTO'
+   378→        WHEN 'contratos'          THEN 'ALTO'
+   379→        ELSE 'NORMAL'
+   380→    END;
+   381→
+   382→    -- Enmascarar campos sensibles antes de guardar en JSONB
+   383→    -- Se eliminan password_hash, numero_cuenta_bancaria y credenciales
+   384→    IF v_nuevo IS NOT NULL THEN
+   385→        v_nuevo := v_nuevo
+   386→            - 'password_hash'
+   387→            - 'numero_cuenta_bancaria'
+   388→            - 'credenciales_cifradas';
+   389→    END IF;
+   390→    IF v_anterior IS NOT NULL THEN
+   391→        v_anterior := v_anterior
+   392→            - 'password_hash'
+   393→            - 'numero_cuenta_bancaria'
+   394→            - 'credenciales_cifradas';
+   395→    END IF;
+   396→
+   397→    INSERT INTO bitacora_auditoria (
+   398→        accion,
+   399→        tabla_afectada,
+   400→        registro_id,
+   401→        valor_anterior,
+   402→        valor_nuevo,
+   403→        resultado,
+   404→        nivel_criticidad
+   405→    ) VALUES (
+   406→        v_accion,
+   407→        v_tabla,
+   408→        CASE TG_OP WHEN 'DELETE' THEN (OLD).id ELSE (NEW).id END,
+   409→        v_anterior,
+   410→        v_nuevo,
+   411→        'EXITOSO',
+   412→        v_criticidad
+   413→    );
+   414→
+   415→    RETURN CASE TG_OP WHEN 'DELETE' THEN OLD ELSE NEW END;
+   416→END;
+   417→$$ LANGUAGE plpgsql SECURITY DEFINER;
+   418→
+   419→COMMENT ON FUNCTION fn_auditar_cambios IS
+   420→    'Trigger genérico de auditoría: registra INSERT/UPDATE/DELETE en bitacora_auditoria. '
+   421→    'Enmascara campos sensibles (password_hash, numero_cuenta_bancaria, credenciales_cifradas) '
+   422→    'antes de escribir en el JSONB. SECURITY DEFINER garantiza acceso al INSERT en bitácora '
+   423→    'incluso para roles con permisos restringidos.';
+   424→
+   425→-- Aplicar el trigger de auditoría a las tablas de mayor sensibilidad
+   426→DO $$
+   427→DECLARE
+   428→    t TEXT;
+   429→BEGIN
+   430→    FOREACH t IN ARRAY ARRAY[
+   431→        'usuarios', 'empleados', 'contratos', 'planillas',
+   432→        'detalles_planilla', 'parametros_legales', 'liquidaciones',
+   433→        'perfiles_puesto', 'bandas_salariales', 'areas'
+   434→    ] LOOP
+   435→        EXECUTE format(
+   436→            'CREATE TRIGGER trg_%1$s_auditoria
+   437→             AFTER INSERT OR UPDATE OR DELETE ON %1$s
+   438→             FOR EACH ROW EXECUTE FUNCTION fn_auditar_cambios()',
+   439→            t
+   440→        );
+   441→    END LOOP;
+   442→END;
+   443→$$;
+   444→
+   445→-- ─────────────────────────────────────────────────────────────
+   446→-- B-2: Trigger específico para cambios de contraseña
+   447→-- Registra en bitácora Y guarda el hash antiguo en historial_contrasenas.
+   448→-- ─────────────────────────────────────────────────────────────
+   449→CREATE OR REPLACE FUNCTION fn_auditar_cambio_contrasena()
+   450→RETURNS TRIGGER AS $$
+   451→BEGIN
+   452→    -- Solo actuar si el password_hash cambió
+   453→    IF OLD.password_hash IS DISTINCT FROM NEW.password_hash THEN
+   454→        -- Guardar hash anterior en el historial (para verificar reutilización)
+   455→        INSERT INTO historial_contrasenas (usuario_id, password_hash)
+   456→        VALUES (OLD.id, OLD.password_hash);
+   457→
+   458→        -- Mantener solo las últimas 5 contraseñas por usuario
+   459→        DELETE FROM historial_contrasenas
+   460→        WHERE id IN (
+   461→            SELECT id FROM historial_contrasenas
+   462→            WHERE usuario_id = OLD.id
+   463→            ORDER BY cambiada_en DESC
+   464→            OFFSET 5
+   465→        );
+   466→
+   467→        -- Registrar en bitácora (sin incluir el hash)
+   468→        INSERT INTO bitacora_auditoria (
+   469→            usuario_id, usuario_email, accion, tabla_afectada,
+   470→            registro_id, resultado, nivel_criticidad, detalle_adicional
+   471→        ) VALUES (
+   472→            OLD.id, OLD.email, 'CAMBIO_CONTRASENA', 'usuarios',
+   473→            OLD.id, 'EXITOSO', 'ALTO',
+   474→            'Contraseña actualizada. Historial de las últimas 5 contraseñas actualizado.'
+   475→        );
+   476→    END IF;
+   477→    RETURN NEW;
+   478→END;
+   479→$$ LANGUAGE plpgsql SECURITY DEFINER;
+   480→
+   481→CREATE TRIGGER trg_usuarios_cambio_contrasena
+   482→    AFTER UPDATE OF password_hash ON usuarios
+   483→    FOR EACH ROW EXECUTE FUNCTION fn_auditar_cambio_contrasena();
+   484→
+   485→-- ─────────────────────────────────────────────────────────────
+   486→-- B-3: Trigger para auditoría de aprobación de planilla (evento CRÍTICO)
+   487→-- ─────────────────────────────────────────────────────────────
+   488→CREATE OR REPLACE FUNCTION fn_auditar_aprobacion_planilla()
+   489→RETURNS TRIGGER AS $$
+   490→BEGIN
+   491→    -- Detectar transición a estado APROBADA
+   492→    IF OLD.estado <> 'APROBADA' AND NEW.estado = 'APROBADA' THEN
+   493→        INSERT INTO bitacora_auditoria (
+   494→            usuario_id, accion, tabla_afectada, registro_id,
+   495→            valor_nuevo, resultado, nivel_criticidad, detalle_adicional
+   496→        ) VALUES (
+   497→            NEW.aprobada_por_id,
+   498→            'APPROVE',
+   499→            'planillas',
+   500→            NEW.id,
+   501→            jsonb_build_object(
+   502→                'codigo_planilla',       NEW.codigo_planilla,
+   503→                'tipo',                  NEW.tipo,
+   504→                'total_neto_a_pagar',    NEW.total_neto_a_pagar,
+   505→                'total_empleados',       NEW.total_empleados,
+   506→                'fecha_aprobacion',      NEW.fecha_aprobacion,
+   507→                'hash_integridad',       NEW.hash_integridad
+   508→            ),
+   509→            'EXITOSO',
+   510→            'CRITICO',
+   511→            'Planilla aprobada y marcada como INMUTABLE. '
+   512→            'Total neto: $' || NEW.total_neto_a_pagar::TEXT ||
+   513→            ' | Empleados: ' || NEW.total_empleados::TEXT
+   514→        );
+   515→    END IF;
+   516→
+   517→    -- Detectar reapertura de período cerrado (evento de máxima criticidad)
+   518→    IF OLD.estado IN ('APROBADA', 'PAGADA') AND NEW.estado = 'EN_CORRECCION' THEN
+   519→        INSERT INTO bitacora_auditoria (
+   520→            usuario_id, accion, tabla_afectada, registro_id,
+   521→            valor_anterior, valor_nuevo, resultado, nivel_criticidad, detalle_adicional
+   522→        ) VALUES (
+   523→            NEW.aprobada_por_id,
+   524→            'REOPEN',
+   525→            'planillas',
+   526→            NEW.id,
+   527→            jsonb_build_object('estado_anterior', OLD.estado),
+   528→            jsonb_build_object('estado_nuevo', NEW.estado, 'justificacion', NEW.justificacion_reaper),
+   529→            'EXITOSO',
+   530→            'CRITICO',
+   531→            '⚠️  REAPERTURA DE PERÍODO CERRADO. Requiere doble aprobación. '
+   532→            'Justificación: ' || COALESCE(NEW.justificacion_reaper, 'No registrada')
+   533→        );
+   534→    END IF;
+   535→
+   536→    RETURN NEW;
+   537→END;
+   538→$$ LANGUAGE plpgsql SECURITY DEFINER;
+   539→
+   540→CREATE TRIGGER trg_planillas_aprobacion_auditoria
+   541→    AFTER UPDATE OF estado ON planillas
+   542→    FOR EACH ROW EXECUTE FUNCTION fn_auditar_aprobacion_planilla();
+   543→
+   544→
+   545→-- ============================================================================================================================
+   546→-- SECCIÓN C: RBAC — ROLES DE POSTGRESQL Y GRANTS GRANULARES
+   547→-- Cada rol de PostgreSQL corresponde a uno de los 8 roles del sistema.
+   548→-- ============================================================================================================================
+   549→
+   550→-- ─────────────────────────────────────────────────────────────
+   551→-- Crear los roles de PostgreSQL
+   552→-- En producción: los roles se crean sin LOGIN; la aplicación usa un único
+   553→-- rol de conexión y aplica SET ROLE según el JWT del usuario autenticado.
+   554→-- ─────────────────────────────────────────────────────────────
+   555→DO $$
+   556→BEGIN
+   557→    -- Rol base de solo conexión (la aplicación usa este rol para conectarse)
+   558→    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nomina_app') THEN
+   559→        CREATE ROLE nomina_app NOLOGIN;
+   560→    END IF;
+   561→    -- Roles por función de negocio
+   562→    FOREACH r IN ARRAY ARRAY[
+   563→        'rol_admin', 'rol_analista', 'rol_rrhh', 'rol_contador',
+   564→        'rol_aprobador', 'rol_gerencia', 'rol_auditor', 'rol_empleado'
+   565→    ] LOOP
+   566→        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+   567→            EXECUTE format('CREATE ROLE %I NOLOGIN', r);
+   568→        END IF;
+   569→    END LOOP;
+   570→END;
+   571→$$;
+   572→
+   573→-- ─────────────────────────────────────────────────────────────
+   574→-- C-1: ROL ADMINISTRADOR — Acceso total con restricción en bitácora (solo INSERT)
+   575→-- ─────────────────────────────────────────────────────────────
+   576→GRANT USAGE ON SCHEMA public TO rol_admin;
+   577→GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO rol_admin;
+   578→GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO rol_admin;
+   579→-- Revocar UPDATE y DELETE en bitácora (inmutabilidad)
+   580→REVOKE UPDATE, DELETE ON bitacora_auditoria FROM rol_admin;
+   581→
+   582→-- ─────────────────────────────────────────────────────────────
+   583→-- C-2: ROL ANALISTA — Procesa nómina, registra incidencias, no aprueba
+   584→-- ─────────────────────────────────────────────────────────────
+   585→GRANT USAGE ON SCHEMA public TO rol_analista;
+   586→-- Lectura general
+   587→GRANT SELECT ON
+   588→    empleados, contratos, datos_previsionales, areas, perfiles_puesto,
+   589→    bandas_salariales, versiones_perfil_puesto, bancos,
+   590→    parametros_legales, tramos_isr, salarios_minimos_sector
+   591→TO rol_analista;
+   592→-- Operaciones de nómina
+   593→GRANT SELECT, INSERT, UPDATE ON
+   594→    planillas, empleados_planilla, incidencias_nomina, detalles_planilla,
+   595→    historial_presentaciones_isss, historial_presentaciones_afp, historial_enteros_isr
+   596→TO rol_analista;
+   597→GRANT SELECT ON vacaciones_empleado TO rol_analista;
+   598→GRANT INSERT ON bitacora_auditoria TO rol_analista;
+   599→GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO rol_analista;
+   600→
+   601→-- ─────────────────────────────────────────────────────────────
+   602→-- C-3: ROL RRHH — Gestión completa del expediente de empleados
+   603→-- ─────────────────────────────────────────────────────────────
+   604→GRANT USAGE ON SCHEMA public TO rol_rrhh;
+   605→GRANT SELECT, INSERT, UPDATE ON
+   606→    empleados, contratos, datos_previsionales, documentos_empleado,
+   607→    vacaciones_empleado, historial_cambios_salariales, historial_cambios_cargo,
+   608→    solicitudes_self_service, areas, perfiles_puesto, versiones_perfil_puesto,
+   609→    bandas_salariales
+   610→TO rol_rrhh;
+   611→GRANT SELECT ON
+   612→    planillas, detalles_planilla, incidencias_nomina,
+   613→    parametros_legales, tramos_isr, salarios_minimos_sector
+   614→TO rol_rrhh;
+   615→GRANT INSERT ON bitacora_auditoria TO rol_rrhh;
+   616→GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO rol_rrhh;
+   617→
+   618→-- ─────────────────────────────────────────────────────────────
+   619→-- C-4: ROL CONTADOR — Acceso a reportes de cumplimiento y datos financieros
+   620→-- ─────────────────────────────────────────────────────────────
+   621→GRANT USAGE ON SCHEMA public TO rol_contador;
+   622→GRANT SELECT ON
+   623→    planillas, detalles_planilla, empleados, contratos, areas,
+   624→    historial_presentaciones_isss, historial_presentaciones_afp, historial_enteros_isr,
+   625→    parametros_legales, tramos_isr, salarios_minimos_sector,
+   626→    liquidaciones, historial_cambios_salariales
+   627→TO rol_contador;
+   628→GRANT SELECT, INSERT, UPDATE ON
+   629→    historial_presentaciones_isss, historial_presentaciones_afp, historial_enteros_isr
+   630→TO rol_contador;
+   631→GRANT INSERT ON bitacora_auditoria TO rol_contador;
+   632→
+   633→-- ─────────────────────────────────────────────────────────────
+   634→-- C-5: ROL APROBADOR — Firma planillas, aprueba incidencias y liquidaciones
+   635→-- ─────────────────────────────────────────────────────────────
+   636→GRANT USAGE ON SCHEMA public TO rol_aprobador;
+   637→GRANT SELECT ON ALL TABLES IN SCHEMA public TO rol_aprobador;
+   638→GRANT UPDATE (
+   639→    estado, aprobada_por_id, fecha_aprobacion,
+   640→    hash_integridad, sello_aprobacion, motivo_rechazo,
+   641→    referencia_lote_banco, fecha_pago_confirmada
+   642→) ON planillas TO rol_aprobador;
+   643→GRANT UPDATE (estado, aprobada_por_id, fecha_aprobacion, motivo_rechazo)
+   644→    ON incidencias_nomina TO rol_aprobador;
+   645→GRANT UPDATE (estado, aprobada_por_id, fecha_aprobacion, acta_liquidacion_url)
+   646→    ON liquidaciones TO rol_aprobador;
+   647→GRANT INSERT, UPDATE ON
+   648→    historial_presentaciones_isss, historial_presentaciones_afp, historial_enteros_isr,
+   649→    retornos_bancarios, checklist_aprobacion_planilla
+   650→TO rol_aprobador;
+   651→GRANT INSERT ON bitacora_auditoria TO rol_aprobador;
+   652→REVOKE UPDATE, DELETE ON bitacora_auditoria FROM rol_aprobador;
+   653→
+   654→-- ─────────────────────────────────────────────────────────────
+   655→-- C-6: ROL GERENCIA — Acceso de solo lectura a todos los reportes y dashboards
+   656→-- ─────────────────────────────────────────────────────────────
+   657→GRANT USAGE ON SCHEMA public TO rol_gerencia;
+   658→GRANT SELECT ON
+   659→    empleados, contratos, areas, perfiles_puesto, bandas_salariales,
+   660→    planillas, detalles_planilla, liquidaciones, vacaciones_empleado,
+   661→    historial_cambios_salariales, historial_cambios_cargo,
+   662→    historial_presentaciones_isss, historial_presentaciones_afp, historial_enteros_isr,
+   663→    parametros_legales, incidencias_nomina
+   664→TO rol_gerencia;
+   665→-- Gerencia NO tiene acceso a DUI, NIT, cuentas bancarias (columnas sensibles)
+   666→-- Esto se refuerza con RLS en SECCIÓN D
+   667→
+   668→-- ─────────────────────────────────────────────────────────────
+   669→-- C-7: ROL AUDITOR — Solo lectura en absolutamente todo, incluida la bitácora
+   670→-- ─────────────────────────────────────────────────────────────
+   671→GRANT USAGE ON SCHEMA public TO rol_auditor;
+   672→GRANT SELECT ON ALL TABLES IN SCHEMA public TO rol_auditor;
+   673→-- El auditor puede exportar la bitácora (INSERT de registro de exportación)
+   674→GRANT INSERT ON bitacora_auditoria TO rol_auditor;
+   675→-- Sin acceso a tablas de seguridad interna
+   676→REVOKE SELECT ON refresh_tokens, otp_tokens, tokens_bloqueados,
+   677→    historial_contrasenas, intentos_login FROM rol_auditor;
+   678→
+   679→-- ─────────────────────────────────────────────────────────────
+   680→-- C-8: ROL EMPLEADO — Solo sus propios datos (reforzado con RLS en Sección D)
+   681→-- ─────────────────────────────────────────────────────────────
+   682→GRANT USAGE ON SCHEMA public TO rol_empleado;
+   683→-- Tablas accesibles para el empleado (RLS restringe a solo sus propios registros)
+   684→GRANT SELECT ON
+   685→    empleados, contratos, detalles_planilla, planillas,
+   686→    vacaciones_empleado, documentos_empleado, liquidaciones,
+   687→    historial_cambios_salariales, areas, perfiles_puesto
+   688→TO rol_empleado;
+   689→GRANT SELECT, INSERT ON solicitudes_self_service TO rol_empleado;
+   690→GRANT INSERT ON bitacora_auditoria TO rol_empleado;
+   691→
+   692→
+   693→-- ============================================================================================================================
+   694→-- SECCIÓN D: ROW LEVEL SECURITY (RLS)
+   695→-- El empleado solo puede ver SUS PROPIOS datos.
+   696→-- La aplicación establece la variable de sesión app.current_user_id antes de cada query.
+   697→-- ============================================================================================================================
+   698→
+   699→-- ─────────────────────────────────────────────────────────────
+   700→-- Función auxiliar: obtiene el UUID del usuario autenticado desde la variable de sesión
+   701→-- La capa de aplicación DEBE ejecutar: SET app.current_user_id = '<uuid>';
+   702→-- ─────────────────────────────────────────────────────────────
+   703→CREATE OR REPLACE FUNCTION fn_current_user_id()
+   704→RETURNS UUID AS $$
+   705→    SELECT NULLIF(current_setting('app.current_user_id', TRUE), '')::UUID;
+   706→$$ LANGUAGE sql STABLE SECURITY DEFINER;
+   707→
+   708→CREATE OR REPLACE FUNCTION fn_current_user_role()
+   709→RETURNS TEXT AS $$
+   710→    SELECT NULLIF(current_setting('app.current_user_role', TRUE), '');
+   711→$$ LANGUAGE sql STABLE SECURITY DEFINER;
+   712→
+   713→COMMENT ON FUNCTION fn_current_user_id IS
+   714→    'Lee el UUID del usuario autenticado desde la variable de sesión app.current_user_id. '
+   715→    'La aplicación DEBE establecerla con: SET LOCAL app.current_user_id = ''<uuid>'' '
+   716→    'al inicio de cada transacción, inmediatamente después de validar el JWT.';
+   717→
+   718→-- ─────────────────────────────────────────────────────────────
+   719→-- D-1: RLS en empleados
+   720→-- El rol EMPLEADO solo puede ver su propio expediente.
+   721→-- Los demás roles ven todos los registros activos.
+   722→-- ─────────────────────────────────────────────────────────────
+   723→ALTER TABLE empleados ENABLE ROW LEVEL SECURITY;
+   724→
+   725→-- Política para EMPLEADO: solo su propio expediente
+   726→CREATE POLICY pol_empleados_self_only ON empleados
+   727→    FOR SELECT
+   728→    TO rol_empleado
+   729→    USING (
+   730→        usuario_id = fn_current_user_id()
+   731→    );
+   732→
+   733→-- Política para roles administrativos: todo sin restricción
+   734→CREATE POLICY pol_empleados_admin ON empleados
+   735→    FOR ALL
+   736→    TO rol_admin, rol_analista, rol_rrhh, rol_aprobador, rol_auditor, rol_contador
+   737→    USING (TRUE);
+   738→
+   739→-- Política para Gerencia: todos los empleados activos, pero sin datos previsionales/fiscales sensibles
+   740→-- (El control de columnas se hace en la vista vw_empleados_gerencia)
+   741→CREATE POLICY pol_empleados_gerencia ON empleados
+   742→    FOR SELECT
+   743→    TO rol_gerencia
+   744→    USING (activo = TRUE);
+   745→
+   746→-- ─────────────────────────────────────────────────────────────
+   747→-- D-2: RLS en detalles_planilla
+   748→-- El empleado solo puede ver sus propios recibos de pago.
+   749→-- ─────────────────────────────────────────────────────────────
+   750→ALTER TABLE detalles_planilla ENABLE ROW LEVEL SECURITY;
+   751→
+   752→CREATE POLICY pol_detalles_self_only ON detalles_planilla
+   753→    FOR SELECT
+   754→    TO rol_empleado
+   755→    USING (
+   756→        empleado_id IN (
+   757→            SELECT id FROM empleados WHERE usuario_id = fn_current_user_id()
+   758→        )
+   759→    );
+   760→
+   761→CREATE POLICY pol_detalles_admin ON detalles_planilla
+   762→    FOR ALL
+   763→    TO rol_admin, rol_analista, rol_aprobador, rol_auditor, rol_contador, rol_gerencia
+   764→    USING (TRUE);
+   765→
+   766→-- ─────────────────────────────────────────────────────────────
+   767→-- D-3: RLS en vacaciones_empleado
+   768→-- ─────────────────────────────────────────────────────────────
+   769→ALTER TABLE vacaciones_empleado ENABLE ROW LEVEL SECURITY;
+   770→
+   771→CREATE POLICY pol_vacaciones_self_only ON vacaciones_empleado
+   772→    FOR SELECT
+   773→    TO rol_empleado
+   774→    USING (
+   775→        empleado_id IN (
+   776→            SELECT id FROM empleados WHERE usuario_id = fn_current_user_id()
+   777→        )
+   778→    );
+   779→
+   780→CREATE POLICY pol_vacaciones_admin ON vacaciones_empleado
+   781→    FOR ALL
+   782→    TO rol_admin, rol_analista, rol_rrhh, rol_aprobador, rol_auditor
+   783→    USING (TRUE);
+   784→
+   785→-- ─────────────────────────────────────────────────────────────
+   786→-- D-4: RLS en documentos_empleado
+   787→-- ─────────────────────────────────────────────────────────────
+   788→ALTER TABLE documentos_empleado ENABLE ROW LEVEL SECURITY;
+   789→
+   790→CREATE POLICY pol_documentos_self_only ON documentos_empleado
+   791→    FOR SELECT
+   792→    TO rol_empleado
+   793→    USING (
+   794→        empleado_id IN (
+   795→            SELECT id FROM empleados WHERE usuario_id = fn_current_user_id()
+   796→        )
+   797→        AND eliminado = FALSE
+   798→    );
+   799→
+   800→CREATE POLICY pol_documentos_admin ON documentos_empleado
+   801→    FOR ALL
+   802→    TO rol_admin, rol_analista, rol_rrhh, rol_aprobador, rol_auditor
+   803→    USING (TRUE);
+   804→
+   805→-- ─────────────────────────────────────────────────────────────
+   806→-- D-5: RLS en liquidaciones
+   807→-- ─────────────────────────────────────────────────────────────
+   808→ALTER TABLE liquidaciones ENABLE ROW LEVEL SECURITY;
+   809→
+   810→CREATE POLICY pol_liquidaciones_self_only ON liquidaciones
+   811→    FOR SELECT
+   812→    TO rol_empleado
+   813→    USING (
+   814→        empleado_id IN (
+   815→            SELECT id FROM empleados WHERE usuario_id = fn_current_user_id()
+   816→        )
+   817→    );
+   818→
+   819→CREATE POLICY pol_liquidaciones_admin ON liquidaciones
+   820→    FOR ALL
+   821→    TO rol_admin, rol_analista, rol_rrhh, rol_aprobador, rol_auditor, rol_contador
+   822→    USING (TRUE);
+   823→
+   824→
+   825→-- ============================================================================================================================
+   826→-- SECCIÓN E: VISTAS SQL
+   827→-- Soporte directo a los 6 módulos del sistema.
+   828→-- ============================================================================================================================
+   829→
+   830→-- ─────────────────────────────────────────────────────────────
+   831→-- E-1: vw_empleados_activos
+   832→-- Vista de uso general: empleados activos con su contrato vigente y perfil de puesto.
+   833→-- Soporta: VISTA 02-01 (Listado General de Empleados) y búsquedas de RRHH.
+   834→-- ─────────────────────────────────────────────────────────────
+   835→CREATE OR REPLACE VIEW vw_empleados_activos AS
+   836→SELECT
+   837→    e.id,
+   838→    e.codigo_empleado,
+   839→    e.primer_nombre || ' ' || e.primer_apellido
+   840→        || COALESCE(' ' || e.segundo_apellido, '') AS nombre_completo,
+   841→    e.primer_nombre,
+   842→    e.segundo_nombre,
+   843→    e.primer_apellido,
+   844→    e.segundo_apellido,
+   845→    e.dui,
+   846→    e.nit,
+   847→    e.email_personal,
+   848→    e.telefono_principal,
+   849→    e.genero,
+   850→    e.fecha_nacimiento,
+   851→    e.fecha_ingreso,
+   852→    e.estado AS estado_laboral,
+   853→    -- Antigüedad calculada en tiempo real
+   854→    DATE_PART('year', AGE(CURRENT_DATE, e.fecha_ingreso))::INTEGER           AS anios_servicio,
+   855→    DATE_PART('month', AGE(CURRENT_DATE, e.fecha_ingreso))::INTEGER          AS meses_servicio,
+   856→    -- Área
+   857→    a.id            AS area_id,
+   858→    a.nombre        AS area_nombre,
+   859→    a.codigo        AS area_codigo,
+   860→    -- Contrato vigente
+   861→    c.id                        AS contrato_id,
+   862→    c.tipo_contrato,
+   863→    c.tipo_jornada,
+   864→    c.salario_base_contrato     AS salario_base,
+   865→    c.forma_pago,
+   866→    c.fecha_inicio              AS contrato_inicio,
+   867→    c.fecha_fin                 AS contrato_fin,
+   868→    -- Perfil de puesto
+   869→    pp.id                       AS perfil_puesto_id,
+   870→    pp.nombre_cargo,
+   871→    pp.nivel_jerarquico,
+   872→    pp.sector_laboral,
+   873→    -- Banda salarial
+   874→    bs.id                       AS banda_id,
+   875→    bs.nombre                   AS banda_nombre,
+   876→    bs.salario_minimo           AS banda_salario_min,
+   877→    bs.salario_midpoint         AS banda_midpoint,
+   878→    bs.salario_maximo           AS banda_salario_max,
+   879→    -- Compa-ratio: posición relativa del salario dentro de la banda
+   880→    CASE
+   881→        WHEN bs.salario_midpoint > 0
+   882→        THEN ROUND((c.salario_base_contrato / bs.salario_midpoint) * 100, 2)
+   883→        ELSE NULL
+   884→    END AS compa_ratio,
+   885→    -- Semáforo de posición salarial en la banda
+   886→    CASE
+   887→        WHEN c.salario_base_contrato < bs.salario_minimo   THEN 'BAJO_MINIMO'
+   888→        WHEN c.salario_base_contrato > bs.salario_maximo   THEN 'SOBRE_MAXIMO'
+   889→        WHEN c.salario_base_contrato < bs.salario_midpoint THEN 'EN_RANGO_BAJO'
+   890→        ELSE 'EN_RANGO_ALTO'
+   891→    END AS posicion_en_banda,
+   892→    -- Previsional
+   893→    e.afp,
+   894→    e.nup_afp,
+   895→    e.numero_afiliado_isss,
+   896→    -- Banco
+   897→    b.nombre AS banco_nombre
+   898→FROM empleados e
+   899→    INNER JOIN areas a ON e.area_id = a.id
+   900→    LEFT JOIN contratos c ON c.empleado_id = e.id AND c.activo = TRUE
+   901→    LEFT JOIN perfiles_puesto pp ON pp.id = c.perfil_puesto_id
+   902→    LEFT JOIN bandas_salariales bs ON bs.id = c.banda_salarial_id
+   903→    LEFT JOIN bancos b ON b.id = c.banco_id
+   904→WHERE e.activo = TRUE;
+   905→
+   906→COMMENT ON VIEW vw_empleados_activos IS
+   907→    'Vista principal de empleados: unión de empleados + contrato vigente + perfil + banda salarial. '
+   908→    'Incluye: antigüedad calculada, compa-ratio y semáforo de posición salarial en la banda. '
+   909→    'Soporta: VISTA 02-01, búsquedas, filtros por departamento/banda/estado.';
+   910→
+   911→-- ─────────────────────────────────────────────────────────────
+   912→-- E-2: vw_saldo_vacaciones
+   913→-- Calcula el saldo de vacaciones en tiempo real por empleado.
+   914→-- Soporta: VISTA 02-02 Pestaña 5, VISTA 06-05 Self-Service.
+   915→-- ─────────────────────────────────────────────────────────────
+   916→CREATE OR REPLACE VIEW vw_saldo_vacaciones AS
+   917→WITH base AS (
+   918→    SELECT
+   919→        e.id AS empleado_id,
+   920→        e.codigo_empleado,
+   921→        e.primer_nombre || ' ' || e.primer_apellido AS nombre_completo,
+   922→        e.fecha_ingreso,
+   923→        CURRENT_DATE AS fecha_calculo,
+   924→        -- Aniversario laboral vigente
+   925→        (DATE_TRUNC('year', AGE(CURRENT_DATE, e.fecha_ingreso)) + e.fecha_ingreso)::DATE
+   926→            AS aniversario_anterior,
+   927→        (DATE_TRUNC('year', AGE(CURRENT_DATE, e.fecha_ingreso)) + e.fecha_ingreso
+   928→            + INTERVAL '1 year')::DATE
+   929→            AS proximo_aniversario,
+   930→        -- Años de servicio completados
+   931→        DATE_PART('year', AGE(CURRENT_DATE, e.fecha_ingreso))::INTEGER AS anios_completados,
+   932→        -- Tiene derecho a vacaciones (mínimo 1 año Art. 177 CT)
+   933→        CASE
+   934→            WHEN DATE_PART('year', AGE(CURRENT_DATE, e.fecha_ingreso)) >= 1 THEN TRUE
+   935→            ELSE FALSE
+   936→        END AS tiene_derecho_vacaciones
+   937→    FROM empleados e
+   938→    WHERE e.activo = TRUE
+   939→),
+   940→dias_tomados AS (
+   941→    SELECT
+   942→        empleado_id,
+   943→        COALESCE(SUM(dias_habiles), 0) AS dias_tomados_periodo
+   944→    FROM vacaciones_empleado
+   945→    WHERE estado IN ('TOMADA', 'PROGRAMADA')
+   946→      AND fecha_inicio >= (
+   947→          SELECT aniversario_anterior
+   948→          FROM base b2
+   949→          WHERE b2.empleado_id = vacaciones_empleado.empleado_id
+   950→      )
+   951→    GROUP BY empleado_id
+   952→)
+   953→SELECT
+   954→    b.empleado_id,
+   955→    b.codigo_empleado,
+   956→    b.nombre_completo,
+   957→    b.fecha_ingreso,
+   958→    b.anios_completados,
+   959→    b.tiene_derecho_vacaciones,
+   960→    b.aniversario_anterior,
+   961→    b.proximo_aniversario,
+   962→    -- Días de vacación que corresponden según antigüedad (Art. 177 CT: 15 días mínimo)
+   963→    15 AS dias_vacacion_anuales,
+   964→    COALESCE(dt.dias_tomados_periodo, 0) AS dias_tomados_periodo_actual,
+   965→    GREATEST(0, 15 - COALESCE(dt.dias_tomados_periodo, 0)) AS dias_disponibles
+   966→FROM base b
+   967→LEFT JOIN dias_tomados dt ON dt.empleado_id = b.empleado_id;
+   968→
+   969→COMMENT ON VIEW vw_saldo_vacaciones IS
+   970→    'Calcula saldo de vacaciones en tiempo real (no almacena saldo). '
+   971→    'Base legal: Art. 177 CT — 15 días hábiles de vacación remunerada después del primer año. '
+   972→    'El derecho nace en el aniversario laboral; no es acumulable sin autorización.';
+   973→
+   974→-- ─────────────────────────────────────────────────────────────
+   975→-- E-3: vw_dashboard_nomina
+   976→-- Dashboard del ciclo de nómina activo con KPIs y alertas de cumplimiento.
+   977→-- Soporta: VISTA 04-01 (Dashboard Central de Nómina).
+   978→-- ─────────────────────────────────────────────────────────────
+   979→CREATE OR REPLACE VIEW vw_dashboard_nomina AS
+   980→WITH planilla_activa AS (
+   981→    SELECT *
+   982→    FROM planillas
+   983→    WHERE estado NOT IN ('PAGADA', 'RECHAZADA')
+   984→    ORDER BY fecha_inicio_periodo DESC
+   985→    LIMIT 1
+   986→),
+   987→planilla_pagada AS (
+   988→    SELECT *
+   989→    FROM planillas
+   990→    WHERE estado = 'PAGADA'
+   991→    ORDER BY fecha_fin_periodo DESC
+   992→    LIMIT 1
+   993→),
+   994→alertas_isss AS (
+   995→    SELECT
+   996→        hi.planilla_id,
+   997→        hi.fecha_vencimiento_legal,
+   998→        hi.estado,
+   999→        (hi.fecha_vencimiento_legal - CURRENT_DATE) AS dias_restantes
+  1000→    FROM historial_presentaciones_isss hi
+  1001→    WHERE hi.estado IN ('PENDIENTE', 'CON_MORA')
+  1002→),
+  1003→alertas_isr AS (
+  1004→    SELECT
+  1005→        ei.planilla_id,
+  1006→        ei.fecha_vencimiento_legal,
+  1007→        ei.estado,
+  1008→        (ei.fecha_vencimiento_legal - CURRENT_DATE) AS dias_restantes
+  1009→    FROM historial_enteros_isr ei
+  1010→    WHERE ei.estado IN ('PENDIENTE', 'CON_MORA')
+  1011→)
+  1012→SELECT
+  1013→    -- Estado del período activo
+  1014→    pa.id                           AS planilla_activa_id,
+  1015→    pa.codigo_planilla              AS planilla_activa_codigo,
+  1016→    pa.estado                       AS planilla_activa_estado,
+  1017→    pa.tipo                         AS planilla_activa_tipo,
+  1018→    pa.fecha_inicio_periodo,
+  1019→    pa.fecha_fin_periodo,
+  1020→    pa.total_empleados,
+  1021→    pa.total_salarios_brutos,
+  1022→    pa.total_neto_a_pagar,
+  1023→    -- Comparativo con período anterior
+  1024→    pp.total_neto_a_pagar           AS neto_periodo_anterior,
+  1025→    CASE
+  1026→        WHEN pp.total_neto_a_pagar > 0
+  1027→        THEN ROUND(((pa.total_neto_a_pagar - pp.total_neto_a_pagar) / pp.total_neto_a_pagar) * 100, 2)
+  1028→        ELSE NULL
+  1029→    END AS variacion_porcentual_vs_anterior,
+  1030→    -- Alertas de cumplimiento (semáforo)
+  1031→    ai_isss.dias_restantes          AS dias_venc_isss,
+  1032→    CASE
+  1033→        WHEN ai_isss.dias_restantes > 7  THEN 'VERDE'
+  1034→        WHEN ai_isss.dias_restantes >= 3 THEN 'AMARILLO'
+  1035→        ELSE 'ROJO'
+  1036→    END                             AS semaforo_isss,
+  1037→    ai_isr.dias_restantes           AS dias_venc_isr,
+  1038→    CASE
+  1039→        WHEN ai_isr.dias_restantes > 7  THEN 'VERDE'
+  1040→        WHEN ai_isr.dias_restantes >= 3 THEN 'AMARILLO'
+  1041→        ELSE 'ROJO'
+  1042→    END                             AS semaforo_isr,
+  1043→    -- KPIs generales de headcount
+  1044→    (SELECT COUNT(*) FROM empleados WHERE activo = TRUE)            AS total_empleados_activos,
+  1045→    (SELECT COUNT(*) FROM empleados
+  1046→     WHERE activo = TRUE
+  1047→       AND DATE_TRUNC('month', fecha_ingreso) = DATE_TRUNC('month', CURRENT_DATE))
+  1048→                                                                    AS ingresos_mes_actual,
+  1049→    (SELECT COUNT(*) FROM empleados
+  1050→     WHERE activo = FALSE
+  1051→       AND DATE_TRUNC('month', fecha_terminacion) = DATE_TRUNC('month', CURRENT_DATE))
+  1052→                                                                    AS bajas_mes_actual
+  1053→FROM planilla_activa pa
+  1054→CROSS JOIN (SELECT * FROM planilla_pagada) pp
+  1055→LEFT JOIN alertas_isss ai_isss ON ai_isss.planilla_id = pp.id
+  1056→LEFT JOIN alertas_isr ai_isr   ON ai_isr.planilla_id  = pp.id;
+  1057→
+  1058→COMMENT ON VIEW vw_dashboard_nomina IS
+  1059→    'Dashboard del ciclo de nómina: período activo, comparativo vs anterior, '
+  1060→    'semáforo de cumplimiento ISSS/ISR y KPIs de headcount. '
+  1061→    'Soporta: VISTA 04-01. Actualizada en tiempo real.';
+  1062→
+  1063→-- ─────────────────────────────────────────────────────────────
+  1064→-- E-4: vw_detalle_planilla_completo
+  1065→-- Desglose completo de nómina por empleado con fundamento legal en cada línea.
+  1066→-- Soporta: VISTA 04-03 (desglose individual), VISTA 02-02 Pestaña 4 (historial de nómina),
+  1067→--          generación de boletas de pago (Art. 138 CT).
+  1068→-- ─────────────────────────────────────────────────────────────
+  1069→CREATE OR REPLACE VIEW vw_detalle_planilla_completo AS
+  1070→SELECT
+  1071→    dp.id                               AS detalle_id,
+  1072→    -- Período
+  1073→    p.id                                AS planilla_id,
+  1074→    p.codigo_planilla,
+  1075→    p.tipo                              AS tipo_planilla,
+  1076→    p.fecha_inicio_periodo,
+  1077→    p.fecha_fin_periodo,
+  1078→    p.estado                            AS estado_planilla,
+  1079→    -- Empleado
+  1080→    e.id                                AS empleado_id,
+  1081→    e.codigo_empleado,
+  1082→    e.primer_nombre || ' ' || e.primer_apellido
+  1083→        || COALESCE(' ' || e.segundo_apellido, '') AS nombre_empleado,
+  1084→    e.dui,
+  1085→    e.nit,
+  1086→    e.afp,
+  1087→    e.nup_afp,
+  1088→    e.numero_afiliado_isss,
+  1089→    -- Área y puesto
+  1090→    a.nombre                            AS area_nombre,
+  1091→    pp.nombre_cargo,
+  1092→    -- ── DEVENGADOS ──
+  1093→    dp.salario_nominal,
+  1094→    dp.monto_horas_extras_diurnas,
+  1095→    dp.monto_horas_extras_nocturnas,
+  1096→    dp.monto_recargo_dia_descanso,
+  1097→    dp.monto_recargo_dia_asueto,
+  1098→    dp.monto_comisiones,
+  1099→    dp.monto_bonos_gravados,
+  1100→    dp.monto_otros_ingresos,
+  1101→    dp.salario_bruto,
+  1102→    -- ── DESCUENTOS ──
+  1103→    dp.base_isss,
+  1104→    dp.descuento_isss,
+  1105→    dp.base_afp,
+  1106→    dp.descuento_afp,
+  1107→    dp.renta_imponible,
+  1108→    dp.tramo_isr_aplicado,
+  1109→    dp.descuento_isr,
+  1110→    dp.descuento_cuota_alimenticia,
+  1111→    dp.descuento_prestamo_patronal,
+  1112→    dp.descuento_seguro_complementario,
+  1113→    dp.descuento_embargo_civil,
+  1114→    dp.descuento_otros,
+  1115→    -- ── NETO ──
+  1116→    dp.neto_a_pagar,
+  1117→    -- ── CARGAS PATRONALES (informativas, no se descuentan del empleado) ──
+  1118→    dp.isss_patronal,
+  1119→    dp.afp_patronal,
+  1120→    dp.insaforp,
+  1121→    dp.costo_laboral_total,
+  1122→    -- ── ESTADO DE PAGO ──
+  1123→    dp.estado_pago,
+  1124→    dp.fecha_acreditacion,
+  1125→    dp.referencia_pago,
+  1126→    -- ── PARÁMETROS USADOS EN EL CÁLCULO (para auditoría del cálculo) ──
+  1127→    pl.tasa_isss_laboral,
+  1128→    pl.tasa_isss_patronal,
+  1129→    pl.tope_cotizacion_isss,
+  1130→    pl.tasa_afp_laboral,
+  1131→    pl.tasa_afp_patronal
+  1132→FROM detalles_planilla dp
+  1133→    INNER JOIN planillas p    ON p.id  = dp.planilla_id
+  1134→    INNER JOIN empleados e    ON e.id  = dp.empleado_id
+  1135→    INNER JOIN areas a        ON a.id  = e.area_id
+  1136→    LEFT JOIN  contratos c    ON c.id  = dp.contrato_id
+  1137→    LEFT JOIN  perfiles_puesto pp ON pp.id = c.perfil_puesto_id
+  1138→    LEFT JOIN  parametros_legales pl ON pl.id = p.parametro_legal_id;
+  1139→
+  1140→COMMENT ON VIEW vw_detalle_planilla_completo IS
+  1141→    'Desglose completo de nómina por empleado incluyendo parámetros legales usados. '
+  1142→    'Cumple Art. 138 CT: toda deducción identificada con concepto. '
+  1143→    'Base para: boletas de pago PDF, auditoría de cálculo, reportes contables.';
+  1144→
+  1145→-- ─────────────────────────────────────────────────────────────
+  1146→-- E-5: vw_cumplimiento_legal_anual
+  1147→-- Panel de semáforo de cumplimiento: ISSS, AFP, ISR del año en curso.
+  1148→-- Soporta: VISTA 05-01/05-02/05-03 y VISTA 05-04 (Reporte Cumplimiento Legal Consolidado).
+  1149→-- ─────────────────────────────────────────────────────────────
+  1150→CREATE OR REPLACE VIEW vw_cumplimiento_legal_anual AS
+  1151→SELECT
+  1152→    p.id                                AS planilla_id,
+  1153→    p.codigo_planilla,
+  1154→    p.tipo,
+  1155→    p.fecha_inicio_periodo,
+  1156→    p.fecha_fin_periodo,
+  1157→    p.estado                            AS estado_planilla,
+  1158→    -- ISSS
+  1159→    hi.estado                           AS estado_isss,
+  1160→    hi.fecha_vencimiento_legal          AS vencimiento_isss,
+  1161→    hi.fecha_presentacion               AS presentacion_isss,
+  1162→    hi.monto_mora                       AS mora_isss,
+  1163→    CASE
+  1164→        WHEN hi.id IS NULL                     THEN 'SIN_REGISTRO'
+  1165→        WHEN hi.estado = 'A_TIEMPO'            THEN '✅ A TIEMPO'
+  1166→        WHEN hi.estado = 'CON_MORA'            THEN '⚠️  CON MORA'
+  1167→        WHEN hi.estado = 'PENDIENTE'
+  1168→             AND hi.fecha_vencimiento_legal < CURRENT_DATE THEN '🔴 VENCIDO'
+  1169→        ELSE '🔵 PENDIENTE'
+  1170→    END                                 AS semaforo_isss,
+  1171→    -- AFP Crecer
+  1172→    ha_c.estado                         AS estado_afp_crecer,
+  1173→    ha_c.fecha_presentacion             AS presentacion_afp_crecer,
+  1174→    -- AFP Confía
+  1175→    ha_k.estado                         AS estado_afp_confia,
+  1176→    ha_k.fecha_presentacion             AS presentacion_afp_confia,
+  1177→    -- ISR
+  1178→    ei.estado                           AS estado_isr,
+  1179→    ei.fecha_vencimiento_legal          AS vencimiento_isr,
+  1180→    ei.fecha_entero                     AS entero_isr,
+  1181→    ei.monto_mora_multa                 AS mora_isr,
+  1182→    CASE
+  1183→        WHEN ei.id IS NULL                     THEN 'SIN_REGISTRO'
+  1184→        WHEN ei.estado = 'A_TIEMPO'            THEN '✅ A TIEMPO'
+  1185→        WHEN ei.estado = 'CON_MORA'            THEN '⚠️  CON MORA'
+  1186→        WHEN ei.estado = 'PENDIENTE'
+  1187→             AND ei.fecha_vencimiento_legal < CURRENT_DATE THEN '🔴 VENCIDO'
+  1188→        ELSE '🔵 PENDIENTE'
+  1189→    END                                 AS semaforo_isr
+  1190→FROM planillas p
+  1191→    LEFT JOIN historial_presentaciones_isss hi   ON hi.planilla_id = p.id
+  1192→    LEFT JOIN historial_presentaciones_afp ha_c  ON ha_c.planilla_id = p.id AND ha_c.afp = 'CRECER'
+  1193→    LEFT JOIN historial_presentaciones_afp ha_k  ON ha_k.planilla_id = p.id AND ha_k.afp = 'CONFIA'
+  1194→    LEFT JOIN historial_enteros_isr ei            ON ei.planilla_id  = p.id
+  1195→WHERE EXTRACT(YEAR FROM p.fecha_inicio_periodo) = EXTRACT(YEAR FROM CURRENT_DATE)
+  1196→  AND p.estado IN ('APROBADA', 'PAGADA')
+  1197→ORDER BY p.fecha_inicio_periodo DESC;
+  1198→
+  1199→COMMENT ON VIEW vw_cumplimiento_legal_anual IS
+  1200→    'Semáforo de cumplimiento legal del año en curso: ISSS, AFP (Crecer y Confía) e ISR. '
+  1201→    'Soporta: VISTA 05-04 reporteCumplimientoLegalConsolidado(). '
+  1202→    'La mora ISSS se calcula al 1%/mes pro-rata (Art. 78 Ley ISSS). '
+  1203→    'La multa ISR: 25-75% del impuesto no enterado (Art. 246 Código Tributario).';
+  1204→
+  1205→-- ─────────────────────────────────────────────────────────────
+  1206→-- E-6: vw_costo_total_personal
+  1207→-- Costo laboral total por área incluyendo cargas patronales.
+  1208→-- Soporta: VISTA 05-04 reporteCostoTotalPersonal().
+  1209→-- ─────────────────────────────────────────────────────────────
+  1210→CREATE OR REPLACE VIEW vw_costo_total_personal AS
+  1211→SELECT
+  1212→    a.id                                AS area_id,
+  1213→    a.nombre                            AS area_nombre,
+  1214→    p.codigo_planilla,
+  1215→    p.fecha_inicio_periodo,
+  1216→    p.fecha_fin_periodo,
+  1217→    COUNT(DISTINCT dp.empleado_id)      AS num_empleados,
+  1218→    SUM(dp.salario_bruto)               AS total_brutos,
+  1219→    SUM(dp.neto_a_pagar)                AS total_netos,
+  1220→    SUM(dp.descuento_isss)              AS total_isss_laboral,
+  1221→    SUM(dp.descuento_afp)               AS total_afp_laboral,
+  1222→    SUM(dp.descuento_isr)               AS total_isr_retenido,
+  1223→    SUM(dp.isss_patronal)               AS total_isss_patronal,
+  1224→    SUM(dp.afp_patronal)                AS total_afp_patronal,
+  1225→    SUM(dp.insaforp)                    AS total_insaforp,
+  1226→    SUM(dp.costo_laboral_total)         AS costo_laboral_total,
+  1227→    -- Costo promedio por empleado
+  1228→    ROUND(SUM(dp.costo_laboral_total) / NULLIF(COUNT(DISTINCT dp.empleado_id), 0), 2)
+  1229→                                        AS costo_promedio_empleado,
+  1230→    -- Carga patronal como % del salario bruto
+  1231→    ROUND(
+  1232→        (SUM(dp.isss_patronal) + SUM(dp.afp_patronal) + SUM(dp.insaforp))
+  1233→        / NULLIF(SUM(dp.salario_bruto), 0) * 100, 2
+  1234→    )                                   AS pct_carga_patronal
+  1235→FROM detalles_planilla dp
+  1236→    INNER JOIN planillas p     ON p.id = dp.planilla_id
+  1237→    INNER JOIN empleados e     ON e.id = dp.empleado_id
+  1238→    INNER JOIN areas a         ON a.id = e.area_id
+  1239→WHERE p.estado IN ('APROBADA', 'PAGADA')
+  1240→GROUP BY a.id, a.nombre, p.codigo_planilla, p.fecha_inicio_periodo, p.fecha_fin_periodo;
+  1241→
+  1242→-- ─────────────────────────────────────────────────────────────
+  1243→-- E-7: vw_anomalias_nomina
+  1244→-- Detección automática de anomalías en el cálculo de nómina.
+  1245→-- Soporta: VISTA 04-03 ejecutarVerificacionAnomalias().
+  1246→-- ─────────────────────────────────────────────────────────────
+  1247→CREATE OR REPLACE VIEW vw_anomalias_nomina AS
+  1248→WITH salarios_min AS (
+  1249→    SELECT sms.sector, sms.salario_mensual, sms.parametro_legal_id
+  1250→    FROM salarios_minimos_sector sms
+  1251→    INNER JOIN parametros_legales pl ON pl.id = sms.parametro_legal_id
+  1252→    WHERE pl.estado = 'VIGENTE'
+  1253→),
+  1254→detalle_prev AS (
+  1255→    SELECT
+  1256→        dp.planilla_id,
+  1257→        dp.empleado_id,
+  1258→        dp.neto_a_pagar,
+  1259→        dp.descuento_isss,
+  1260→        dp.descuento_afp,
+  1261→        dp.descuento_isr,
+  1262→        dp.base_isss,
+  1263→        dp.salario_bruto,
+  1264→        LAG(dp.neto_a_pagar) OVER (
+  1265→            PARTITION BY dp.empleado_id
+  1266→            ORDER BY p.fecha_inicio_periodo
+  1267→        ) AS neto_periodo_anterior
+  1268→    FROM detalles_planilla dp
+  1269→    INNER JOIN planillas p ON p.id = dp.planilla_id
+  1270→)
+  1271→SELECT
+  1272→    dp.planilla_id,
+  1273→    dp.empleado_id,
+  1274→    e.codigo_empleado,
+  1275→    e.primer_nombre || ' ' || e.primer_apellido AS nombre_empleado,
+  1276→    pp.sector_laboral,
+  1277→    -- Tipo de anomalía
+  1278→    CASE
+  1279→        WHEN dp.neto_a_pagar < sm.salario_mensual
+  1280→            THEN 'NETO_BAJO_MINIMO'
+  1281→        WHEN dp.descuento_isr = 0 AND dp.salario_bruto > 472
+  1282→            THEN 'ISR_CERO_SOSPECHOSO'
+  1283→        WHEN dp.neto_periodo_anterior IS NOT NULL
+  1284→             AND ABS(dp.neto_a_pagar - dp.neto_periodo_anterior) / NULLIF(dp.neto_periodo_anterior, 0) > 0.20
+  1285→            THEN 'VARIACION_MAYOR_20PCT'
+  1286→        WHEN dp.descuento_isss = 0 AND dp.salario_bruto > 0
+  1287→            THEN 'ISSS_CERO_SIN_JUSTIFICACION'
+  1288→        WHEN dp.base_isss > 1000
+  1289→            THEN 'TOPE_ISSS_MAL_APLICADO'
+  1290→        WHEN dp.descuento_afp = 0 AND dp.salario_bruto > 0
+  1291→            THEN 'AFP_CERO_SIN_JUSTIFICACION'
+  1292→        ELSE NULL
+  1293→    END                                 AS tipo_anomalia,
+  1294→    -- Descripción del problema
+  1295→    CASE
+  1296→        WHEN dp.neto_a_pagar < sm.salario_mensual
+  1297→            THEN 'Neto a pagar ($' || dp.neto_a_pagar || ') es inferior al salario mínimo del sector ($' || sm.salario_mensual || ')'
+  1298→        WHEN dp.descuento_isr = 0 AND dp.salario_bruto > 472
+  1299→            THEN 'ISR calculado en $0 con salario bruto de $' || dp.salario_bruto || ' (supera el primer tramo de $472)'
+  1300→        WHEN dp.neto_periodo_anterior IS NOT NULL
+  1301→             AND ABS(dp.neto_a_pagar - dp.neto_periodo_anterior) / NULLIF(dp.neto_periodo_anterior, 0) > 0.20
+  1302→            THEN 'Variación de ' || ROUND(ABS(dp.neto_a_pagar - dp.neto_periodo_anterior) / dp.neto_periodo_anterior * 100, 1) || '% respecto al período anterior'
+  1303→        WHEN dp.descuento_isss = 0 AND dp.salario_bruto > 0
+  1304→            THEN 'ISSS descontado en $0 con salario bruto de $' || dp.salario_bruto
+  1305→        WHEN dp.base_isss > 1000
+  1306→            THEN 'Base ISSS ($' || dp.base_isss || ') supera el tope legal de $1,000.00'
+  1307→        WHEN dp.descuento_afp = 0 AND dp.salario_bruto > 0
+  1308→            THEN 'AFP descontada en $0 con salario bruto de $' || dp.salario_bruto
+  1309→        ELSE NULL
+  1310→    END                                 AS descripcion_anomalia,
+  1311→    CASE
+  1312→        WHEN dp.neto_a_pagar < sm.salario_mensual         THEN 'ALTA'
+  1313→        WHEN dp.base_isss > 1000                          THEN 'ALTA'
+  1314→        WHEN dp.descuento_isr = 0 AND dp.salario_bruto > 472 THEN 'MEDIA'
+  1315→        WHEN dp.descuento_isss = 0 AND dp.salario_bruto > 0  THEN 'MEDIA'
+  1316→        WHEN dp.descuento_afp = 0 AND dp.salario_bruto > 0   THEN 'MEDIA'
+  1317→        ELSE 'BAJA'
+  1318→    END                                 AS severidad,
+  1319→    dp.salario_bruto                    AS valor_encontrado,
+  1320→    dp.neto_a_pagar
+  1321→FROM detalle_prev dp
+  1322→    INNER JOIN empleados e     ON e.id  = dp.empleado_id
+  1323→    LEFT JOIN contratos c      ON c.empleado_id = e.id AND c.activo = TRUE
+  1324→    LEFT JOIN perfiles_puesto pp ON pp.id = c.perfil_puesto_id
+  1325→    LEFT JOIN salarios_min sm  ON sm.sector = COALESCE(pp.sector_laboral, 'COMERCIO')
+  1326→WHERE (
+  1327→    dp.neto_a_pagar < COALESCE(sm.salario_mensual, 0)
+  1328→    OR (dp.descuento_isr = 0 AND dp.salario_bruto > 472)
+  1329→    OR (dp.neto_periodo_anterior IS NOT NULL
+  1330→        AND ABS(dp.neto_a_pagar - dp.neto_periodo_anterior) / NULLIF(dp.neto_periodo_anterior, 0) > 0.20)
+  1331→    OR (dp.descuento_isss = 0 AND dp.salario_bruto > 0)
+  1332→    OR dp.base_isss > 1000
+  1333→    OR (dp.descuento_afp = 0 AND dp.salario_bruto > 0)
+  1334→);
+  1335→
+  1336→COMMENT ON VIEW vw_anomalias_nomina IS
+  1337→    'Detección automática de 6 tipos de anomalías en el cálculo de nómina. '
+  1338→    'Soporta: VISTA 04-03 ejecutarVerificacionAnomalias(). '
+  1339→    'Severidades: ALTA (neto bajo mínimo, tope ISSS mal aplicado), '
+  1340→    'MEDIA (ISR/ISSS/AFP en cero), BAJA (variación > 20% vs período anterior).';
+  1341→
+  1342→-- ─────────────────────────────────────────────────────────────
+  1343→-- E-8: vw_pasivos_laborales
+  1344→-- Proyección de pasivos laborales para provisión contable (NIIF para PYMES).
+  1345→-- Soporta: VISTA 05-04 proyeccionPasivosLaborales().
+  1346→-- ─────────────────────────────────────────────────────────────
+  1347→CREATE OR REPLACE VIEW vw_pasivos_laborales AS
+  1348→SELECT
+  1349→    e.id                                AS empleado_id,
+  1350→    e.codigo_empleado,
+  1351→    e.primer_nombre || ' ' || e.primer_apellido AS nombre_empleado,
+  1352→    a.nombre                            AS area,
+  1353→    e.salario_base,
+  1354→    e.fecha_ingreso,
+  1355→    DATE_PART('year', AGE(CURRENT_DATE, e.fecha_ingreso))   AS anios_servicio,
+  1356→    -- 1. Vacaciones devengadas no tomadas
+  1357→    ROUND(
+  1358→        (sv.dias_disponibles * e.salario_base / 30), 2
+  1359→    )                                   AS pasivo_vacaciones,
+  1360→    -- 2. Aguinaldo acumulado del año en curso (provisión mensual)
+  1361→    ROUND(
+  1362→        CASE
+  1363→            WHEN DATE_PART('year', AGE(CURRENT_DATE, e.fecha_ingreso)) < 1
+  1364→                THEN (EXTRACT(MONTH FROM AGE(CURRENT_DATE, e.fecha_ingreso)) / 12.0) * (15.0/30 * e.salario_base)
+  1365→            WHEN DATE_PART('year', AGE(CURRENT_DATE, e.fecha_ingreso)) BETWEEN 1 AND 2
+  1366→                THEN (EXTRACT(MONTH FROM CURRENT_DATE - DATE_TRUNC('year', CURRENT_DATE)::DATE + 1) / 12.0)
+  1367→                     * (15.0/30 * e.salario_base)
+  1368→            WHEN DATE_PART('year', AGE(CURRENT_DATE, e.fecha_ingreso)) BETWEEN 3 AND 9
+  1369→                THEN (EXTRACT(MONTH FROM CURRENT_DATE - DATE_TRUNC('year', CURRENT_DATE)::DATE + 1) / 12.0)
+  1370→                     * (19.0/30 * e.salario_base)
+  1371→            ELSE (EXTRACT(MONTH FROM CURRENT_DATE - DATE_TRUNC('year', CURRENT_DATE)::DATE + 1) / 12.0)
+  1372→                 * (21.0/30 * e.salario_base)
+  1373→        END, 2
+  1374→    )                                   AS pasivo_aguinaldo,
+  1375→    -- 3. Indemnización acumulada estimada (despido injustificado Art. 58 CT)
+  1376→    ROUND(
+  1377→        DATE_PART('year', AGE(CURRENT_DATE, e.fecha_ingreso))
+  1378→        * 30 * (e.salario_base / 30), 2
+  1379→    )                                   AS pasivo_indemnizacion_estimada,
+  1380→    CURRENT_DATE                        AS fecha_corte
+  1381→FROM empleados e
+  1382→    INNER JOIN areas a ON a.id = e.area_id
+  1383→    LEFT JOIN vw_saldo_vacaciones sv ON sv.empleado_id = e.id
+  1384→WHERE e.activo = TRUE;
+  1385→
+  1386→COMMENT ON VIEW vw_pasivos_laborales IS
+  1387→    'Proyección de pasivos laborales al día de hoy para provisión contable bajo NIIF para PYMES. '
+  1388→    'Incluye: vacaciones devengadas no tomadas, aguinaldo acumulado y provisión de indemnización. '
+  1389→    'La indemnización estimada asume despido injustificado (escenario de mayor pasivo). '
+  1390→    'Soporta: VISTA 05-04 proyeccionPasivosLaborales().';
+  1391→
+  1392→-- ─────────────────────────────────────────────────────────────
+  1393→-- E-9: vw_estructura_salarial
+  1394→-- Análisis de equidad interna y compa-ratios por banda.
+  1395→-- Soporta: VISTA 03-03 (Valuación y Bandas), VISTA 05-04 reporteEquidadSalarialInterna().
+  1396→-- ─────────────────────────────────────────────────────────────
+  1397→CREATE OR REPLACE VIEW vw_estructura_salarial AS
+  1398→SELECT
+  1399→    bs.id                               AS banda_id,
+  1400→    bs.nombre                           AS banda_nombre,
+  1401→    bs.sector,
+  1402→    bs.salario_minimo                   AS banda_min,
+  1403→    bs.salario_midpoint                 AS banda_midpoint,
+  1404→    bs.salario_maximo                   AS banda_max,
+  1405→    COUNT(e.id)                         AS num_empleados,
+  1406→    ROUND(AVG(c.salario_base_contrato), 2)  AS salario_promedio,
+  1407→    ROUND(MIN(c.salario_base_contrato), 2)  AS salario_minimo_real,
+  1408→    ROUND(MAX(c.salario_base_contrato), 2)  AS salario_maximo_real,
+  1409→    -- Compa-ratio promedio de la banda
+  1410→    ROUND(AVG(c.salario_base_contrato) / NULLIF(bs.salario_midpoint, 0) * 100, 2)
+  1411→                                        AS compa_ratio_promedio,
+  1412→    COUNT(CASE WHEN c.salario_base_contrato < bs.salario_minimo THEN 1 END)
+  1413→                                        AS empleados_bajo_minimo,
+  1414→    COUNT(CASE WHEN c.salario_base_contrato > bs.salario_maximo THEN 1 END)
+  1415→                                        AS empleados_sobre_maximo,
+  1416→    -- Costo de ajuste para llevar todos al mínimo de la banda
+  1417→    ROUND(SUM(GREATEST(0, bs.salario_minimo - c.salario_base_contrato)), 2)
+  1418→                                        AS costo_ajuste_a_minimo,
+  1419→    -- Costo de ajuste para llevar todos al midpoint
+  1420→    ROUND(SUM(GREATEST(0, bs.salario_midpoint - c.salario_base_contrato)), 2)
+  1421→                                        AS costo_ajuste_a_midpoint
+  1422→FROM bandas_salariales bs
+  1423→    LEFT JOIN contratos c  ON c.banda_salarial_id = bs.id AND c.activo = TRUE
+  1424→    LEFT JOIN empleados e  ON e.id = c.empleado_id AND e.activo = TRUE
+  1425→WHERE bs.activo = TRUE
+  1426→GROUP BY bs.id, bs.nombre, bs.sector, bs.salario_minimo, bs.salario_midpoint, bs.salario_maximo;
+  1427→
+  1428→-- ─────────────────────────────────────────────────────────────
+  1429→-- E-10: vw_catalogo_perfiles_activos
+  1430→-- Vista del catálogo de perfiles con métricas de ocupación.
+  1431→-- Soporta: VISTA 03-01 (Catálogo de Perfiles de Puestos).
+  1432→-- ─────────────────────────────────────────────────────────────
+  1433→CREATE OR REPLACE VIEW vw_catalogo_perfiles_activos AS
+  1434→SELECT
+  1435→    pp.id,
+  1436→    pp.codigo,
+  1437→    pp.nombre_cargo,
+  1438→    pp.nivel_jerarquico,
+  1439→    pp.tipo_jornada_cargo,
+  1440→    pp.sector_laboral,
+  1441→    pp.plazas_presupuestadas,
+  1442→    pp.puntuacion_valuacion,
+  1443→    pp.estado,
+  1444→    a.nombre                            AS area_nombre,
+  1445→    bs.nombre                           AS banda_nombre,
+  1446→    bs.salario_minimo                   AS banda_min,
+  1447→    bs.salario_midpoint,
+  1448→    bs.salario_maximo                   AS banda_max,
+  1449→    -- Ocupación actual
+  1450→    COUNT(CASE WHEN e.activo = TRUE THEN 1 END) AS plazas_ocupadas,
+  1451→    pp.plazas_presupuestadas - COUNT(CASE WHEN e.activo = TRUE THEN 1 END) AS plazas_disponibles,
+  1452→    -- Versión vigente del descriptivo
+  1453→    vpv.numero_version                  AS version_descriptivo,
+  1454→    vpv.fecha_vigencia_desde            AS fecha_vigencia_descriptivo,
+  1455→    -- Última modificación
+  1456→    pp.fecha_actualizacion
+  1457→FROM perfiles_puesto pp
+  1458→    INNER JOIN areas a             ON a.id  = pp.area_id
+  1459→    LEFT JOIN  bandas_salariales bs ON bs.id = pp.banda_salarial_id
+  1460→    LEFT JOIN  contratos c         ON c.perfil_puesto_id = pp.id AND c.activo = TRUE
+  1461→    LEFT JOIN  empleados e         ON e.id  = c.empleado_id
+  1462→    LEFT JOIN  versiones_perfil_puesto vpv
+  1463→        ON vpv.perfil_puesto_id = pp.id AND vpv.estado = 'VIGENTE'
+  1464→WHERE pp.estado <> 'DESACTIVADO'
+  1465→GROUP BY pp.id, pp.codigo, pp.nombre_cargo, pp.nivel_jerarquico,
+  1466→         pp.tipo_jornada_cargo, pp.sector_laboral, pp.plazas_presupuestadas,
+  1467→         pp.puntuacion_valuacion, pp.estado, a.nombre,
+  1468→         bs.nombre, bs.salario_minimo, bs.salario_midpoint, bs.salario_maximo,
+  1469→         vpv.numero_version, vpv.fecha_vigencia_desde, pp.fecha_actualizacion;
+  1470→
+  1471→-- ─────────────────────────────────────────────────────────────
+  1472→-- E-11: vw_historial_cotizaciones_empleado
+  1473→-- Historial de cotizaciones previsionales por empleado.
+  1474→-- Soporta: VISTA 02-02 Pestaña 3 verHistorialCotizaciones().
+  1475→-- ─────────────────────────────────────────────────────────────
+  1476→CREATE OR REPLACE VIEW vw_historial_cotizaciones_empleado AS
+  1477→SELECT
+  1478→    dp.empleado_id,
+  1479→    e.codigo_empleado,
+  1480→    e.primer_nombre || ' ' || e.primer_apellido AS nombre_empleado,
+  1481→    e.afp,
+  1482→    e.nup_afp,
+  1483→    e.numero_afiliado_isss,
+  1484→    p.codigo_planilla                   AS periodo,
+  1485→    p.fecha_inicio_periodo,
+  1486→    p.fecha_fin_periodo,
+  1487→    p.estado                            AS estado_planilla,
+  1488→    -- ISSS
+  1489→    dp.base_isss                        AS salario_cotizable_isss,
+  1490→    dp.descuento_isss                   AS cuota_laboral_isss,
+  1491→    dp.isss_patronal                    AS cuota_patronal_isss,
+  1492→    (dp.descuento_isss + dp.isss_patronal) AS total_cotizacion_isss,
+  1493→    -- AFP
+  1494→    dp.base_afp                         AS ibc_afp,
+  1495→    dp.descuento_afp                    AS cuota_laboral_afp,
+  1496→    dp.afp_patronal                     AS cuota_patronal_afp,
+  1497→    (dp.descuento_afp + dp.afp_patronal) AS total_cotizacion_afp,
+  1498→    -- Estado de presentación
+  1499→    CASE WHEN p.estado = 'PAGADA' THEN 'PRESENTADO' ELSE 'PENDIENTE' END
+  1500→                                        AS estado_presentacion
+  1501→FROM detalles_planilla dp
+  1502→    INNER JOIN planillas p ON p.id = dp.planilla_id
+  1503→    INNER JOIN empleados e ON e.id = dp.empleado_id
+  1504→WHERE p.estado IN ('APROBADA', 'PAGADA')
+  1505→ORDER BY dp.empleado_id, p.fecha_inicio_periodo DESC;
+  1506→
+  1507→-- ─────────────────────────────────────────────────────────────
+  1508→-- E-12: vw_rotacion_personal
+  1509→-- Indicadores de rotación para el reporte de gestión de talento.
+  1510→-- Soporta: VISTA 05-04 reporteRotacionPersonal().
+  1511→-- ─────────────────────────────────────────────────────────────
+  1512→CREATE OR REPLACE VIEW vw_rotacion_personal AS
+  1513→WITH bajas_mes AS (
+  1514→    SELECT
+  1515→        DATE_TRUNC('month', fecha_terminacion)::DATE    AS mes,
+  1516→        tipo_terminacion,
+  1517→        COUNT(*)                                         AS cantidad_bajas,
+  1518→        ROUND(AVG(
+  1519→            DATE_PART('year', AGE(fecha_terminacion, fecha_ingreso)) * 12
+  1520→            + DATE_PART('month', AGE(fecha_terminacion, fecha_ingreso))
+  1521→        ), 1)                                            AS meses_promedio_al_retiro
+  1522→    FROM empleados
+  1523→    WHERE activo = FALSE AND fecha_terminacion IS NOT NULL
+  1524→    GROUP BY DATE_TRUNC('month', fecha_terminacion), tipo_terminacion
+  1525→),
+  1526→headcount_mensual AS (
+  1527→    -- Aproximación al headcount activo al final de cada mes
+  1528→    SELECT
+  1529→        DATE_TRUNC('month', CURRENT_DATE)::DATE         AS mes,
+  1530→        COUNT(*)                                         AS headcount
+  1531→    FROM empleados
+  1532→    WHERE activo = TRUE
+  1533→)
+  1534→SELECT
+  1535→    bm.mes,
+  1536→    bm.tipo_terminacion,
+  1537→    bm.cantidad_bajas,
+  1538→    bm.meses_promedio_al_retiro,
+  1539→    hm.headcount,
+  1540→    -- Tasa de rotación mensual = (bajas / headcount promedio) × 100
+  1541→    ROUND(bm.cantidad_bajas::NUMERIC / NULLIF(hm.headcount, 0) * 100, 2) AS tasa_rotacion_mensual
+  1542→FROM bajas_mes bm
+  1543→CROSS JOIN headcount_mensual hm
+  1544→ORDER BY bm.mes DESC, bm.cantidad_bajas DESC;
+  1545→
+  1546→
+  1547→-- ============================================================================================================================
+  1548→-- SECCIÓN F: ÍNDICES DE RENDIMIENTO ADICIONALES
+  1549→-- ============================================================================================================================
+  1550→
+  1551→-- ─── Empleados ───
+  1552→CREATE INDEX idx_empleados_estado         ON empleados (estado)         WHERE activo = TRUE;
+  1553→CREATE INDEX idx_empleados_area           ON empleados (area_id)        WHERE activo = TRUE;
+  1554→CREATE INDEX idx_empleados_dui            ON empleados (dui);
+  1555→CREATE INDEX idx_empleados_nombre_trgm    ON empleados
+  1556→    USING GIN ((primer_nombre || ' ' || primer_apellido) gin_trgm_ops);
+  1557→COMMENT ON INDEX idx_empleados_nombre_trgm IS
+  1558→    'Índice trigrama para búsqueda por nombre (LIKE/ILIKE) en el listado de empleados. '
+  1559→    'Requiere extensión pg_trgm (activada en Parte 1).';
+  1560→
+  1561→-- ─── Contratos ───
+  1562→CREATE INDEX idx_contratos_empleado_activo ON contratos (empleado_id) WHERE activo = TRUE;
+  1563→CREATE INDEX idx_contratos_perfil          ON contratos (perfil_puesto_id);
+  1564→CREATE INDEX idx_contratos_vencimiento     ON contratos (fecha_fin)    WHERE activo = TRUE AND fecha_fin IS NOT NULL;
+  1565→COMMENT ON INDEX idx_contratos_vencimiento IS
+  1566→    'Usado para alertas de vencimiento de contratos temporales (30/15/5 días anticipación).';
+  1567→
+  1568→-- ─── Planillas ───
+  1569→CREATE INDEX idx_planillas_estado         ON planillas (estado);
+  1570→CREATE INDEX idx_planillas_tipo_periodo   ON planillas (tipo, fecha_inicio_periodo DESC);
+  1571→CREATE INDEX idx_planillas_periodo        ON planillas (fecha_inicio_periodo, fecha_fin_periodo);
+  1572→
+  1573→-- ─── Detalles Planilla ───
+  1574→CREATE INDEX idx_dp_planilla              ON detalles_planilla (planilla_id);
+  1575→CREATE INDEX idx_dp_empleado              ON detalles_planilla (empleado_id);
+  1576→CREATE INDEX idx_dp_estado_pago           ON detalles_planilla (estado_pago) WHERE estado_pago <> 'PAGADO';
+  1577→
+  1578→-- ─── Incidencias ───
+  1579→CREATE INDEX idx_inc_empleado_planilla    ON incidencias_nomina (empleado_id, planilla_id);
+  1580→CREATE INDEX idx_inc_estado               ON incidencias_nomina (estado)  WHERE estado = 'PENDIENTE';
+  1581→CREATE INDEX idx_inc_tipo_fecha           ON incidencias_nomina (tipo, fecha_inicio);
+  1582→
+  1583→-- ─── Vacaciones ───
+  1584→CREATE INDEX idx_vac_empleado_estado      ON vacaciones_empleado (empleado_id, estado);
+  1585→
+  1586→-- ─── Cumplimiento legal ───
+  1587→CREATE INDEX idx_isss_estado              ON historial_presentaciones_isss (estado) WHERE estado <> 'PRESENTADO';
+  1588→CREATE INDEX idx_isr_estado               ON historial_enteros_isr         (estado) WHERE estado <> 'PRESENTADO';
+  1589→CREATE INDEX idx_afp_estado               ON historial_presentaciones_afp  (estado) WHERE estado <> 'PRESENTADO';
+  1590→
+  1591→-- ─── Parámetros legales ───
+  1592→CREATE INDEX idx_pl_vigente               ON parametros_legales (fecha_vigencia_desde DESC) WHERE estado = 'VIGENTE';
+  1593→CREATE INDEX idx_pl_estado                ON parametros_legales (estado);
+  1594→
+  1595→-- ─── Seguridad ───
+  1596→CREATE INDEX idx_rt_usuario_activo        ON refresh_tokens   (usuario_id) WHERE activo = TRUE;
+  1597→CREATE INDEX idx_rt_expira                ON refresh_tokens   (expira_en)  WHERE activo = TRUE;
+  1598→CREATE INDEX idx_otp_usuario_activo       ON otp_tokens       (usuario_id) WHERE usado = FALSE;
+  1599→
+  1600→-- ─── Perfiles de puesto ───
+  1601→CREATE INDEX idx_pp_area_estado           ON perfiles_puesto (area_id, estado);
+  1602→CREATE INDEX idx_pp_banda                 ON perfiles_puesto (banda_salarial_id);
+  1603→
+  1604→
+  1605→-- ============================================================================================================================
+  1606→-- SECCIÓN G: FUNCIONES DE NEGOCIO REUTILIZABLES
+  1607→-- ============================================================================================================================
+  1608→
+  1609→-- ─────────────────────────────────────────────────────────────
+  1610→-- G-1: Motor de cálculo de nómina por empleado
+  1611→-- Implementa la secuencia obligatoria de 8 pasos (VISTA 04-03):
+  1612→--   (1) Bruto = base + incidencias
+  1613→--   (2) ISSS laboral = MIN(bruto, $1,000) × 3%
+  1614→--   (3) AFP laboral = bruto × 7.25%
+  1615→--   (4) Renta imponible = bruto - ISSS - AFP
+  1616→--   (5) ISR = tabla de tramos
+  1617→--   (6) Otros descuentos en prelación legal
+  1618→--   (7) Neto = bruto - ISSS - AFP - ISR - otros
+  1619→--   (8) Cargas patronales (no se descuentan del empleado)
+  1620→-- ─────────────────────────────────────────────────────────────
+  1621→CREATE OR REPLACE FUNCTION fn_calcular_nomina_empleado(
+  1622→    p_empleado_id   UUID,
+  1623→    p_planilla_id   UUID,
+  1624→    p_parametro_id  UUID
+  1625→)
+  1626→RETURNS TABLE (
+  1627→    -- Devengados
+  1628→    salario_nominal             NUMERIC,
+  1629→    monto_horas_extras_diurnas  NUMERIC,
+  1630→    monto_horas_extras_noct     NUMERIC,
+  1631→    monto_recargo_descanso      NUMERIC,
+  1632→    monto_recargo_asueto        NUMERIC,
+  1633→    monto_comisiones            NUMERIC,
+  1634→    monto_bonos_gravados        NUMERIC,
+  1635→    monto_otros_ingresos        NUMERIC,
+  1636→    salario_bruto               NUMERIC,
+  1637→    -- Descuentos
+  1638→    base_isss                   NUMERIC,
+  1639→    descuento_isss              NUMERIC,
+  1640→    base_afp                    NUMERIC,
+  1641→    descuento_afp               NUMERIC,
+  1642→    renta_imponible             NUMERIC,
+  1643→    tramo_isr                   SMALLINT,
+  1644→    descuento_isr               NUMERIC,
+  1645→    desc_cuota_alimenticia      NUMERIC,
+  1646→    desc_prestamo               NUMERIC,
+  1647→    desc_seguro                 NUMERIC,
+  1648→    desc_embargo                NUMERIC,
+  1649→    desc_otros                  NUMERIC,
+  1650→    neto_a_pagar                NUMERIC,
+  1651→    -- Cargas patronales
+  1652→    isss_patronal               NUMERIC,
+  1653→    afp_patronal                NUMERIC,
+  1654→    insaforp_monto              NUMERIC,
+  1655→    costo_laboral_total         NUMERIC
+  1656→) AS $$
+  1657→DECLARE
+  1658→    v_contrato          RECORD;
+  1659→    v_params            RECORD;
+  1660→    v_sal_nominal       NUMERIC(10,2);
+  1661→    v_hex_diurno        NUMERIC(10,2) := 0;
+  1662→    v_hex_noct          NUMERIC(10,2) := 0;
+  1663→    v_rec_descanso      NUMERIC(10,2) := 0;
+  1664→    v_rec_asueto        NUMERIC(10,2) := 0;
+  1665→    v_comisiones        NUMERIC(10,2) := 0;
+  1666→    v_bonos             NUMERIC(10,2) := 0;
+  1667→    v_otros_ing         NUMERIC(10,2) := 0;
+  1668→    v_bruto             NUMERIC(10,2);
+  1669→    v_base_isss         NUMERIC(10,2);
+  1670→    v_isss              NUMERIC(10,2);
+  1671→    v_afp               NUMERIC(10,2);
+  1672→    v_renta_imp         NUMERIC(10,2);
+  1673→    v_isr               NUMERIC(10,2);
+  1674→    v_tramo             SMALLINT;
+  1675→    v_alimentos         NUMERIC(10,2) := 0;
+  1676→    v_prestamo          NUMERIC(10,2) := 0;
+  1677→    v_seguro            NUMERIC(10,2) := 0;
+  1678→    v_embargo           NUMERIC(10,2) := 0;
+  1679→    v_otros_desc        NUMERIC(10,2) := 0;
+  1680→    v_neto              NUMERIC(10,2);
+  1681→    v_isss_pat          NUMERIC(10,2);
+  1682→    v_afp_pat           NUMERIC(10,2);
+  1683→    v_insaforp          NUMERIC(10,2);
+  1684→    v_total_empleados   INTEGER;
+  1685→BEGIN
+  1686→    -- ── Obtener contrato vigente ──
+  1687→    SELECT c.salario_base_contrato, c.tipo_jornada
+  1688→    INTO v_contrato
+  1689→    FROM contratos c
+  1690→    WHERE c.empleado_id = p_empleado_id AND c.activo = TRUE
+  1691→    LIMIT 1;
+  1692→
+  1693→    IF NOT FOUND THEN
+  1694→        RAISE EXCEPTION 'Empleado % no tiene contrato activo', p_empleado_id;
+  1695→    END IF;
+  1696→
+  1697→    -- ── Obtener parámetros legales ──
+  1698→    SELECT * INTO v_params
+  1699→    FROM parametros_legales WHERE id = p_parametro_id;
+  1700→
+  1701→    -- ── PASO 1: Salario nominal + incidencias aprobadas ──
+  1702→    v_sal_nominal := v_contrato.salario_base_contrato;
+  1703→
+  1704→    -- Sumar montos de incidencias APROBADAS del período (por tipo)
+  1705→    SELECT
+  1706→        COALESCE(SUM(CASE WHEN tipo_hora_extra = 'DIURNA'       THEN monto_incidencia ELSE 0 END), 0),
+  1707→        COALESCE(SUM(CASE WHEN tipo_hora_extra = 'NOCTURNA'     THEN monto_incidencia ELSE 0 END), 0),
+  1708→        COALESCE(SUM(CASE WHEN tipo_hora_extra = 'DIA_DESCANSO' THEN monto_incidencia ELSE 0 END), 0),
+  1709→        COALESCE(SUM(CASE WHEN tipo_hora_extra = 'DIA_ASUETO'   THEN monto_incidencia ELSE 0 END), 0)
+  1710→    INTO v_hex_diurno, v_hex_noct, v_rec_descanso, v_rec_asueto
+  1711→    FROM incidencias_nomina
+  1712→    WHERE empleado_id = p_empleado_id
+  1713→      AND planilla_id = p_planilla_id
+  1714→      AND tipo = 'HORAS_EXTRA'
+  1715→      AND estado = 'APROBADA';
+  1716→
+  1717→    SELECT
+  1718→        COALESCE(SUM(CASE WHEN tipo = 'COMISION' THEN monto_incidencia ELSE 0 END), 0),
+  1719→        COALESCE(SUM(CASE WHEN tipo = 'BONO' AND gravado_isr = TRUE THEN monto_incidencia ELSE 0 END), 0),
+  1720→        COALESCE(SUM(CASE WHEN tipo NOT IN ('HORAS_EXTRA','COMISION','BONO','DESCUENTO_ESPECIAL','AUSENCIA')
+  1721→                          THEN COALESCE(monto_incidencia, 0) ELSE 0 END), 0)
+  1722→    INTO v_comisiones, v_bonos, v_otros_ing
+  1723→    FROM incidencias_nomina
+  1724→    WHERE empleado_id = p_empleado_id
+  1725→      AND planilla_id = p_planilla_id
+  1726→      AND estado = 'APROBADA';
+  1727→
+  1728→    v_bruto := ROUND(
+  1729→        v_sal_nominal + v_hex_diurno + v_hex_noct + v_rec_descanso + v_rec_asueto
+  1730→        + v_comisiones + v_bonos + v_otros_ing, 2
+  1731→    );
+  1732→
+  1733→    -- ── PASO 2: ISSS laboral = MIN(bruto, tope) × tasa ──
+  1734→    v_base_isss := LEAST(v_bruto, v_params.tope_cotizacion_isss);
+  1735→    v_isss := ROUND(v_base_isss * v_params.tasa_isss_laboral, 2);
+  1736→
+  1737→    -- ── PASO 3: AFP laboral = bruto × tasa (sin tope) ──
+  1738→    v_afp := ROUND(v_bruto * v_params.tasa_afp_laboral, 2);
+  1739→
+  1740→    -- ── PASO 4: Renta imponible = bruto - ISSS - AFP ──
+  1741→    v_renta_imp := GREATEST(ROUND(v_bruto - v_isss - v_afp, 2), 0);
+  1742→
+  1743→    -- ── PASO 5: ISR según tabla de tramos ──
+  1744→    v_isr := fn_calcular_isr_mensual(v_renta_imp, p_parametro_id);
+  1745→
+  1746→    -- Determinar el tramo aplicado
+  1747→    SELECT numero_tramo INTO v_tramo
+  1748→    FROM tramos_isr
+  1749→    WHERE parametro_legal_id = p_parametro_id
+  1750→      AND limite_inferior <= v_renta_imp
+  1751→      AND (limite_superior IS NULL OR v_renta_imp <= limite_superior)
+  1752→    ORDER BY numero_tramo LIMIT 1;
+  1753→
+  1754→    -- ── PASO 6: Otros descuentos en orden de prelación (Art. 132 CT) ──
+  1755→    SELECT
+  1756→        COALESCE(SUM(CASE WHEN concepto = 'CUOTA_ALIMENTICIA' THEN monto_incidencia ELSE 0 END), 0),
+  1757→        COALESCE(SUM(CASE WHEN concepto = 'PRESTAMO_PATRONAL' THEN monto_incidencia ELSE 0 END), 0),
+  1758→        COALESCE(SUM(CASE WHEN concepto = 'SEGURO_COMPLEMENTARIO' THEN monto_incidencia ELSE 0 END), 0),
+  1759→        COALESCE(SUM(CASE WHEN concepto = 'EMBARGO_CIVIL' THEN monto_incidencia ELSE 0 END), 0),
+  1760→        COALESCE(SUM(CASE WHEN tipo = 'DESCUENTO_ESPECIAL'
+  1761→                          AND concepto NOT IN ('CUOTA_ALIMENTICIA','PRESTAMO_PATRONAL','SEGURO_COMPLEMENTARIO','EMBARGO_CIVIL')
+  1762→                          THEN monto_incidencia ELSE 0 END), 0)
+  1763→    INTO v_alimentos, v_prestamo, v_seguro, v_embargo, v_otros_desc
+  1764→    FROM incidencias_nomina
+  1765→    WHERE empleado_id = p_empleado_id
+  1766→      AND planilla_id = p_planilla_id
+  1767→      AND tipo = 'DESCUENTO_ESPECIAL'
+  1768→      AND estado = 'APROBADA';
+  1769→
+  1770→    -- ── PASO 7: Neto a pagar ──
+  1771→    v_neto := GREATEST(ROUND(
+  1772→        v_bruto - v_isss - v_afp - v_isr
+  1773→        - v_alimentos - v_prestamo - v_seguro - v_embargo - v_otros_desc, 2
+  1774→    ), 0);
+  1775→
+  1776→    -- ── PASO 8: Cargas patronales (no se descuentan del empleado) ──
+  1777→    v_isss_pat := ROUND(v_base_isss * v_params.tasa_isss_patronal, 2);
+  1778→    v_afp_pat  := ROUND(v_bruto * v_params.tasa_afp_patronal, 2);
+  1779→
+  1780→    -- INSAFORP solo si la empresa tiene ≥ empleados_minimos configurados
+  1781→    SELECT COUNT(*) INTO v_total_empleados FROM empleados WHERE activo = TRUE;
+  1782→    v_insaforp := CASE
+  1783→        WHEN v_total_empleados >= v_params.empleados_minimos_insaforp
+  1784→        THEN ROUND(v_bruto * v_params.tasa_insaforp, 2)
+  1785→        ELSE 0.00
+  1786→    END;
+  1787→
+  1788→    RETURN QUERY SELECT
+  1789→        v_sal_nominal, v_hex_diurno, v_hex_noct, v_rec_descanso, v_rec_asueto,
+  1790→        v_comisiones, v_bonos, v_otros_ing, v_bruto,
+  1791→        v_base_isss, v_isss,
+  1792→        v_bruto, v_afp,
+  1793→        v_renta_imp, v_tramo, v_isr,
+  1794→        v_alimentos, v_prestamo, v_seguro, v_embargo, v_otros_desc, v_neto,
+  1795→        v_isss_pat, v_afp_pat, v_insaforp,
+  1796→        ROUND(v_neto + v_isss_pat + v_afp_pat + v_insaforp, 2);
+  1797→END;
+  1798→$$ LANGUAGE plpgsql STABLE;
+  1799→
+  1800→COMMENT ON FUNCTION fn_calcular_nomina_empleado IS
+  1801→    'Motor de cálculo de nómina para un empleado y período específico. '
+  1802→    'Implementa los 8 pasos de la VISTA 04-03 con la secuencia legal correcta: '
+  1803→    'bruto → ISSS → AFP → renta imponible → ISR → descuentos → neto → cargas patronales. '
+  1804→    'Todos los montos se calculan con NUMERIC(10,2) — PROHIBIDO REAL o DOUBLE PRECISION.';
+  1805→
+  1806→-- ─────────────────────────────────────────────────────────────
+  1807→-- G-2: Cálculo de aguinaldo por empleado (Arts. 196-202 CT)
+  1808→-- ─────────────────────────────────────────────────────────────
+  1809→CREATE OR REPLACE FUNCTION fn_calcular_aguinaldo(
+  1810→    p_empleado_id   UUID,
+  1811→    p_anio          INTEGER,
+  1812→    p_parametro_id  UUID
+  1813→)
+  1814→RETURNS TABLE (
+  1815→    anios_servicio_al_12_dic    NUMERIC,
+  1816→    dias_aguinaldo              SMALLINT,
+  1817→    salario_base_calculo        NUMERIC,
+  1818→    es_proporcional             BOOLEAN,
+  1819→    meses_completos             SMALLINT,
+  1820→    aguinaldo_bruto             NUMERIC,
+  1821→    monto_exento_isr            NUMERIC,    -- Hasta 2 salarios mínimos del sector
+  1822→    monto_gravado_isr           NUMERIC,
+  1823→    isr_sobre_aguinaldo         NUMERIC,
+  1824→    aguinaldo_neto              NUMERIC
+  1825→) AS $$
+  1826→DECLARE
+  1827→    v_fecha_corte       DATE := MAKE_DATE(p_anio, 12, 12);
+  1828→    v_empleado          RECORD;
+  1829→    v_contrato          RECORD;
+  1830→    v_sal_min           NUMERIC(10,2);
+  1831→    v_anios             NUMERIC;
+  1832→    v_dias              SMALLINT;
+  1833→    v_meses             SMALLINT;
+  1834→    v_bruto             NUMERIC(10,2);
+  1835→    v_exento            NUMERIC(10,2);
+  1836→    v_gravado           NUMERIC(10,2);
+  1837→    v_isr               NUMERIC(10,2);
+  1838→    v_neto              NUMERIC(10,2);
+  1839→    v_es_proporcional   BOOLEAN;
+  1840→BEGIN
+  1841→    SELECT e.fecha_ingreso INTO v_empleado FROM empleados e WHERE e.id = p_empleado_id;
+  1842→    SELECT c.salario_base_contrato, c.perfil_puesto_id INTO v_contrato
+  1843→    FROM contratos c WHERE c.empleado_id = p_empleado_id AND c.activo = TRUE;
+  1844→
+  1845→    -- Antigüedad exacta al 12 de diciembre
+  1846→    v_anios := DATE_PART('year', AGE(v_fecha_corte, v_empleado.fecha_ingreso));
+  1847→
+  1848→    -- Tramo de días según antigüedad (Art. 196 CT)
+  1849→    v_dias := CASE
+  1850→        WHEN v_anios < 1  THEN 0       -- Sin derecho (menos de 1 año)
+  1851→        WHEN v_anios < 3  THEN 15      -- 1 a < 3 años
+  1852→        WHEN v_anios < 10 THEN 19      -- 3 a < 10 años
+  1853→        ELSE 21                        -- 10 años o más
+  1854→    END;
+  1855→
+  1856→    -- Determinar si tiene año completo o proporcional
+  1857→    -- Proporcional: ingresó después del 1 de diciembre del año anterior
+  1858→    v_es_proporcional := v_empleado.fecha_ingreso > MAKE_DATE(p_anio - 1, 12, 1);
+  1859→    v_meses := CASE
+  1860→        WHEN v_es_proporcional
+  1861→        THEN DATE_PART('month', AGE(v_fecha_corte, v_empleado.fecha_ingreso))::SMALLINT
+  1862→        ELSE 12
+  1863→    END;
+  1864→
+  1865→    -- Salario base de cálculo (salario de noviembre o del mes anterior)
+  1866→    v_bruto := ROUND(v_contrato.salario_base_contrato / 30 * v_dias
+  1867→               * (v_meses::NUMERIC / 12), 2);
+  1868→
+  1869→    -- Monto exento de ISR = 2 salarios mínimos del sector del empleado
+  1870→    SELECT sms.salario_mensual INTO v_sal_min
+  1871→    FROM salarios_minimos_sector sms
+  1872→    INNER JOIN perfiles_puesto pp ON pp.sector_laboral = sms.sector
+  1873→    WHERE sms.parametro_legal_id = p_parametro_id
+  1874→      AND pp.id = v_contrato.perfil_puesto_id
+  1875→    LIMIT 1;
+  1876→
+  1877→    v_sal_min := COALESCE(v_sal_min, 365.00);  -- Fallback al sector comercio
+  1878→    v_exento  := LEAST(v_bruto, v_sal_min * 2);
+  1879→    v_gravado := GREATEST(v_bruto - v_exento, 0);
+  1880→    v_isr     := fn_calcular_isr_mensual(v_gravado, p_parametro_id);
+  1881→    v_neto    := ROUND(v_bruto - v_isr, 2);
+  1882→
+  1883→    RETURN QUERY SELECT
+  1884→        v_anios, v_dias, v_contrato.salario_base_contrato,
+  1885→        v_es_proporcional, v_meses,
+  1886→        v_bruto, v_exento, v_gravado, v_isr, v_neto;
+  1887→END;
+  1888→$$ LANGUAGE plpgsql STABLE;
+  1889→
+  1890→COMMENT ON FUNCTION fn_calcular_aguinaldo IS
+  1891→    'Calcula el aguinaldo por empleado (Arts. 196-202 CT). '
+  1892→    'Tramos: 15 días (1-<3 años), 19 días (3-<10 años), 21 días (≥10 años). '
+  1893→    'Exención ISR: hasta 2 salarios mínimos del sector (Ley ISR). '
+  1894→    'Si el empleado ingresó después del 1-dic del año anterior, calcula proporcional (meses/12).';
+  1895→
+  1896→-- ─────────────────────────────────────────────────────────────
+  1897→-- G-3: Cálculo de mora ISSS
+  1898→-- 1% mensual pro-rata sobre el total de cotizaciones adeudadas.
+  1899→-- ─────────────────────────────────────────────────────────────
+  1900→CREATE OR REPLACE FUNCTION fn_calcular_mora_isss(
+  1901→    p_planilla_id       UUID,
+  1902→    p_fecha_proyectada  DATE DEFAULT CURRENT_DATE
+  1903→)
+  1904→RETURNS NUMERIC AS $$
+  1905→DECLARE
+  1906→    v_monto_base    NUMERIC(14,2);
+  1907→    v_fecha_venc    DATE;
+  1908→    v_dias_mora     INTEGER;
+  1909→    v_mora          NUMERIC(14,2);
+  1910→BEGIN
+  1911→    SELECT
+  1912→        monto_cuotas_laborales + monto_cuotas_patronales,
+  1913→        fecha_vencimiento_legal
+  1914→    INTO v_monto_base, v_fecha_venc
+  1915→    FROM historial_presentaciones_isss
+  1916→    WHERE planilla_id = p_planilla_id;
+  1917→
+  1918→    IF NOT FOUND OR p_fecha_proyectada <= v_fecha_venc THEN
+  1919→        RETURN 0.00;
+  1920→    END IF;
+  1921→
+  1922→    v_dias_mora := (p_fecha_proyectada - v_fecha_venc);
+  1923→    -- 1% mensual = 1%/30 diario
+  1924→    v_mora := ROUND(v_monto_base * 0.01 / 30 * v_dias_mora, 2);
+  1925→
+  1926→    RETURN GREATEST(v_mora, 0.00);
+  1927→END;
+  1928→$$ LANGUAGE plpgsql STABLE;
+  1929→
+  1930→COMMIT;
+  1931→
+  1932→-- ============================================================================================================================
+  1933→-- FIN DEL SCRIPT PARTE 2
+  1934→-- ============================================================================================================================
+  1935→-- RESUMEN DE OBJETOS CREADOS EN ESTA PARTE:
+  1936→--
+  1937→-- SECCIÓN A — TRIGGERS DE AUTOMATIZACIÓN (9 triggers):
+  1938→--   • fn_set_fecha_actualizacion       → 7 tablas con auto-update de timestamp
+  1939→--   • fn_generar_codigo_empleado       → EMP-XXXXX automático en INSERT
+  1940→--   • fn_generar_codigo_planilla       → NOMINA-YYYY-MM-T automático
+  1941→--   • fn_generar_codigo_perfil         → CARGO-XXX automático
+  1942→--   • fn_sincronizar_salario_empleado  → Sincroniza salario_base al activar contrato
+  1943→--   • fn_proteger_planilla_aprobada    → Bloquea cambios en planillas APROBADAS/PAGADAS
+  1944→--   • fn_proteger_detalle_planilla     → Bloquea detalles post-aprobación
+  1945→--   • fn_validar_horas_extra_semana    → Art. 169 CT: máx. 10h/semana
+  1946→--   • fn_validar_salario_minimo        → Salario mínimo por sector al guardar contrato
+  1947→--
+  1948→-- SECCIÓN B — TRIGGERS DE AUDITORÍA (3 triggers):
+  1949→--   • fn_auditar_cambios               → Auditoría automática en 10 tablas críticas
+  1950→--   • fn_auditar_cambio_contrasena     → Historial de hashes + bitácora en cambio de clave
+  1951→--   • fn_auditar_aprobacion_planilla   → Evento CRITICO al aprobar o reabrir planilla
+  1952→--
+  1953→-- SECCIÓN C — RBAC: 8 roles de PostgreSQL con GRANTs granulares
+  1954→-- SECCIÓN D — ROW LEVEL SECURITY en 5 tablas sensibles (empleados, detalles, vacaciones, docs, liquidaciones)
+  1955→--
+  1956→-- SECCIÓN E — 12 VISTAS:
+  1957→--   vw_empleados_activos               Listado general con compa-ratio (VISTA 02-01)
+  1958→--   vw_saldo_vacaciones                Saldo en tiempo real (VISTA 02-02, VISTA 06-05)
+  1959→--   vw_dashboard_nomina                KPIs y semáforo de cumplimiento (VISTA 04-01)
+  1960→--   vw_detalle_planilla_completo       Boletas / desglose calculado (VISTA 04-03, Art. 138 CT)
+  1961→--   vw_cumplimiento_legal_anual        Panel ISSS/AFP/ISR del año (VISTA 05-01/02/03/04)
+  1962→--   vw_costo_total_personal            Costo laboral por área (VISTA 05-04)
+  1963→--   vw_anomalias_nomina                6 tipos de anomalías automáticas (VISTA 04-03)
+  1964→--   vw_pasivos_laborales               Provisión contable NIIF PYMES (VISTA 05-04)
+  1965→--   vw_estructura_salarial             Compa-ratios y desajustes por banda (VISTA 03-03)
+  1966→--   vw_catalogo_perfiles_activos       Ocupación y métricas de puestos (VISTA 03-01)
+  1967→--   vw_historial_cotizaciones_empleado Cotizaciones ISSS/AFP por empleado (VISTA 02-02 P3)
+  1968→--   vw_rotacion_personal               Tasa de rotación mensual (VISTA 05-04)
+  1969→--
+  1970→-- SECCIÓN F — 21 ÍNDICES DE RENDIMIENTO ADICIONALES
+  1971→-- SECCIÓN G — 3 FUNCIONES DE NEGOCIO:
+  1972→--   fn_calcular_nomina_empleado        Motor completo de 8 pasos para la VISTA 04-03
+  1973→--   fn_calcular_aguinaldo              Aguinaldo + exención ISR (Arts. 196-202 CT)
+  1974→--   fn_calcular_mora_isss              Mora del 1%/mes pro-rata (Art. 78 Ley ISSS)
+  1975→-- ============================================================================================================================
+  1976→

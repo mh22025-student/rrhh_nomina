@@ -1,0 +1,1732 @@
+     1→-- ============================================================================================================================
+     2→-- SISTEMA DE NÓMINA Y PERFILES DE PUESTOS — REPÚBLICA DE EL SALVADOR
+     3→-- Script DDL/DML Completo | PostgreSQL 15+
+     4→-- Versión: 1.0 | Clasificación: Uso Interno
+     5→-- Tablas: 35 | ENUMs: 22 | Soporte: 26 Vistas / ~130 Funciones / 6 Módulos / 8 Roles
+     6→--
+     7→-- ESTRUCTURA DEL SCRIPT:
+     8→--   SECCIÓN 1 — Extensiones y tipos ENUM
+     9→--   SECCIÓN 2 — Tablas maestras (sin dependencias)
+    10→--   SECCIÓN 3 — Tablas principales (con dependencias)
+    11→--   SECCIÓN 4 — Tablas transaccionales (operaciones y cálculos)
+    12→--   SECCIÓN 5 — Tablas de soporte (seguridad, documentos, cumplimiento)
+    13→--   SECCIÓN 6 — Tabla de auditoría INMUTABLE (bitácora)
+    14→--   SECCIÓN 7 — DML de carga inicial (semillas / inserts maestros)
+    15→-- ============================================================================================================================
+    16→
+    17→BEGIN;
+    18→
+    19→-- ============================================================================================================================
+    20→-- SECCIÓN 1: EXTENSIONES Y TIPOS ENUM
+    21→-- ============================================================================================================================
+    22→
+    23→-- Extensión para UUIDs criptográficamente seguros (nativa en PG 13+, pero se activa aquí por compatibilidad)
+    24→CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+    25→-- Extensión para búsqueda de texto completo y operaciones de texto avanzadas
+    26→CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+    27→
+    28→-- ─────────────────────────────────────────────────────────────
+    29→-- ENUMS DE SEGURIDAD Y ACCESO
+    30→-- ─────────────────────────────────────────────────────────────
+    31→
+    32→-- Los 8 roles del sistema. Toda lógica de autorización (backend + DB) debe validar contra estos valores.
+    33→CREATE TYPE tipo_rol_sistema AS ENUM (
+    34→    'ADMIN',        -- Administrador del Sistema: acceso total, configuración, usuarios
+    35→    'ANALISTA',     -- Analista de Nómina: procesa incidencias, calcula planillas
+    36→    'RRHH',         -- Recursos Humanos: gestiona empleados y expedientes
+    37→    'CONTADOR',     -- Contador: acceso a reportes contables y cumplimiento fiscal
+    38→    'APROBADOR',    -- Aprobador RR.HH./Financiero: firma planillas y liquidaciones
+    39→    'GERENCIA',     -- Gerencia: reportes ejecutivos y dashboards
+    40→    'AUDITOR',      -- Auditor Interno: solo lectura en todos los módulos
+    41→    'EMPLEADO'      -- Empleado: portal self-service (solo datos propios)
+    42→);
+    43→
+    44→-- Estados del ciclo de vida de un usuario en el sistema
+    45→CREATE TYPE tipo_estado_usuario AS ENUM (
+    46→    'ACTIVO',       -- Usuario operativo con acceso habilitado
+    47→    'INACTIVO',     -- Desactivado por el administrador
+    48→    'BLOQUEADO',    -- Bloqueado automáticamente por intentos fallidos (15 min) o por admin
+    49→    'ELIMINADO'     -- Soft delete; preserva integridad histórica de auditoría
+    50→);
+    51→
+    52→-- ─────────────────────────────────────────────────────────────
+    53→-- ENUMS DE ORGANIZACIÓN Y EMPLEADOS
+    54→-- ─────────────────────────────────────────────────────────────
+    55→
+    56→-- Género del empleado (para reportes de equidad salarial)
+    57→CREATE TYPE tipo_genero AS ENUM ('MASCULINO', 'FEMENINO', 'NO_ESPECIFICADO');
+    58→
+    59→-- Estado laboral del empleado dentro de la organización
+    60→CREATE TYPE tipo_estado_empleado AS ENUM (
+    61→    'ACTIVO',           -- En funciones normales
+    62→    'PERIODO_PRUEBA',   -- Dentro de los 30 días iniciales (Art. 30 CT)
+    63→    'EN_LICENCIA',      -- Licencia autorizada (con o sin goce)
+    64→    'SUSPENDIDO',       -- Suspensión disciplinaria
+    65→    'TERMINADO'         -- Relación laboral concluida
+    66→);
+    67→
+    68→-- Tipo de contrato laboral según el Código de Trabajo de El Salvador
+    69→CREATE TYPE tipo_contrato AS ENUM (
+    70→    'INDEFINIDO',           -- Contrato por tiempo indefinido
+    71→    'PLAZO_FIJO',           -- Contrato a plazo determinado
+    72→    'PERIODO_PRUEBA',       -- Período de prueba máx. 30 días (Art. 30 CT)
+    73→    'OBRA_DETERMINADA'      -- Por obra o servicio específico
+    74→);
+    75→
+    76→-- Tipo de jornada laboral (determina horas ordinarias y recargos)
+    77→CREATE TYPE tipo_jornada AS ENUM (
+    78→    'DIURNA',    -- 8h/día, 44h/semana
+    79→    'NOCTURNA',  -- 7h/día, 39h/semana
+    80→    'MIXTA',     -- 7.5h/día, 42h/semana
+    81→    'VARIABLE'   -- Turnos rotativos
+    82→);
+    83→
+    84→-- Periodicidad de pago de la nómina
+    85→CREATE TYPE tipo_forma_pago AS ENUM ('MENSUAL', 'QUINCENAL', 'SEMANAL');
+    86→
+    87→-- Tipo de cuenta bancaria para dispersión ACH
+    88→CREATE TYPE tipo_cuenta_bancaria AS ENUM ('AHORRO', 'CORRIENTE');
+    89→
+    90→-- AFP habilitadas en El Salvador (Ley del Sistema de Ahorro para Pensiones)
+    91→CREATE TYPE tipo_afp AS ENUM ('CRECER', 'CONFIA');
+    92→
+    93→-- Nivel jerárquico para valuación de puestos
+    94→CREATE TYPE tipo_nivel_jerarquico AS ENUM (
+    95→    'OPERATIVO', 'TECNICO', 'PROFESIONAL', 'JEFATURA', 'GERENCIA', 'DIRECCION'
+    96→);
+    97→
+    98→-- Sector laboral para aplicación de salario mínimo y exención de aguinaldo ISR
+    99→CREATE TYPE tipo_sector_laboral AS ENUM (
+   100→    'COMERCIO', 'INDUSTRIA', 'SERVICIOS', 'AGROPECUARIO', 'OTROS'
+   101→);
+   102→
+   103→-- Estado del ciclo de vida del descriptivo de un perfil de puesto
+   104→CREATE TYPE tipo_estado_perfil AS ENUM (
+   105→    'BORRADOR',     -- En edición, no visible en selecciones de nómina
+   106→    'EN_REVISION',  -- Enviado a aprobación
+   107→    'VIGENTE',      -- Aprobado y activo
+   108→    'HISTORICO',    -- Versión anterior, archivada
+   109→    'RECHAZADO',    -- Devuelto con observaciones del aprobador
+   110→    'DESACTIVADO'   -- Perfil desactivado (sin empleados activos)
+   111→);
+   112→
+   113→-- ─────────────────────────────────────────────────────────────
+   114→-- ENUMS DE NÓMINA Y PLANILLA
+   115→-- ─────────────────────────────────────────────────────────────
+   116→
+   117→-- Estados del ciclo de vida de una planilla.
+   118→-- Los 4 estados canónicos del spec son BORRADOR, CALCULADA, APROBADA, PAGADA.
+   119→-- Se agregan RECHAZADA y EN_CORRECCION para cubrir el flujo completo de las 26 vistas.
+   120→CREATE TYPE tipo_estado_planilla AS ENUM (
+   121→    'BORRADOR',         -- Período creado, empleados cargados, sin cálculo ejecutado
+   122→    'CALCULADA',        -- Motor de cálculo ejecutado; pendiente de revisión y aprobación
+   123→    'APROBADA',         -- Firmada digitalmente por el aprobador; inmutable desde aquí
+   124→    'PAGADA',           -- Dispersión bancaria confirmada; período cerrado definitivamente
+   125→    'RECHAZADA',        -- Devuelta al analista con observaciones; requiere recálculo
+   126→    'EN_CORRECCION'     -- Reapertura de emergencia (requiere doble aprobación Admin+Aprobador)
+   127→);
+   128→
+   129→-- Tipo de nómina procesada
+   130→CREATE TYPE tipo_planilla AS ENUM (
+   131→    'MENSUAL',          -- Nómina mensual regular
+   132→    'QUINCENAL',        -- Nómina quincenal
+   133→    'AGUINALDO',        -- Planilla especial de aguinaldo (Art. 196-202 CT)
+   134→    'LIQUIDACION',      -- Finiquito / Liquidación de relación laboral
+   135→    'COMPLEMENTARIA'    -- Ajuste posterior a una planilla cerrada (errores)
+   136→);
+   137→
+   138→-- ─────────────────────────────────────────────────────────────
+   139→-- ENUMS DE INCIDENCIAS
+   140→-- ─────────────────────────────────────────────────────────────
+   141→
+   142→-- Clasificación de los eventos que modifican la nómina base
+   143→CREATE TYPE tipo_incidencia AS ENUM (
+   144→    'HORAS_EXTRA',          -- Horas extraordinarias diurnas/nocturnas/descanso/asueto
+   145→    'AUSENCIA',             -- Días de ausencia justificados o injustificados
+   146→    'INCAPACIDAD_ISSS',     -- Incapacidad médica certificada por el ISSS
+   147→    'PERMISO',              -- Permiso con o sin goce de sueldo
+   148→    'COMISION',             -- Comisión variable del período
+   149→    'BONO',                 -- Bono o bonificación extraordinaria
+   150→    'DESCUENTO_ESPECIAL'    -- Descuento adicional autorizado (Art. 132 CT)
+   151→);
+   152→
+   153→-- Flujo de aprobación de una incidencia antes de incluirse en el cálculo
+   154→CREATE TYPE tipo_estado_incidencia AS ENUM (
+   155→    'PENDIENTE',    -- Registrada, esperando aprobación del supervisor
+   156→    'APROBADA',     -- Aprobada; se incluirá en el próximo cálculo
+   157→    'RECHAZADA',    -- Rechazada con motivo; no afecta la nómina
+   158→    'PROCESADA',    -- Incluida en una planilla calculada/cerrada
+   159→    'ANULADA'       -- Anulada después de aprobación (requiere justificación)
+   160→);
+   161→
+   162→-- Subtipo de horas extra para aplicar el recargo correcto (Arts. 169-170 CT)
+   163→CREATE TYPE tipo_hora_extra AS ENUM (
+   164→    'DIURNA',       -- Hora extra en jornada diurna
+   165→    'NOCTURNA',     -- Hora extra en jornada nocturna (recargo adicional Art. 161 CT)
+   166→    'DIA_DESCANSO', -- Hora trabajada en día de descanso semanal (Art. 165 CT)
+   167→    'DIA_ASUETO'    -- Hora trabajada en día de asueto nacional (Art. 192 CT)
+   168→);
+   169→
+   170→-- Subtipo para incapacidades ISSS (determina regla de pago Art. 41 Ley ISSS)
+   171→CREATE TYPE tipo_incapacidad_isss AS ENUM (
+   172→    'ENFERMEDAD_COMUN',     -- Días 1-3 los paga el patrono; del 4 en adelante, el ISSS al 75%
+   173→    'ACCIDENTE_TRABAJO',    -- Cobertura inmediata por el ISSS
+   174→    'MATERNIDAD'            -- Cobertura de maternidad por el ISSS
+   175→);
+   176→
+   177→-- Subtipo de permiso (impacto en salario, vacaciones y aguinaldo)
+   178→CREATE TYPE tipo_permiso AS ENUM (
+   179→    'CON_GOCE',     -- Sin descuento salarial; tiempo computa para prestaciones
+   180→    'SIN_GOCE'      -- Descuento proporcional; >2 meses afecta cómputo de vacaciones/aguinaldo
+   181→);
+   182→
+   183→-- ─────────────────────────────────────────────────────────────
+   184→-- ENUMS DE LIQUIDACIONES Y CUMPLIMIENTO
+   185→-- ─────────────────────────────────────────────────────────────
+   186→
+   187→-- Causal de terminación laboral (determina prestaciones aplicables según CT)
+   188→CREATE TYPE tipo_terminacion AS ENUM (
+   189→    'DESPIDO_INJUSTIFICADO',    -- Indemnización: 30 días/año (Art. 58 CT)
+   190→    'DESPIDO_JUSTIFICADO',      -- Sin indemnización (Art. 50 CT)
+   191→    'RENUNCIA_VOLUNTARIA',      -- Indemnización: 15 días/año (Ley 523)
+   192→    'MUTUO_CONSENTIMIENTO',     -- Según lo acordado por escrito
+   193→    'CASO_FORTUITO',            -- Fuerza mayor; sin indemnización
+   194→    'RENUNCIA_JUSTIFICADA'      -- Renuncia por causas imputables al patrono; indemnización completa
+   195→);
+   196→
+   197→-- Estado de una liquidación desde apertura hasta cierre del expediente
+   198→CREATE TYPE tipo_estado_liquidacion AS ENUM (
+   199→    'BORRADOR',     -- En proceso de cálculo por el analista
+   200→    'CALCULADA',    -- Todos los rubros calculados; pendiente de revisión
+   201→    'APROBADA',     -- Aprobada; pendiente de firma del empleado y pago
+   202→    'CERRADA'       -- Firmada, pagada y expediente archivado
+   203→);
+   204→
+   205→-- Estado de las obligaciones de cumplimiento ante ISSS, AFP y MH
+   206→CREATE TYPE tipo_estado_cumplimiento AS ENUM (
+   207→    'PENDIENTE',    -- Obligación identificada; no presentada aún
+   208→    'A_TIEMPO',     -- Presentada y pagada dentro del plazo legal
+   209→    'CON_MORA',     -- Presentada/pagada fuera del plazo; con recargo calculado
+   210→    'PRESENTADO'    -- Presentada (puede o no estar pagada)
+   211→);
+   212→
+   213→-- Estado de los parámetros legales: inmutabilidad retroactiva (principio central del módulo 06-01)
+   214→CREATE TYPE tipo_estado_parametro AS ENUM (
+   215→    'VIGENTE',      -- Actualmente activo; alimenta el motor de cálculo
+   216→    'HISTORICO',    -- Expirado; conservado para reliquidaciones históricas
+   217→    'PROGRAMADO'    -- Fecha de vigencia futura; aún no en efecto
+   218→);
+   219→
+   220→-- Vacaciones: estados del registro de período vacacional
+   221→CREATE TYPE tipo_estado_vacacion AS ENUM (
+   222→    'PROGRAMADA',   -- Aprobada y programada; aún no iniciada
+   223→    'TOMADA',       -- Período vacacional completado
+   224→    'CANCELADA',    -- Cancelada antes de iniciar
+   225→    'COMPENSADA'    -- Convertida en pago (solo al momento de liquidación)
+   226→);
+   227→
+   228→-- Clasificación de documentos del expediente digital (Módulo 4 del manual)
+   229→CREATE TYPE tipo_documento_expediente AS ENUM (
+   230→    'CONTRATACION',     -- A) Documentos de ingreso: contrato, DUI, NIT, solicitud
+   231→    'SEGUIMIENTO',      -- B) Desempeño, cambios salariales, sanciones, capacitaciones
+   232→    'SEGURIDAD_SOCIAL', -- C) Afiliación ISSS, AFP, incapacidades
+   233→    'FISCAL',           -- D) Constancias ISR, NIT, declaraciones
+   234→    'TERMINACION'       -- E) Carta de renuncia, acta de liquidación, finiquito
+   235→);
+   236→
+   237→-- Acciones registrables en la bitácora de auditoría (inmutable)
+   238→CREATE TYPE tipo_accion_auditoria AS ENUM (
+   239→    'INSERT', 'UPDATE', 'DELETE',
+   240→    'SELECT_SENSIBLE',  -- Consulta de datos sensibles: salarios, DUI, NIT, cuentas
+   241→    'LOGIN', 'LOGOUT', 'LOGIN_FALLIDO',
+   242→    'APPROVE',          -- Aprobación de planilla, incidencia o liquidación
+   243→    'REJECT',           -- Rechazo con observaciones
+   244→    'CALCULATE',        -- Ejecución del motor de cálculo de nómina
+   245→    'EXPORT',           -- Generación y descarga de reportes/archivos
+   246→    'ACCESO_DENEGADO',  -- Intento de acceso a módulo no autorizado (HTTP 403)
+   247→    'REOPEN',           -- Reapertura de período cerrado (evento CRÍTICO)
+   248→    'CAMBIO_CONTRASENA',
+   249→    'CAMBIO_ROL',       -- Modificación de rol de usuario (invalida sesiones)
+   250→    'BLOQUEO_CUENTA',
+   251→    'PARAMETROS_LEGALES_CREADOS'
+   252→);
+   253→
+   254→
+   255→-- ============================================================================================================================
+   256→-- SECCIÓN 2: TABLAS MAESTRAS (SIN DEPENDENCIAS DE NEGOCIO)
+   257→-- ============================================================================================================================
+   258→
+   259→-- ─────────────────────────────────────────────────────────────
+   260→-- TABLA: bancos
+   261→-- Catálogo de instituciones bancarias habilitadas para dispersión ACH.
+   262→-- ─────────────────────────────────────────────────────────────
+   263→CREATE TABLE bancos (
+   264→    id                  UUID            NOT NULL DEFAULT gen_random_uuid(),
+   265→    codigo              VARCHAR(10)     NOT NULL,
+   266→    nombre              VARCHAR(100)    NOT NULL,
+   267→    codigo_ach          VARCHAR(20),                          -- Código ACH para archivo de dispersión
+   268→    formato_cuenta      VARCHAR(50),                          -- Descripción del formato de número de cuenta
+   269→    activo              BOOLEAN         NOT NULL DEFAULT TRUE,
+   270→    fecha_creacion      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   271→    CONSTRAINT pk_bancos PRIMARY KEY (id),
+   272→    CONSTRAINT uq_bancos_codigo UNIQUE (codigo)
+   273→);
+   274→COMMENT ON TABLE bancos IS 'Catálogo de instituciones bancarias habilitadas para dispersión de nómina vía ACH.';
+   275→
+   276→-- ─────────────────────────────────────────────────────────────
+   277→-- TABLA: parametros_legales
+   278→-- Almacena históricamente todos los parámetros que alimentan el motor de cálculo.
+   279→-- PRINCIPIO FUNDAMENTAL: Ningún registro existente se modifica jamás.
+   280→-- Ante un cambio de ley se crea un nuevo registro con fecha_vigencia_desde futura.
+   281→-- ─────────────────────────────────────────────────────────────
+   282→CREATE TABLE parametros_legales (
+   283→    id                          UUID            NOT NULL DEFAULT gen_random_uuid(),
+   284→    descripcion_cambio          VARCHAR(255)    NOT NULL,                   -- Ej: "Actualización salario mínimo Decreto #123"
+   285→    decreto_norma_origen        VARCHAR(100)    NOT NULL,                   -- Referencia legal: número de decreto, Diario Oficial
+   286→    -- Tasas ISSS (Ley del Seguro Social)
+   287→    tasa_isss_laboral           NUMERIC(5,4)    NOT NULL DEFAULT 0.0300     CHECK (tasa_isss_laboral     BETWEEN 0 AND 1),
+   288→    tasa_isss_patronal          NUMERIC(5,4)    NOT NULL DEFAULT 0.0750     CHECK (tasa_isss_patronal    BETWEEN 0 AND 1),
+   289→    tope_cotizacion_isss        NUMERIC(10,2)   NOT NULL DEFAULT 1000.00    CHECK (tope_cotizacion_isss  > 0),
+   290→    -- Tasas AFP (Ley del Sistema de Ahorro para Pensiones)
+   291→    tasa_afp_laboral            NUMERIC(5,4)    NOT NULL DEFAULT 0.0725     CHECK (tasa_afp_laboral      BETWEEN 0 AND 1),
+   292→    tasa_afp_patronal           NUMERIC(5,4)    NOT NULL DEFAULT 0.0875     CHECK (tasa_afp_patronal     BETWEEN 0 AND 1),
+   293→    -- INSAFORP (Ley de Formación Profesional — aplica para patronos con ≥ 10 empleados)
+   294→    tasa_insaforp               NUMERIC(5,4)    NOT NULL DEFAULT 0.0100     CHECK (tasa_insaforp         BETWEEN 0 AND 1),
+   295→    empleados_minimos_insaforp  SMALLINT        NOT NULL DEFAULT 10         CHECK (empleados_minimos_insaforp > 0),
+   296→    -- Control de vigencia y estado (inmutabilidad retroactiva)
+   297→    fecha_vigencia_desde        DATE            NOT NULL,
+   298→    fecha_vigencia_hasta        DATE,                                       -- NULL = actualmente vigente
+   299→    estado                      tipo_estado_parametro NOT NULL DEFAULT 'PROGRAMADO',
+   300→    creado_por_usuario_id       UUID,                                       -- FK se agrega después (dependencia circular)
+   301→    fecha_creacion              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   302→    CONSTRAINT pk_parametros_legales PRIMARY KEY (id),
+   303→    -- Solo puede existir un registro VIGENTE a la vez
+   304→    CONSTRAINT uq_parametros_un_vigente UNIQUE (estado) DEFERRABLE INITIALLY DEFERRED,
+   305→    CONSTRAINT ck_parametros_fechas CHECK (
+   306→        fecha_vigencia_hasta IS NULL OR fecha_vigencia_hasta > fecha_vigencia_desde
+   307→    )
+   308→);
+   309→COMMENT ON TABLE parametros_legales IS
+   310→    'Historial inmutable de parámetros legales: tasas ISSS/AFP/INSAFORP. '
+   311→    'NUNCA se modifica un registro existente. Ante cambio de ley: INSERT con fecha_vigencia_desde futura.';
+   312→
+   313→-- NOTA: La UNIQUE CONSTRAINT en estado='VIGENTE' es DEFERRABLE para permitir la transición
+   314→-- atómica de un parámetro a HISTORICO y uno nuevo a VIGENTE dentro de la misma transacción.
+   315→
+   316→-- ─────────────────────────────────────────────────────────────
+   317→-- TABLA: tramos_isr
+   318→-- Tramos de la tabla de retención ISR del Ministerio de Hacienda (Art. 37 Ley ISR).
+   319→-- MENSUAL. 4 tramos. Hijos de parametros_legales.
+   320→-- ─────────────────────────────────────────────────────────────
+   321→CREATE TABLE tramos_isr (
+   322→    id                      UUID            NOT NULL DEFAULT gen_random_uuid(),
+   323→    parametro_legal_id      UUID            NOT NULL,
+   324→    numero_tramo            SMALLINT        NOT NULL CHECK (numero_tramo BETWEEN 1 AND 10),
+   325→    limite_inferior         NUMERIC(10,2)   NOT NULL CHECK (limite_inferior >= 0),
+   326→    limite_superior         NUMERIC(10,2),                  -- NULL en el último tramo (sin límite superior)
+   327→    cuota_fija              NUMERIC(10,2)   NOT NULL DEFAULT 0.00 CHECK (cuota_fija >= 0),
+   328→    tasa_marginal           NUMERIC(5,4)    NOT NULL CHECK (tasa_marginal BETWEEN 0 AND 1),
+   329→    exceso_calculado_sobre  NUMERIC(10,2)   NOT NULL DEFAULT 0.00 CHECK (exceso_calculado_sobre >= 0),
+   330→    CONSTRAINT pk_tramos_isr PRIMARY KEY (id),
+   331→    CONSTRAINT fk_tramos_isr_parametros FOREIGN KEY (parametro_legal_id)
+   332→        REFERENCES parametros_legales(id) ON DELETE RESTRICT,
+   333→    CONSTRAINT uq_tramo_por_parametro UNIQUE (parametro_legal_id, numero_tramo),
+   334→    CONSTRAINT ck_tramos_limites CHECK (
+   335→        limite_superior IS NULL OR limite_superior > limite_inferior
+   336→    )
+   337→);
+   338→COMMENT ON TABLE tramos_isr IS
+   339→    'Tramos de la tabla mensual de ISR (Art. 37 Ley ISR). '
+   340→    'Formato: ISR = cuota_fija + (renta_imponible - exceso_calculado_sobre) * tasa_marginal, si renta en [inferior, superior).';
+   341→
+   342→-- ─────────────────────────────────────────────────────────────
+   343→-- TABLA: salarios_minimos_sector
+   344→-- Salarios mínimos por sector laboral. Hijos de parametros_legales.
+   345→-- Base para validación de salarios y cálculo de exención ISR en aguinaldo.
+   346→-- ─────────────────────────────────────────────────────────────
+   347→CREATE TABLE salarios_minimos_sector (
+   348→    id                  UUID                NOT NULL DEFAULT gen_random_uuid(),
+   349→    parametro_legal_id  UUID                NOT NULL,
+   350→    sector              tipo_sector_laboral NOT NULL,
+   351→    salario_mensual     NUMERIC(10,2)       NOT NULL CHECK (salario_mensual > 0),
+   352→    CONSTRAINT pk_salarios_minimos PRIMARY KEY (id),
+   353→    CONSTRAINT fk_salarios_minimos_parametros FOREIGN KEY (parametro_legal_id)
+   354→        REFERENCES parametros_legales(id) ON DELETE RESTRICT,
+   355→    CONSTRAINT uq_salario_por_sector_parametro UNIQUE (parametro_legal_id, sector)
+   356→);
+   357→COMMENT ON TABLE salarios_minimos_sector IS
+   358→    'Salario mínimo mensual vigente por sector (comercio, industria, servicios, agropecuario, otros). '
+   359→    'Se usa para: validar salarios al crear/modificar empleados, calcular exención ISR de aguinaldo '
+   360→    '(2 salarios mínimos), y detectar anomalías de salario neto menor al mínimo.';
+   361→
+   362→-- ─────────────────────────────────────────────────────────────
+   363→-- TABLA: usuarios
+   364→-- Cuentas de acceso al sistema. El campo password_hash almacena el hash bcrypt (factor 12).
+   365→-- PROHIBIDO almacenar contraseñas en texto plano.
+   366→-- ─────────────────────────────────────────────────────────────
+   367→CREATE TABLE usuarios (
+   368→    id                          UUID                NOT NULL DEFAULT gen_random_uuid(),
+   369→    email                       VARCHAR(100)        NOT NULL,
+   370→    password_hash               VARCHAR(255)        NOT NULL,   -- SIEMPRE bcrypt factor ≥ 12. NUNCA texto plano.
+   371→    primer_nombre               VARCHAR(50)         NOT NULL,
+   372→    primer_apellido             VARCHAR(50)         NOT NULL,
+   373→    segundo_nombre              VARCHAR(50),
+   374→    segundo_apellido            VARCHAR(50),
+   375→    rol                         tipo_rol_sistema    NOT NULL,
+   376→    estado                      tipo_estado_usuario NOT NULL DEFAULT 'ACTIVO',
+   377→    debe_cambiar_contrasena     BOOLEAN             NOT NULL DEFAULT FALSE,  -- Flag para forzar cambio en próximo login
+   378→    empleado_id                 UUID,               -- FK se agrega después (dependencia con empleados)
+   379→    ultimo_login_exitoso_at     TIMESTAMPTZ,
+   380→    ultimo_login_fallido_at     TIMESTAMPTZ,
+   381→    contador_intentos_fallidos  SMALLINT            NOT NULL DEFAULT 0 CHECK (contador_intentos_fallidos >= 0),
+   382→    bloqueado_hasta             TIMESTAMPTZ,                    -- Bloqueo temporal por intentos fallidos (15 min)
+   383→    fecha_creacion              TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+   384→    fecha_actualizacion         TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+   385→    creado_por_id               UUID,               -- FK self-referencing: quién creó este usuario
+   386→    motivo_eliminacion          TEXT,               -- Obligatorio en soft-delete
+   387→    CONSTRAINT pk_usuarios PRIMARY KEY (id),
+   388→    CONSTRAINT uq_usuarios_email UNIQUE (email),
+   389→    CONSTRAINT ck_usuarios_email_formato CHECK (email ~* '^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$')
+   390→);
+   391→COMMENT ON TABLE usuarios IS
+   392→    'Cuentas de acceso al sistema. password_hash: SIEMPRE bcrypt factor ≥ 12. '
+   393→    'Soft-delete: estado=ELIMINADO (no DELETE físico) para preservar integridad del historial de auditoría. '
+   394→    'Roles válidos: ADMIN, ANALISTA, RRHH, CONTADOR, APROBADOR, GERENCIA, AUDITOR, EMPLEADO.';
+   395→
+   396→-- ─────────────────────────────────────────────────────────────
+   397→-- TABLA: areas
+   398→-- Estructura organizacional de la empresa: áreas, departamentos, unidades.
+   399→-- Árbol jerárquico auto-referenciado. Alimenta filtros, organigramas y aprobadores de nómina.
+   400→-- ─────────────────────────────────────────────────────────────
+   401→CREATE TABLE areas (
+   402→    id                          UUID            NOT NULL DEFAULT gen_random_uuid(),
+   403→    codigo                      VARCHAR(20)     NOT NULL,
+   404→    nombre                      VARCHAR(100)    NOT NULL,
+   405→    descripcion                 TEXT,
+   406→    area_padre_id               UUID,           -- NULL = área raíz (ej: empresa misma)
+   407→    nivel                       SMALLINT        NOT NULL DEFAULT 1 CHECK (nivel BETWEEN 1 AND 10),
+   408→    aprobador_nomina_id         UUID,           -- FK a usuarios: aprobador de nómina asignado al área
+   409→    jefe_id                     UUID,           -- FK a empleados (DEFERRABLE — se agrega post-creación de empleados)
+   410→    activo                      BOOLEAN         NOT NULL DEFAULT TRUE,
+   411→    fecha_creacion              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   412→    fecha_actualizacion         TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   413→    CONSTRAINT pk_areas PRIMARY KEY (id),
+   414→    CONSTRAINT uq_areas_codigo UNIQUE (codigo),
+   415→    CONSTRAINT uq_areas_nombre_padre UNIQUE (nombre, area_padre_id),
+   416→    CONSTRAINT fk_areas_padre FOREIGN KEY (area_padre_id)
+   417→        REFERENCES areas(id) ON DELETE RESTRICT,
+   418→    CONSTRAINT fk_areas_aprobador FOREIGN KEY (aprobador_nomina_id)
+   419→        REFERENCES usuarios(id) ON DELETE SET NULL
+   420→);
+   421→COMMENT ON TABLE areas IS
+   422→    'Árbol organizacional auto-referenciado (área_padre_id). '
+   423→    'jefe_id se agrega como FK DEFERRABLE después de crear la tabla empleados (dependencia circular controlada).';
+   424→
+   425→
+   426→-- ============================================================================================================================
+   427→-- SECCIÓN 3: TABLAS PRINCIPALES (CON DEPENDENCIAS)
+   428→-- ============================================================================================================================
+   429→
+   430→-- ─────────────────────────────────────────────────────────────
+   431→-- TABLA: bandas_salariales
+   432→-- Estructura de compensación: rangos de puntuación y rangos salariales por sector.
+   433→-- Base del sistema de valuación de puestos por el método de puntos por factor.
+   434→-- ─────────────────────────────────────────────────────────────
+   435→CREATE TABLE bandas_salariales (
+   436→    id                  UUID                NOT NULL DEFAULT gen_random_uuid(),
+   437→    nombre              VARCHAR(80)         NOT NULL,
+   438→    descripcion         TEXT,
+   439→    sector              tipo_sector_laboral NOT NULL DEFAULT 'COMERCIO',
+   440→    puntuacion_min      INTEGER             NOT NULL CHECK (puntuacion_min >= 0),
+   441→    puntuacion_max      INTEGER             NOT NULL CHECK (puntuacion_max > 0),
+   442→    salario_minimo      NUMERIC(10,2)       NOT NULL CHECK (salario_minimo > 0),     -- Extremo inferior de la banda
+   443→    salario_midpoint    NUMERIC(10,2)       NOT NULL CHECK (salario_midpoint > 0),   -- Punto medio / referencia de mercado
+   444→    salario_maximo      NUMERIC(10,2)       NOT NULL CHECK (salario_maximo > 0),     -- Extremo superior de la banda
+   445→    activo              BOOLEAN             NOT NULL DEFAULT TRUE,
+   446→    fecha_creacion      TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+   447→    fecha_actualizacion TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+   448→    CONSTRAINT pk_bandas_salariales PRIMARY KEY (id),
+   449→    CONSTRAINT uq_bandas_nombre_sector UNIQUE (nombre, sector),
+   450→    CONSTRAINT ck_bandas_puntuacion CHECK (puntuacion_max > puntuacion_min),
+   451→    CONSTRAINT ck_bandas_salarios CHECK (
+   452→        salario_minimo < salario_midpoint AND salario_midpoint < salario_maximo
+   453→    )
+   454→);
+   455→COMMENT ON TABLE bandas_salariales IS
+   456→    'Estructura de bandas salariales para el sistema de valuación de puestos. '
+   457→    'Constraint ck_bandas_salarios garantiza que min < midpoint < max. '
+   458→    'Al actualizar una banda, el sistema debe identificar empleados fuera del nuevo rango.';
+   459→
+   460→-- ─────────────────────────────────────────────────────────────
+   461→-- TABLA: perfiles_puesto
+   462→-- Catálogo maestro de cargos. Cada fila representa UN cargo único en la organización.
+   463→-- Las versiones del descriptivo se almacenan en versiones_perfil_puesto.
+   464→-- ─────────────────────────────────────────────────────────────
+   465→CREATE TABLE perfiles_puesto (
+   466→    id                          UUID                    NOT NULL DEFAULT gen_random_uuid(),
+   467→    codigo                      VARCHAR(20)             NOT NULL,           -- Auto-generado: CARGO-XXX
+   468→    nombre_cargo                VARCHAR(80)             NOT NULL,
+   469→    area_id                     UUID                    NOT NULL,
+   470→    superior_jerarquico_id      UUID,                                       -- FK self-referencing (perfil padre en el organigrama)
+   471→    banda_salarial_id           UUID,                                       -- Asignada al aprobar el descriptivo valorado
+   472→    nivel_jerarquico            tipo_nivel_jerarquico   NOT NULL,
+   473→    tipo_jornada_cargo          tipo_jornada            NOT NULL DEFAULT 'DIURNA',
+   474→    sector_laboral              tipo_sector_laboral     NOT NULL DEFAULT 'COMERCIO',
+   475→    plazas_presupuestadas       SMALLINT                NOT NULL DEFAULT 1 CHECK (plazas_presupuestadas > 0),
+   476→    puntuacion_valuacion        INTEGER                 CHECK (puntuacion_valuacion >= 0),
+   477→    estado                      tipo_estado_perfil      NOT NULL DEFAULT 'BORRADOR',
+   478→    fecha_creacion              TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+   479→    fecha_actualizacion         TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+   480→    creado_por_id               UUID,
+   481→    CONSTRAINT pk_perfiles_puesto PRIMARY KEY (id),
+   482→    CONSTRAINT uq_perfiles_codigo UNIQUE (codigo),
+   483→    CONSTRAINT uq_perfiles_nombre_area UNIQUE (nombre_cargo, area_id),
+   484→    CONSTRAINT fk_perfiles_area FOREIGN KEY (area_id)
+   485→        REFERENCES areas(id) ON DELETE RESTRICT,
+   486→    CONSTRAINT fk_perfiles_superior FOREIGN KEY (superior_jerarquico_id)
+   487→        REFERENCES perfiles_puesto(id) ON DELETE SET NULL,
+   488→    CONSTRAINT fk_perfiles_banda FOREIGN KEY (banda_salarial_id)
+   489→        REFERENCES bandas_salariales(id) ON DELETE RESTRICT,
+   490→    CONSTRAINT fk_perfiles_creador FOREIGN KEY (creado_por_id)
+   491→        REFERENCES usuarios(id) ON DELETE SET NULL
+   492→);
+   493→COMMENT ON TABLE perfiles_puesto IS
+   494→    'Catálogo de cargos. Una fila = un cargo único. '
+   495→    'El descriptivo completo (funciones, requisitos, condiciones) vive en versiones_perfil_puesto. '
+   496→    'ON DELETE RESTRICT en area_id: no se puede eliminar un área con perfiles asignados.';
+   497→
+   498→-- ─────────────────────────────────────────────────────────────
+   499→-- TABLA: versiones_perfil_puesto
+   500→-- Historial completo de descriptivos de puestos con versionado semántico.
+   501→-- Una versión VIGENTE por perfil. Las anteriores pasan a HISTORICO.
+   502→-- ─────────────────────────────────────────────────────────────
+   503→CREATE TABLE versiones_perfil_puesto (
+   504→    id                          UUID                NOT NULL DEFAULT gen_random_uuid(),
+   505→    perfil_puesto_id            UUID                NOT NULL,
+   506→    numero_version              SMALLINT            NOT NULL DEFAULT 1 CHECK (numero_version > 0),
+   507→    -- Sección A: Identificación (redundante con perfiles_puesto pero necesario por versionado)
+   508→    proposito_principal         TEXT                NOT NULL,
+   509→    -- Secciones B-D almacenadas como JSONB para flexibilidad (estructura definida en capa de aplicación)
+   510→
+   511→    funciones_esenciales        JSONB               NOT NULL DEFAULT '[]'::JSONB,   -- Array de strings
+   512→    funciones_secundarias       JSONB               NOT NULL DEFAULT '[]'::JSONB,   -- Array de strings
+   513→    requisitos                  JSONB               NOT NULL DEFAULT '{}'::JSONB,   -- educación, experiencia, idiomas, etc.
+   514→    responsabilidades           JSONB               NOT NULL DEFAULT '{}'::JSONB,   -- supervisión, fondos, confidencialidad
+   515→    condiciones_trabajo         JSONB               NOT NULL DEFAULT '{}'::JSONB,   -- ambiente, riesgos, esfuerzo
+   516→    competencias_conductuales   JSONB               NOT NULL DEFAULT '[]'::JSONB,   -- Array de competencias
+   517→    indicadores_kpi             JSONB               NOT NULL DEFAULT '[]'::JSONB,   -- Metas y KPIs (¡Corregido con coma!)
+   518→
+   519→    -- Resultado de la valuación (método de puntos por factor)
+   520→    puntos_habilidades          NUMERIC(6,2)        CHECK (puntos_habilidades >= 0),
+   521→    puntos_esfuerzo             NUMERIC(6,2)        CHECK (puntos_esfuerzo >= 0),
+   522→    puntos_responsabilidad      NUMERIC(6,2)        CHECK (puntos_responsabilidad >= 0),
+   523→    puntos_condiciones          NUMERIC(6,2)        CHECK (puntos_condiciones >= 0),
+   524→    puntuacion_total            NUMERIC(7,2)        CHECK (puntuacion_total >= 0),
+   525→    banda_sugerida_id           UUID,
+   526→    estado                      tipo_estado_perfil  NOT NULL DEFAULT 'BORRADOR',
+   527→    -- Flujo de aprobación
+   528→    fecha_envio_revision        TIMESTAMPTZ,
+   529→    revisado_por_id             UUID,
+   530→    fecha_aprobacion            TIMESTAMPTZ,
+   531→    motivo_rechazo              TEXT,
+   532→    fecha_vigencia_desde        DATE,
+   533→    fecha_creacion              TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+   534→    fecha_actualizacion         TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+   535→    creado_por_id               UUID,
+   536→    CONSTRAINT pk_versiones_perfil PRIMARY KEY (id),
+   537→    CONSTRAINT uq_version_por_perfil UNIQUE (perfil_puesto_id, numero_version),
+   538→    CONSTRAINT fk_versiones_perfil FOREIGN KEY (perfil_puesto_id)
+   539→        REFERENCES perfiles_puesto(id) ON DELETE RESTRICT,
+   540→    CONSTRAINT fk_versiones_banda_sugerida FOREIGN KEY (banda_sugerida_id)
+   541→        REFERENCES bandas_salariales(id) ON DELETE SET NULL,
+   542→    CONSTRAINT fk_versiones_revisor FOREIGN KEY (revisado_por_id)
+   543→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   544→    CONSTRAINT fk_versiones_creador FOREIGN KEY (creado_por_id)
+   545→        REFERENCES usuarios(id) ON DELETE SET NULL
+   546→);
+   547→COMMENT ON TABLE versiones_perfil_puesto IS
+   548→    'Versionado del descriptivo de puesto. Formato diff entre versiones se calcula en capa de aplicación. '
+   549→    'Al aprobar una versión nueva: versión anterior pasa a HISTORICO. Solo una versión VIGENTE por perfil.';
+   550→
+   551→-- ─────────────────────────────────────────────────────────────
+   552→-- TABLA: empleados
+   553→-- Expediente maestro del colaborador. Fuente de verdad del sistema.
+   554→-- Campos legales salvadoreños: dui, nit, nup_afp, numero_afiliado_isss — todos UNIQUE.
+   555→-- ─────────────────────────────────────────────────────────────
+   556→CREATE TABLE empleados (
+   557→    id                          UUID                    NOT NULL DEFAULT gen_random_uuid(),
+   558→    codigo_empleado             VARCHAR(20)             NOT NULL,               -- Auto-generado: EMP-XXXXX
+   559→    -- Datos de identidad
+   560→    primer_nombre               VARCHAR(50)             NOT NULL,
+   561→    segundo_nombre              VARCHAR(50),
+   562→    primer_apellido             VARCHAR(50)             NOT NULL,
+   563→    segundo_apellido            VARCHAR(50),
+   564→    fecha_nacimiento            DATE                    NOT NULL,
+   565→    genero                      tipo_genero             NOT NULL,
+   566→    -- Documentos de identidad salvadoreños — UNIQUE obligatorio por ley
+   567→    dui                         VARCHAR(10)             NOT NULL,               -- Formato: ########-#
+   568→    nit                         VARCHAR(17)             NOT NULL,               -- Formato: ####-######-###-#
+   569→    -- Previsional — UNIQUE obligatorio; se completa en Paso 2 del registro
+   570→    afp                         tipo_afp,
+   571→    nup_afp                     VARCHAR(30),                                    -- Número Único Previsional AFP
+   572→    numero_afiliado_isss        VARCHAR(20),                                    -- Número de afiliación ISSS
+   573→    -- Datos de contacto
+   574→    email_personal              VARCHAR(100)            NOT NULL,
+   575→    telefono_principal          VARCHAR(9)              NOT NULL,               -- Formato: ####-####
+   576→    telefono_alternativo        VARCHAR(9),
+   577→    nombre_contacto_emergencia  VARCHAR(100)            NOT NULL,
+   578→    telefono_emergencia         VARCHAR(9)              NOT NULL,
+   579→    direccion_residencia        TEXT                    NOT NULL,
+   580→    -- Datos laborales
+   581→    fecha_ingreso               DATE                    NOT NULL,
+   582→    estado                      tipo_estado_empleado    NOT NULL DEFAULT 'ACTIVO',
+   583→    area_id                     UUID                    NOT NULL,
+   584→    salario_base                NUMERIC(10,2)           NOT NULL                CHECK (salario_base >= 0),
+   585→    -- Relaciones del sistema
+   586→    usuario_id                  UUID,                                           -- Vinculación con usuario de self-service
+   587→    foto_url                    TEXT,
+   588→    observaciones_nomina        TEXT,
+   589→    activo                      BOOLEAN                 NOT NULL DEFAULT TRUE,
+   590→    fecha_terminacion           DATE,                                           -- Fecha efectiva de baja
+   591→    fecha_creacion              TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+   592→    fecha_actualizacion         TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+   593→    creado_por_id               UUID,
+   594→    CONSTRAINT pk_empleados PRIMARY KEY (id),
+   595→    CONSTRAINT uq_empleados_codigo         UNIQUE (codigo_empleado),
+   596→    CONSTRAINT uq_empleados_dui            UNIQUE (dui),
+   597→    CONSTRAINT uq_empleados_nit            UNIQUE (nit),
+   598→    CONSTRAINT uq_empleados_nup_afp        UNIQUE (nup_afp),
+   599→    CONSTRAINT uq_empleados_isss           UNIQUE (numero_afiliado_isss),
+   600→    CONSTRAINT uq_empleados_email          UNIQUE (email_personal),
+   601→    CONSTRAINT ck_empleados_edad           CHECK (
+   602→        fecha_nacimiento <= CURRENT_DATE - INTERVAL '18 years'
+   603→    ),
+   604→    CONSTRAINT ck_empleados_dui_formato    CHECK (dui ~ '^\d{8}-\d$'),
+   605→    CONSTRAINT ck_empleados_nit_formato    CHECK (nit ~ '^\d{4}-\d{6}-\d{3}-\d$'),
+   606→    CONSTRAINT ck_empleados_telefono       CHECK (telefono_principal ~ '^\d{4}-\d{4}$'),
+   607→    CONSTRAINT ck_empleados_salario        CHECK (salario_base >= 0),
+   608→    CONSTRAINT fk_empleados_area FOREIGN KEY (area_id)
+   609→        REFERENCES areas(id) ON DELETE RESTRICT,
+   610→    CONSTRAINT fk_empleados_usuario FOREIGN KEY (usuario_id)
+   611→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   612→    CONSTRAINT fk_empleados_creador FOREIGN KEY (creado_por_id)
+   613→        REFERENCES usuarios(id) ON DELETE SET NULL
+   614→);
+   615→COMMENT ON TABLE empleados IS
+   616→    'Expediente maestro del colaborador. '
+   617→    'UNIQUE constraints en dui, nit, nup_afp, numero_afiliado_isss son requerimientos legales irrenunciables. '
+   618→    'ON DELETE RESTRICT en area_id: no se puede eliminar un área con empleados asignados. '
+   619→    'Soft-delete: activo=FALSE + fecha_terminacion (no DELETE físico).';
+   620→
+   621→-- Resuelve la dependencia circular: areas.jefe_id → empleados.id
+   622→ALTER TABLE areas ADD CONSTRAINT fk_areas_jefe
+   623→    FOREIGN KEY (jefe_id) REFERENCES empleados(id)
+   624→    ON DELETE SET NULL
+   625→    DEFERRABLE INITIALLY DEFERRED;
+   626→COMMENT ON CONSTRAINT fk_areas_jefe ON areas IS
+   627→    'FK DEFERRABLE: permite insertar área y empleado en la misma transacción sin violar integridad referencial.';
+   628→
+   629→-- ─────────────────────────────────────────────────────────────
+   630→-- TABLA: contratos
+   631→-- Historial de contratos laborales del empleado. El contrato activo es activo=TRUE.
+   632→-- Un empleado puede tener solo un contrato activo a la vez.
+   633→-- ─────────────────────────────────────────────────────────────
+   634→CREATE TABLE contratos (
+   635→    id                      UUID                NOT NULL DEFAULT gen_random_uuid(),
+   636→    empleado_id             UUID                NOT NULL,
+   637→    perfil_puesto_id        UUID,
+   638→    banda_salarial_id       UUID,
+   639→    banco_id                UUID,
+   640→    tipo_contrato           tipo_contrato       NOT NULL,
+   641→    tipo_jornada            tipo_jornada        NOT NULL,
+   642→    fecha_inicio            DATE                NOT NULL,
+   643→    fecha_fin               DATE,                                           -- NULL para contratos indefinidos
+   644→    salario_base_contrato   NUMERIC(10,2)       NOT NULL                    CHECK (salario_base_contrato >= 0),
+   645→    forma_pago              tipo_forma_pago     NOT NULL DEFAULT 'MENSUAL',
+   646→    numero_cuenta_bancaria  TEXT,                                           -- Cifrado en capa de aplicación (AES-256)
+   647→    tipo_cuenta             tipo_cuenta_bancaria,
+   648→    activo                  BOOLEAN             NOT NULL DEFAULT TRUE,
+   649→    fecha_creacion          TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+   650→    registrado_por_id       UUID,
+   651→    CONSTRAINT pk_contratos PRIMARY KEY (id),
+   652→    CONSTRAINT fk_contratos_empleado FOREIGN KEY (empleado_id)
+   653→        REFERENCES empleados(id) ON DELETE RESTRICT,
+   654→    CONSTRAINT fk_contratos_perfil FOREIGN KEY (perfil_puesto_id)
+   655→        REFERENCES perfiles_puesto(id) ON DELETE RESTRICT,
+   656→    CONSTRAINT fk_contratos_banda FOREIGN KEY (banda_salarial_id)
+   657→        REFERENCES bandas_salariales(id) ON DELETE RESTRICT,
+   658→    CONSTRAINT fk_contratos_banco FOREIGN KEY (banco_id)
+   659→        REFERENCES bancos(id) ON DELETE RESTRICT,
+   660→    CONSTRAINT fk_contratos_registrador FOREIGN KEY (registrado_por_id)
+   661→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   662→    CONSTRAINT ck_contratos_salario  CHECK (salario_base_contrato >= 0),
+   663→    CONSTRAINT ck_contratos_fechas   CHECK (
+   664→        fecha_fin IS NULL OR fecha_fin > fecha_inicio
+   665→    )
+   666→);
+   667→COMMENT ON TABLE contratos IS
+   668→    'Historial contractual del empleado. El contrato vigente tiene activo=TRUE. '
+   669→    'numero_cuenta_bancaria debe almacenarse CIFRADO (AES-256) en la capa de aplicación. '
+   670→    'ON DELETE RESTRICT en empleado_id: no se puede eliminar un empleado con contratos históricos.';
+   671→
+   672→-- Garantiza que cada empleado tenga máximo un contrato activo simultáneamente
+   673→CREATE UNIQUE INDEX uq_un_contrato_activo_por_empleado
+   674→    ON contratos (empleado_id) WHERE (activo = TRUE);
+   675→COMMENT ON INDEX uq_un_contrato_activo_por_empleado IS
+   676→    'Index parcial: garantiza que solo exista UN contrato activo por empleado en todo momento.';
+   677→
+   678→
+   679→-- ============================================================================================================================
+   680→-- SECCIÓN 4: TABLAS TRANSACCIONALES (OPERACIONES Y CÁLCULOS DE NÓMINA)
+   681→-- ============================================================================================================================
+   682→
+   683→-- ─────────────────────────────────────────────────────────────
+   684→-- TABLA: planillas
+   685→-- Registro maestro de cada ciclo de nómina procesado.
+   686→-- Las planillas APROBADAS son INMUTABLES. Errores post-pago se corrigen con planillas COMPLEMENTARIAS.
+   687→-- ─────────────────────────────────────────────────────────────
+   688→CREATE TABLE planillas (
+   689→    id                          UUID                    NOT NULL DEFAULT gen_random_uuid(),
+   690→    codigo_planilla             VARCHAR(30)             NOT NULL,               -- Ej: NOMINA-2026-01-M
+   691→    descripcion                 VARCHAR(200)            NOT NULL,
+   692→    tipo                        tipo_planilla           NOT NULL DEFAULT 'MENSUAL',
+   693→    estado                      tipo_estado_planilla    NOT NULL DEFAULT 'BORRADOR',
+   694→    fecha_inicio_periodo        DATE                    NOT NULL,
+   695→    fecha_fin_periodo           DATE                    NOT NULL,
+   696→    fecha_pago_programada       DATE,
+   697→    fecha_pago_confirmada       DATE,
+   698→    -- Parámetros legales usados para el cálculo (snapshot de la versión vigente al calcular)
+   699→    parametro_legal_id          UUID,
+   700→    -- Planilla de referencia para complementarias
+   701→    planilla_padre_id           UUID,                                           -- FK self: solo para tipo=COMPLEMENTARIA
+   702→    -- Totales calculados (se llenan al ejecutar el motor de cálculo)
+   703→    total_empleados             INTEGER                 DEFAULT 0               CHECK (total_empleados >= 0),
+   704→    total_salarios_brutos       NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_salarios_brutos >= 0),
+   705→    total_isss_laboral          NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_isss_laboral >= 0),
+   706→    total_afp_laboral           NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_afp_laboral >= 0),
+   707→    total_isr_retenido          NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_isr_retenido >= 0),
+   708→    total_otros_descuentos      NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_otros_descuentos >= 0),
+   709→    total_neto_a_pagar          NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_neto_a_pagar >= 0),
+   710→    total_isss_patronal         NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_isss_patronal >= 0),
+   711→    total_afp_patronal          NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_afp_patronal >= 0),
+   712→    total_insaforp              NUMERIC(14,2)           DEFAULT 0.00            CHECK (total_insaforp >= 0),
+   713→    -- Control de flujo
+   714→    calculada_por_id            UUID,
+   715→    fecha_calculo               TIMESTAMPTZ,
+   716→    aprobada_por_id             UUID,
+   717→    fecha_aprobacion            TIMESTAMPTZ,
+   718→    aprobacion_segundo_nivel_id UUID,                                           -- Para planillas > umbral configurado
+   719→    hash_integridad             VARCHAR(64),                                    -- SHA-256 del contenido al aprobar
+   720→    sello_aprobacion            JSONB,                                          -- { nombre, ip, timestamp, hash }
+   721→    motivo_rechazo              TEXT,
+   722→    referencia_lote_banco       VARCHAR(100),
+   723→    justificacion_reaper        TEXT,                                           -- Si estado=EN_CORRECCION
+   724→    fecha_creacion              TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+   725→    creada_por_id               UUID,
+   726→    CONSTRAINT pk_planillas PRIMARY KEY (id),
+   727→    CONSTRAINT uq_planillas_codigo UNIQUE (codigo_planilla),
+   728→    CONSTRAINT fk_planillas_parametro FOREIGN KEY (parametro_legal_id)
+   729→        REFERENCES parametros_legales(id) ON DELETE RESTRICT,
+   730→    CONSTRAINT fk_planillas_padre FOREIGN KEY (planilla_padre_id)
+   731→        REFERENCES planillas(id) ON DELETE RESTRICT,
+   732→    CONSTRAINT fk_planillas_calculador FOREIGN KEY (calculada_por_id)
+   733→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   734→    CONSTRAINT fk_planillas_aprobador FOREIGN KEY (aprobada_por_id)
+   735→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   736→    CONSTRAINT fk_planillas_segundo_aprobador FOREIGN KEY (aprobacion_segundo_nivel_id)
+   737→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   738→    CONSTRAINT fk_planillas_creador FOREIGN KEY (creada_por_id)
+   739→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   740→    CONSTRAINT ck_planillas_fechas CHECK (fecha_fin_periodo >= fecha_inicio_periodo)
+   741→);
+   742→COMMENT ON TABLE planillas IS
+   743→    'Registro maestro del ciclo de nómina. INMUTABLE desde estado=APROBADA. '
+   744→    'Errores post-pago: crear nueva planilla con tipo=COMPLEMENTARIA y planilla_padre_id apuntando a la original. '
+   745→    'hash_integridad se calcula sobre todos los detalles_planilla al momento de la aprobación.';
+   746→
+   747→-- Garantiza: solo un período BORRADOR o CALCULADO activo por tipo de nómina a la vez
+   748→CREATE UNIQUE INDEX uq_planilla_activa_por_tipo
+   749→    ON planillas (tipo)
+   750→    WHERE estado IN ('BORRADOR', 'CALCULADA');
+   751→COMMENT ON INDEX uq_planilla_activa_por_tipo IS
+   752→    'Regla de período único activo: no puede haber dos planillas en proceso para el mismo tipo de nómina.';
+   753→
+   754→-- ─────────────────────────────────────────────────────────────
+   755→-- TABLA: empleados_planilla
+   756→-- Tabla puente: empleados incluidos en cada planilla (carga inicial al crear el período).
+   757→-- Permite incluir/excluir empleados individualmente antes del cálculo.
+   758→-- ─────────────────────────────────────────────────────────────
+   759→CREATE TABLE empleados_planilla (
+   760→    id                  UUID        NOT NULL DEFAULT gen_random_uuid(),
+   761→    planilla_id         UUID        NOT NULL,
+   762→    empleado_id         UUID        NOT NULL,
+   763→    contrato_id         UUID,                       -- Snapshot del contrato vigente al momento de inclusión
+   764→    excluido            BOOLEAN     NOT NULL DEFAULT FALSE,
+   765→    justificacion_excl  TEXT,                       -- Obligatorio si excluido=TRUE
+   766→    fecha_inclusion     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+   767→    incluido_por_id     UUID,
+   768→    CONSTRAINT pk_empleados_planilla PRIMARY KEY (id),
+   769→    CONSTRAINT uq_empleado_por_planilla UNIQUE (planilla_id, empleado_id),
+   770→    CONSTRAINT fk_ep_planilla FOREIGN KEY (planilla_id)
+   771→        REFERENCES planillas(id) ON DELETE CASCADE,     -- Si se elimina una planilla BORRADOR, se eliminan sus empleados
+   772→    CONSTRAINT fk_ep_empleado FOREIGN KEY (empleado_id)
+   773→        REFERENCES empleados(id) ON DELETE RESTRICT,
+   774→    CONSTRAINT fk_ep_contrato FOREIGN KEY (contrato_id)
+   775→        REFERENCES contratos(id) ON DELETE SET NULL,
+   776→    CONSTRAINT fk_ep_inclusor FOREIGN KEY (incluido_por_id)
+   777→        REFERENCES usuarios(id) ON DELETE SET NULL
+   778→);
+   779→COMMENT ON TABLE empleados_planilla IS
+   780→    'Empleados cargados en una planilla. ON DELETE CASCADE desde planillas solo para estado=BORRADOR (controlado por aplicación). '
+   781→    'excluido=TRUE permite excluir temporalmente a un empleado sin eliminarlo del registro.';
+   782→
+   783→-- ─────────────────────────────────────────────────────────────
+   784→-- TABLA: incidencias_nomina
+   785→-- Registro de todos los eventos que modifican la nómina base del período activo.
+   786→-- Requieren aprobación antes de incluirse en el cálculo.
+   787→-- ─────────────────────────────────────────────────────────────
+   788→CREATE TABLE incidencias_nomina (
+   789→    id                          UUID                        NOT NULL DEFAULT gen_random_uuid(),
+   790→    empleado_id                 UUID                        NOT NULL,
+   791→    planilla_id                 UUID                        NOT NULL,
+   792→    tipo                        tipo_incidencia             NOT NULL,
+   793→    estado                      tipo_estado_incidencia      NOT NULL DEFAULT 'PENDIENTE',
+   794→    -- Datos del evento
+   795→    fecha_inicio                DATE                        NOT NULL,
+   796→    fecha_fin                   DATE,                                       -- NULL para incidencias de un solo día
+   797→    descripcion                 VARCHAR(500),
+   798→    documento_url               TEXT,                                       -- URL firmada del respaldo adjunto
+   799→    -- Campos específicos por tipo (algunos son NULL según el tipo)
+   800→    tipo_hora_extra             tipo_hora_extra,                            -- Para tipo=HORAS_EXTRA
+   801→    cantidad_horas              NUMERIC(5,2)                CHECK (cantidad_horas IS NULL OR cantidad_horas > 0),
+   802→    tipo_incapacidad            tipo_incapacidad_isss,                      -- Para tipo=INCAPACIDAD_ISSS
+   803→    numero_certificado_isss     VARCHAR(50),
+   804→    tipo_ausencia               tipo_ausencia,                              -- Para tipo=AUSENCIA
+   805→    tipo_permiso                tipo_permiso,                               -- Para tipo=PERMISO
+   806→    gravado_isr                 BOOLEAN,                                    -- Para tipo=BONO
+   807→    es_comision_habitual        BOOLEAN,                                    -- Para tipo=COMISION (Art. 180 CT)
+   808→    -- Montos calculados (NUMERIC(10,2) — PROHIBIDO float)
+   809→    monto_incidencia            NUMERIC(10,2)               CHECK (monto_incidencia IS NULL OR monto_incidencia >= 0),
+   810→    monto_patrono               NUMERIC(10,2)               CHECK (monto_patrono IS NULL OR monto_patrono >= 0),  -- Días pagados por patrono (incapacidades)
+   811→    monto_isss_subsidio         NUMERIC(10,2)               CHECK (monto_isss_subsidio IS NULL OR monto_isss_subsidio >= 0),
+   812→    -- Flujo de aprobación
+   813→    aprobada_por_id             UUID,
+   814→    comentarios_aprobacion      TEXT,
+   815→    motivo_rechazo              TEXT,
+   816→    fecha_aprobacion            TIMESTAMPTZ,
+   817→    -- Control
+   818→    registrada_por_id           UUID                        NOT NULL,
+   819→    fecha_creacion              TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+   820→    fecha_actualizacion         TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+   821→    CONSTRAINT pk_incidencias PRIMARY KEY (id),
+   822→    CONSTRAINT fk_incidencias_empleado FOREIGN KEY (empleado_id)
+   823→        REFERENCES empleados(id) ON DELETE RESTRICT,
+   824→    CONSTRAINT fk_incidencias_planilla FOREIGN KEY (planilla_id)
+   825→        REFERENCES planillas(id) ON DELETE RESTRICT,
+   826→    CONSTRAINT fk_incidencias_aprobador FOREIGN KEY (aprobada_por_id)
+   827→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   828→    CONSTRAINT fk_incidencias_registrador FOREIGN KEY (registrada_por_id)
+   829→        REFERENCES usuarios(id) ON DELETE RESTRICT,
+   830→    CONSTRAINT ck_incidencias_fechas CHECK (
+   831→        fecha_fin IS NULL OR fecha_fin >= fecha_inicio
+   832→    ),
+   833→    CONSTRAINT ck_horas_extra_dia CHECK (
+   834→        tipo != 'HORAS_EXTRA' OR cantidad_horas <= 2   -- Art. 169 CT: máx. 2 horas extra por día
+   835→    )
+   836→);
+   837→COMMENT ON TABLE incidencias_nomina IS
+   838→    'Eventos que modifican la nómina base: horas extra, ausencias, incapacidades, permisos, comisiones, bonos y descuentos. '
+   839→    'Solo las incidencias con estado=APROBADA se incluyen en el motor de cálculo. '
+   840→    'ck_horas_extra_dia: Art. 169 CT limita a 2 horas extra por día por incidencia.';
+   841→
+   842→-- ─────────────────────────────────────────────────────────────
+   843→-- TABLA: detalles_planilla
+   844→-- Desglose de nómina calculado POR EMPLEADO POR PERÍODO.
+   845→-- Es el registro histórico inmutable del cálculo. Estructura exigida por Ley.
+   846→-- TODOS los campos monetarios: NUMERIC(10,2). PROHIBIDO REAL o DOUBLE PRECISION.
+   847→-- ─────────────────────────────────────────────────────────────
+   848→CREATE TABLE detalles_planilla (
+   849→    id                              UUID            NOT NULL DEFAULT gen_random_uuid(),
+   850→    planilla_id                     UUID            NOT NULL,
+   851→    empleado_id                     UUID            NOT NULL,
+   852→    contrato_id                     UUID,                                       -- Snapshot del contrato usado en el cálculo
+   853→    -- ─── DEVENGADOS (INGRESOS) ───────────────────────────────
+   854→    salario_nominal                 NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (salario_nominal >= 0),
+   855→    monto_horas_extras_diurnas      NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_horas_extras_diurnas >= 0),
+   856→    monto_horas_extras_nocturnas    NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_horas_extras_nocturnas >= 0),
+   857→    monto_recargo_dia_descanso      NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_recargo_dia_descanso >= 0),
+   858→    monto_recargo_dia_asueto        NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_recargo_dia_asueto >= 0),
+   859→    monto_comisiones                NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_comisiones >= 0),
+   860→    monto_bonos_gravados            NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_bonos_gravados >= 0),
+   861→    monto_otros_ingresos            NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (monto_otros_ingresos >= 0),
+   862→    -- ─── SALARIO BRUTO (calculado = suma de devengados) ──────
+   863→    salario_bruto                   NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (salario_bruto >= 0),
+   864→    -- ─── DESCUENTOS LABORALES (de cargo del trabajador) ──────
+   865→    -- ISSS laboral: MIN(salario_bruto, tope_isss) × tasa_isss_laboral
+   866→    base_isss                       NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (base_isss >= 0),  -- MIN(bruto, $1,000)
+   867→    descuento_isss                  NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (descuento_isss >= 0),
+   868→    -- AFP laboral: salario_bruto × tasa_afp_laboral (sin tope)
+   869→    base_afp                        NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (base_afp >= 0),
+   870→    descuento_afp                   NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (descuento_afp >= 0),
+   871→    -- ISR: aplicado sobre la renta imponible = bruto - isss - afp (Art. 37 Ley ISR)
+   872→    renta_imponible                 NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (renta_imponible >= 0),
+   873→    tramo_isr_aplicado              SMALLINT        CHECK (tramo_isr_aplicado BETWEEN 1 AND 10),
+   874→    descuento_isr                   NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (descuento_isr >= 0),
+   875→    -- Otros descuentos en orden de prelación legal (Art. 132 CT)
+   876→    descuento_cuota_alimenticia     NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (descuento_cuota_alimenticia >= 0),   -- Prioridad 1
+   877→    descuento_prestamo_patronal     NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (descuento_prestamo_patronal >= 0),   -- Prioridad 2
+   878→    descuento_seguro_complementario NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (descuento_seguro_complementario >= 0),
+   879→    descuento_embargo_civil         NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (descuento_embargo_civil >= 0),       -- Máx 20% excedente mínimo
+   880→    descuento_otros                 NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (descuento_otros >= 0),
+   881→    -- ─── NETO A PAGAR ────────────────────────────────────────
+   882→    neto_a_pagar                    NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (neto_a_pagar >= 0),
+   883→    -- ─── CARGAS PATRONALES (NO se descuentan del empleado; son gasto del patrono) ─
+   884→    isss_patronal                   NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (isss_patronal >= 0),
+   885→    afp_patronal                    NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (afp_patronal >= 0),
+   886→    insaforp                        NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (insaforp >= 0),
+   887→    costo_laboral_total             NUMERIC(10,2)   NOT NULL DEFAULT 0.00       CHECK (costo_laboral_total >= 0),  -- neto + cargas patronales
+   888→    -- ─── ESTADO DE PAGO ──────────────────────────────────────
+   889→    estado_pago                     VARCHAR(30)     NOT NULL DEFAULT 'PENDIENTE',  -- PENDIENTE, PAGADO, RETORNADO, PENDIENTE_MANUAL
+   890→    fecha_acreditacion              DATE,
+   891→    referencia_pago                 VARCHAR(100),
+   892→    CONSTRAINT pk_detalles_planilla PRIMARY KEY (id),
+   893→    CONSTRAINT uq_detalle_empleado_planilla UNIQUE (planilla_id, empleado_id),
+   894→    CONSTRAINT fk_dp_planilla FOREIGN KEY (planilla_id)
+   895→        REFERENCES planillas(id) ON DELETE RESTRICT,    -- No borrar si la planilla está aprobada
+   896→    CONSTRAINT fk_dp_empleado FOREIGN KEY (empleado_id)
+   897→        REFERENCES empleados(id) ON DELETE RESTRICT,
+   898→    CONSTRAINT fk_dp_contrato FOREIGN KEY (contrato_id)
+   899→        REFERENCES contratos(id) ON DELETE SET NULL
+   900→);
+   901→COMMENT ON TABLE detalles_planilla IS
+   902→    'Desglose de nómina POR EMPLEADO POR PERÍODO. Registro histórico e inmutable post-aprobación. '
+   903→    'Estructura cumple Art. 138 CT: toda deducción debe estar identificada con su concepto y base legal. '
+   904→    'TODOS los campos monetarios son NUMERIC(10,2). El uso de REAL o DOUBLE PRECISION está PROHIBIDO. '
+   905→    'Orden de prelación de descuentos: cuota_alimenticia > préstamo > seguro > embargo > otros (Art. 132 CT).';
+   906→
+   907→-- ─────────────────────────────────────────────────────────────
+   908→-- TABLA: vacaciones_empleado
+   909→-- Registro de períodos vacacionales. Base para cálculo de saldos y liquidaciones.
+   910→-- ─────────────────────────────────────────────────────────────
+   911→CREATE TABLE vacaciones_empleado (
+   912→    id                      UUID                    NOT NULL DEFAULT gen_random_uuid(),
+   913→    empleado_id             UUID                    NOT NULL,
+   914→    periodo_vacacional      VARCHAR(20)             NOT NULL,           -- Ej: "2025-2026" (año de derecho)
+   915→    fecha_inicio            DATE                    NOT NULL,
+   916→    fecha_fin               DATE                    NOT NULL,
+   917→    dias_habiles            SMALLINT                NOT NULL            CHECK (dias_habiles > 0),
+   918→    tipo                    VARCHAR(20)             NOT NULL,           -- PROGRAMADA / TOMADA
+   919→    estado                  tipo_estado_vacacion    NOT NULL DEFAULT 'PROGRAMADA',
+   920→    autorizado_por_id       UUID,
+   921→    planilla_id             UUID,                                       -- Si se incluyó en una nómina
+   922→    fecha_cancelacion       DATE,
+   923→    motivo_cancelacion      TEXT,
+   924→    liquidacion_id          UUID,                                       -- FK se agrega después de crear liquidaciones
+   925→    fecha_creacion          TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+   926→    registrada_por_id       UUID,
+   927→    CONSTRAINT pk_vacaciones PRIMARY KEY (id),
+   928→    CONSTRAINT fk_vac_empleado FOREIGN KEY (empleado_id)
+   929→        REFERENCES empleados(id) ON DELETE RESTRICT,
+   930→    CONSTRAINT fk_vac_autorizador FOREIGN KEY (autorizado_por_id)
+   931→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   932→    CONSTRAINT fk_vac_planilla FOREIGN KEY (planilla_id)
+   933→        REFERENCES planillas(id) ON DELETE SET NULL,
+   934→    CONSTRAINT fk_vac_registrador FOREIGN KEY (registrada_por_id)
+   935→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   936→    CONSTRAINT ck_vacaciones_fechas CHECK (fecha_fin >= fecha_inicio)
+   937→);
+   938→COMMENT ON TABLE vacaciones_empleado IS
+   939→    'Registro de períodos vacacionales. El saldo disponible se calcula dinámicamente. '
+   940→    'Base legal: Art. 177-187 CT. Derecho a 15 días con goce de sueldo después del primer año (Art. 177).';
+   941→
+   942→-- ─────────────────────────────────────────────────────────────
+   943→-- TABLA: liquidaciones
+   944→-- Expediente de liquidación de relación laboral.
+   945→-- Cada rubro tiene fundamento legal trazable. Es inmutable desde estado=CERRADA.
+   946→-- ─────────────────────────────────────────────────────────────
+   947→CREATE TABLE liquidaciones (
+   948→    id                              UUID                        NOT NULL DEFAULT gen_random_uuid(),
+   949→    empleado_id                     UUID                        NOT NULL,
+   950→    tipo_terminacion                tipo_terminacion            NOT NULL,
+   951→    estado                          tipo_estado_liquidacion     NOT NULL DEFAULT 'BORRADOR',
+   952→    fecha_terminacion               DATE                        NOT NULL,
+   953→    fecha_inicio_relacion           DATE                        NOT NULL,   -- Snapshot desde contratos
+   954→    -- Cálculo de antigüedad
+   955→    anios_servicio_exactos          NUMERIC(5,2)                CHECK (anios_servicio_exactos >= 0),
+   956→    anios_computables               SMALLINT                    CHECK (anios_computables >= 0),
+   957→    -- Rubros calculados (todos NUMERIC(10,2) — PROHIBIDO float)
+   958→    indemnizacion_bruta             NUMERIC(10,2)   DEFAULT 0.00    CHECK (indemnizacion_bruta >= 0),
+   959→    vacacion_proporcional           NUMERIC(10,2)   DEFAULT 0.00    CHECK (vacacion_proporcional >= 0),
+   960→    aguinaldo_proporcional          NUMERIC(10,2)   DEFAULT 0.00    CHECK (aguinaldo_proporcional >= 0),
+   961→    aguinaldo_exento_isr            NUMERIC(10,2)   DEFAULT 0.00    CHECK (aguinaldo_exento_isr >= 0),
+   962→    aguinaldo_gravado_isr           NUMERIC(10,2)   DEFAULT 0.00    CHECK (aguinaldo_gravado_isr >= 0),
+   963→    ultimo_salario_bruto            NUMERIC(10,2)   DEFAULT 0.00    CHECK (ultimo_salario_bruto >= 0),
+   964→    -- Deducciones sobre la liquidación
+   965→    isr_sobre_liquidacion           NUMERIC(10,2)   DEFAULT 0.00    CHECK (isr_sobre_liquidacion >= 0),
+   966→    descuentos_varios               NUMERIC(10,2)   DEFAULT 0.00    CHECK (descuentos_varios >= 0),
+   967→    -- Totales
+   968→    total_bruto_liquidacion         NUMERIC(10,2)   DEFAULT 0.00    CHECK (total_bruto_liquidacion >= 0),
+   969→    total_neto_liquidacion          NUMERIC(10,2)   DEFAULT 0.00    CHECK (total_neto_liquidacion >= 0),
+   970→    -- Documentación y control
+   971→    fundamento_legal                TEXT,                                   -- Síntesis del articulado aplicado
+   972→    acta_liquidacion_url            TEXT,                                   -- URL del acta firmada (cifrada)
+   973→    hash_acta                       VARCHAR(64),                            -- SHA-256 para verificar integridad del acta
+   974→    casos_especiales                JSONB           DEFAULT '{}'::JSONB,    -- Maternidad, incapacidad al despedir, embargo
+   975→    planilla_ultimo_periodo_id      UUID,
+   976→    aprobada_por_id                 UUID,
+   977→    fecha_aprobacion                TIMESTAMPTZ,
+   978→    fecha_firma_pago                DATE,
+   979→    motivo_retencion                TEXT,
+   980→    fecha_creacion                  TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+   981→    creada_por_id                   UUID,
+   982→    CONSTRAINT pk_liquidaciones PRIMARY KEY (id),
+   983→    CONSTRAINT fk_liq_empleado FOREIGN KEY (empleado_id)
+   984→        REFERENCES empleados(id) ON DELETE RESTRICT,
+   985→    CONSTRAINT fk_liq_planilla FOREIGN KEY (planilla_ultimo_periodo_id)
+   986→        REFERENCES planillas(id) ON DELETE SET NULL,
+   987→    CONSTRAINT fk_liq_aprobador FOREIGN KEY (aprobada_por_id)
+   988→        REFERENCES usuarios(id) ON DELETE SET NULL,
+   989→    CONSTRAINT fk_liq_creador FOREIGN KEY (creada_por_id)
+   990→        REFERENCES usuarios(id) ON DELETE SET NULL
+   991→);
+   992→COMMENT ON TABLE liquidaciones IS
+   993→    'Expediente de terminación laboral. Calcula indemnización, vacación proporcional, aguinaldo proporcional y último salario. '
+   994→    'Referencia legal: Arts. 58, 113, 177-187, 196-202 CT. Ley 523 para renuncias voluntarias. '
+   995→    'casos_especiales JSONB: maternidad (fuero Art. 113), incapacidad ISSS al despedir, embargos activos.';
+   996→
+   997→-- Agregar FK de vacaciones a liquidaciones
+   998→ALTER TABLE vacaciones_empleado ADD CONSTRAINT fk_vac_liquidacion
+   999→    FOREIGN KEY (liquidacion_id) REFERENCES liquidaciones(id) ON DELETE SET NULL;
+  1000→
+  1001→
+  1002→-- ============================================================================================================================
+  1003→-- SECCIÓN 5: TABLAS DE SOPORTE (SEGURIDAD, DOCUMENTOS, CUMPLIMIENTO)
+  1004→-- ============================================================================================================================
+  1005→
+  1006→-- ─────────────────────────────────────────────────────────────
+  1007→-- TABLA: historial_cambios_salariales
+  1008→-- Registro inmutable de cada cambio de salario con fundamento documentado.
+  1009→-- ─────────────────────────────────────────────────────────────
+  1010→CREATE TABLE historial_cambios_salariales (
+  1011→    id                  UUID            NOT NULL DEFAULT gen_random_uuid(),
+  1012→    empleado_id         UUID            NOT NULL,
+  1013→    contrato_id         UUID,
+  1014→    salario_anterior    NUMERIC(10,2)   NOT NULL CHECK (salario_anterior >= 0),
+  1015→    salario_nuevo       NUMERIC(10,2)   NOT NULL CHECK (salario_nuevo >= 0),
+  1016→    porcentaje_cambio   NUMERIC(6,2),   -- Calculado: ((nuevo-anterior)/anterior)*100
+  1017→    fecha_efectividad   DATE            NOT NULL,
+  1018→    motivo              VARCHAR(50)     NOT NULL,   -- 'EVALUACION_DESEMPENIO', 'AJUSTE_BANDA', 'NUEVO_CARGO', 'MERCADO', 'OTRO'
+  1019→    detalle_motivo      TEXT,
+  1020→    documento_url       TEXT,
+  1021→    aprobado_por_id     UUID,
+  1022→    fecha_registro      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  1023→    CONSTRAINT pk_historial_salarios PRIMARY KEY (id),
+  1024→    CONSTRAINT fk_hs_empleado FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE RESTRICT,
+  1025→    CONSTRAINT fk_hs_contrato FOREIGN KEY (contrato_id) REFERENCES contratos(id) ON DELETE SET NULL,
+  1026→    CONSTRAINT fk_hs_aprobador FOREIGN KEY (aprobado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+  1027→);
+  1028→
+  1029→-- ─────────────────────────────────────────────────────────────
+  1030→-- TABLA: historial_cambios_cargo
+  1031→-- Registro de traspasos de puesto, ascensos y traslados.
+  1032→-- ─────────────────────────────────────────────────────────────
+  1033→CREATE TABLE historial_cambios_cargo (
+  1034→    id                      UUID            NOT NULL DEFAULT gen_random_uuid(),
+  1035→    empleado_id             UUID            NOT NULL,
+  1036→    perfil_anterior_id      UUID,
+  1037→    perfil_nuevo_id         UUID,
+  1038→    area_anterior_id        UUID,
+  1039→    area_nueva_id           UUID,
+  1040→    fecha_efectividad       DATE            NOT NULL,
+  1041→    motivo                  TEXT            NOT NULL,
+  1042→    alerta_salario_fuera_rango BOOLEAN      NOT NULL DEFAULT FALSE,
+  1043→    aprobado_por_id         UUID,
+  1044→    fecha_registro          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  1045→    CONSTRAINT pk_historial_cargo PRIMARY KEY (id),
+  1046→    CONSTRAINT fk_hc_empleado        FOREIGN KEY (empleado_id)       REFERENCES empleados(id)       ON DELETE RESTRICT,
+  1047→    CONSTRAINT fk_hc_perfil_ant      FOREIGN KEY (perfil_anterior_id) REFERENCES perfiles_puesto(id) ON DELETE SET NULL,
+  1048→    CONSTRAINT fk_hc_perfil_nuevo    FOREIGN KEY (perfil_nuevo_id)    REFERENCES perfiles_puesto(id) ON DELETE SET NULL,
+  1049→    CONSTRAINT fk_hc_area_ant        FOREIGN KEY (area_anterior_id)   REFERENCES areas(id)           ON DELETE SET NULL,
+  1050→    CONSTRAINT fk_hc_area_nueva      FOREIGN KEY (area_nueva_id)      REFERENCES areas(id)           ON DELETE SET NULL,
+  1051→    CONSTRAINT fk_hc_aprobador       FOREIGN KEY (aprobado_por_id)    REFERENCES usuarios(id)        ON DELETE SET NULL
+  1052→);
+  1053→
+  1054→-- ─────────────────────────────────────────────────────────────
+  1055→-- TABLA: historial_presentaciones_isss
+  1056→-- Seguimiento del cumplimiento mensual ante el ISSS (sistema OIS).
+  1057→-- ─────────────────────────────────────────────────────────────
+  1058→CREATE TABLE historial_presentaciones_isss (
+  1059→    id                          UUID                        NOT NULL DEFAULT gen_random_uuid(),
+  1060→    planilla_id                 UUID                        NOT NULL,
+  1061→    fecha_vencimiento_legal     DATE                        NOT NULL,   -- Último día del mes siguiente al período
+  1062→    fecha_presentacion          DATE,
+  1063→    referencia_ois              VARCHAR(100),
+  1064→    monto_cuotas_laborales      NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_cuotas_laborales >= 0),
+  1065→    monto_cuotas_patronales     NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_cuotas_patronales >= 0),
+  1066→    monto_mora                  NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_mora >= 0),
+  1067→    monto_total_pagado          NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_total_pagado >= 0),
+  1068→    estado                      tipo_estado_cumplimiento    NOT NULL DEFAULT 'PENDIENTE',
+  1069→    comprobante_url             TEXT,
+  1070→    hash_archivo_ois            VARCHAR(64),
+  1071→    registrado_por_id           UUID,
+  1072→    fecha_registro              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  1073→    CONSTRAINT pk_presentaciones_isss PRIMARY KEY (id),
+  1074→    CONSTRAINT uq_isss_por_planilla UNIQUE (planilla_id),
+  1075→    CONSTRAINT fk_pi_planilla FOREIGN KEY (planilla_id) REFERENCES planillas(id) ON DELETE RESTRICT,
+  1076→    CONSTRAINT fk_pi_registrador FOREIGN KEY (registrado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+  1077→);
+  1078→COMMENT ON TABLE historial_presentaciones_isss IS
+  1079→    'Registro de cumplimiento ante ISSS. Plazo legal: dentro del mes siguiente al período de pago. '
+  1080→    'La mora se calcula al 1% mensual pro-rata (Art. 78 Ley ISSS).';
+  1081→
+  1082→-- ─────────────────────────────────────────────────────────────
+  1083→-- TABLA: historial_presentaciones_afp
+  1084→-- Seguimiento del cumplimiento ante AFP Crecer / AFP Confía (sistema SEPP).
+  1085→-- ─────────────────────────────────────────────────────────────
+  1086→CREATE TABLE historial_presentaciones_afp (
+  1087→    id                          UUID                        NOT NULL DEFAULT gen_random_uuid(),
+  1088→    planilla_id                 UUID                        NOT NULL,
+  1089→    afp                         tipo_afp                    NOT NULL,
+  1090→    fecha_vencimiento_legal     DATE                        NOT NULL,
+  1091→    fecha_presentacion          DATE,
+  1092→    numero_lote_sepp            VARCHAR(100),
+  1093→    monto_cuotas_laborales      NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_cuotas_laborales >= 0),
+  1094→    monto_cuotas_patronales     NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_cuotas_patronales >= 0),
+  1095→    monto_total_acreditado      NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_total_acreditado >= 0),
+  1096→    estado                      tipo_estado_cumplimiento    NOT NULL DEFAULT 'PENDIENTE',
+  1097→    comprobante_url             TEXT,
+  1098→    registrado_por_id           UUID,
+  1099→    fecha_registro              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  1100→    CONSTRAINT pk_presentaciones_afp PRIMARY KEY (id),
+  1101→    CONSTRAINT uq_afp_por_planilla_afp UNIQUE (planilla_id, afp),
+  1102→    CONSTRAINT fk_pa_planilla FOREIGN KEY (planilla_id) REFERENCES planillas(id) ON DELETE RESTRICT,
+  1103→    CONSTRAINT fk_pa_registrador FOREIGN KEY (registrado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+  1104→);
+  1105→COMMENT ON TABLE historial_presentaciones_afp IS
+  1106→    'Registro de cotizaciones AFP enviadas vía SEPP. '
+  1107→    'Fondos no acreditados en 5 días hábiles generan responsabilidad solidaria del patrono (Ley SAP).';
+  1108→
+  1109→-- ─────────────────────────────────────────────────────────────
+  1110→-- TABLA: historial_enteros_isr
+  1111→-- Seguimiento de retenciones de ISR enteradas al Ministerio de Hacienda.
+  1112→-- ─────────────────────────────────────────────────────────────
+  1113→CREATE TABLE historial_enteros_isr (
+  1114→    id                          UUID                        NOT NULL DEFAULT gen_random_uuid(),
+  1115→    planilla_id                 UUID                        NOT NULL,
+  1116→    fecha_vencimiento_legal     DATE                        NOT NULL,   -- 10 días hábiles siguientes (Art. 62 Ley ISR)
+  1117→    fecha_entero                DATE,
+  1118→    formulario_f910             VARCHAR(50),                            -- Número del formulario presentado al MH
+  1119→    monto_isr_total             NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_isr_total >= 0),
+  1120→    monto_mora_multa            NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_mora_multa >= 0),
+  1121→    monto_total_pagado          NUMERIC(14,2)   DEFAULT 0.00    CHECK (monto_total_pagado >= 0),
+  1122→    banco_entero                VARCHAR(100),
+  1123→    referencia_transaccion      VARCHAR(100),
+  1124→    estado                      tipo_estado_cumplimiento    NOT NULL DEFAULT 'PENDIENTE',
+  1125→    comprobante_url             TEXT,
+  1126→    registrado_por_id           UUID,
+  1127→    fecha_registro              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  1128→    CONSTRAINT pk_enteros_isr PRIMARY KEY (id),
+  1129→    CONSTRAINT uq_isr_por_planilla UNIQUE (planilla_id),
+  1130→    CONSTRAINT fk_ei_planilla FOREIGN KEY (planilla_id) REFERENCES planillas(id) ON DELETE RESTRICT,
+  1131→    CONSTRAINT fk_ei_registrador FOREIGN KEY (registrado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+  1132→);
+  1133→COMMENT ON TABLE historial_enteros_isr IS
+  1134→    'Registro de retenciones ISR enteradas al MH. '
+  1135→    'Incumplimiento genera responsabilidad solidaria + multa de 25% a 75% (Art. 246 Código Tributario). '
+  1136→    'El plazo de 10 días hábiles se calcula excluyendo sábados, domingos y días de asueto.';
+  1137→
+  1138→-- ─────────────────────────────────────────────────────────────
+  1139→-- TABLA: refresh_tokens
+  1140→-- Gestión de tokens de sesión de larga duración (JWT Refresh Tokens).
+  1141→-- La rotación garantiza que cada refresh token se use una sola vez.
+  1142→-- ─────────────────────────────────────────────────────────────
+  1143→CREATE TABLE refresh_tokens (
+  1144→    id              UUID        NOT NULL DEFAULT gen_random_uuid(),
+  1145→    usuario_id      UUID        NOT NULL,
+  1146→    token_hash      VARCHAR(64) NOT NULL,   -- SHA-256 del token real (nunca el token en claro)
+  1147→    expira_en       TIMESTAMPTZ NOT NULL,
+  1148→    activo          BOOLEAN     NOT NULL DEFAULT TRUE,
+  1149→    creado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  1150→    ultimo_uso_en   TIMESTAMPTZ,
+  1151→    ip_creacion     INET,
+  1152→    user_agent      TEXT,
+  1153→    CONSTRAINT pk_refresh_tokens PRIMARY KEY (id),
+  1154→    CONSTRAINT uq_refresh_token_hash UNIQUE (token_hash),
+  1155→    CONSTRAINT fk_rt_usuario FOREIGN KEY (usuario_id)
+  1156→        REFERENCES usuarios(id) ON DELETE CASCADE
+  1157→);
+  1158→COMMENT ON TABLE refresh_tokens IS
+  1159→    'Tokens de sesión. El token real NUNCA se almacena; solo su SHA-256. '
+  1160→    'Rotación en cada uso: el token anterior se invalida y se emite uno nuevo (previene replay attacks).';
+  1161→
+  1162→-- ─────────────────────────────────────────────────────────────
+  1163→-- TABLA: otp_tokens
+  1164→-- Códigos OTP de un solo uso para recuperación de contraseña (TTL: 15 minutos).
+  1165→-- ─────────────────────────────────────────────────────────────
+  1166→CREATE TABLE otp_tokens (
+  1167→    id              UUID        NOT NULL DEFAULT gen_random_uuid(),
+  1168→    usuario_id      UUID        NOT NULL,
+  1169→    otp_hash        VARCHAR(64) NOT NULL,   -- SHA-256 del código OTP de 6 dígitos
+  1170→    reset_token     VARCHAR(64),            -- UUID v4 de un solo uso para el step 3 del flujo
+  1171→    expira_en       TIMESTAMPTZ NOT NULL,
+  1172→    intentos        SMALLINT    NOT NULL DEFAULT 0 CHECK (intentos >= 0),
+  1173→    usado           BOOLEAN     NOT NULL DEFAULT FALSE,
+  1174→    creado_en       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  1175→    CONSTRAINT pk_otp_tokens PRIMARY KEY (id),
+  1176→    CONSTRAINT fk_otp_usuario FOREIGN KEY (usuario_id)
+  1177→        REFERENCES usuarios(id) ON DELETE CASCADE
+  1178→);
+  1179→
+  1180→-- ─────────────────────────────────────────────────────────────
+  1181→-- TABLA: tokens_bloqueados
+  1182→-- Lista negra de refresh tokens invalidados (logout, cambio de rol, cambio de contraseña).
+  1183→-- ─────────────────────────────────────────────────────────────
+  1184→CREATE TABLE tokens_bloqueados (
+  1185→    token_hash      VARCHAR(64) NOT NULL,
+  1186→    bloqueado_en    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  1187→    motivo          VARCHAR(100),
+  1188→    CONSTRAINT pk_tokens_bloqueados PRIMARY KEY (token_hash)
+  1189→);
+  1190→COMMENT ON TABLE tokens_bloqueados IS
+  1191→    'Lista negra de tokens invalidados. Registros expirados pueden purgarse con un job periódico. '
+  1192→    'El middleware de autenticación debe consultar esta tabla en cada request.';
+  1193→
+  1194→-- ─────────────────────────────────────────────────────────────
+  1195→-- TABLA: intentos_login
+  1196→-- Registro de intentos de login para el mecanismo anti-brute-force.
+  1197→-- El bloqueo ocurre después de 5 intentos fallidos consecutivos por correo.
+  1198→-- ─────────────────────────────────────────────────────────────
+  1199→CREATE TABLE intentos_login (
+  1200→    id              UUID        NOT NULL DEFAULT gen_random_uuid(),
+  1201→    email           VARCHAR(100) NOT NULL,
+  1202→    ip_origen       INET        NOT NULL,
+  1203→    user_agent      TEXT,
+  1204→    exitoso         BOOLEAN     NOT NULL,
+  1205→    intentado_en    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  1206→    CONSTRAINT pk_intentos_login PRIMARY KEY (id)
+  1207→);
+  1208→CREATE INDEX idx_intentos_login_email_fecha ON intentos_login (email, intentado_en DESC);
+  1209→COMMENT ON TABLE intentos_login IS
+  1210→    'Registro de intentos de login. Index en (email, fecha) para consultas eficientes del contador de fallos. '
+  1211→    'El bloqueo de 15 min se aplica tras 5 intentos fallidos consecutivos por correo (no por IP). '
+  1212→    'Rate limiting adicional de 10 intentos/IP/minuto se implementa en capa de aplicación (Redis).';
+  1213→
+  1214→-- ─────────────────────────────────────────────────────────────
+  1215→-- TABLA: permisos_granulares_usuario
+  1216→-- Permisos adicionales o restricciones sobre el rol base de un usuario.
+  1217→-- Ej: un ANALISTA con acceso de solo lectura a reportes de Gerencia.
+  1218→-- ─────────────────────────────────────────────────────────────
+  1219→CREATE TABLE permisos_granulares_usuario (
+  1220→    id          UUID            NOT NULL DEFAULT gen_random_uuid(),
+  1221→    usuario_id  UUID            NOT NULL,
+  1222→    modulo      VARCHAR(50)     NOT NULL,   -- 'M-01', 'M-02', ..., 'M-06'
+  1223→    accion      VARCHAR(100)    NOT NULL,   -- Nombre de la función/endpoint
+  1224→    permitido   BOOLEAN         NOT NULL,   -- TRUE = conceder; FALSE = denegar explícitamente
+  1225→    vigente     BOOLEAN         NOT NULL DEFAULT TRUE,
+  1226→    otorgado_por_id UUID,
+  1227→    fecha_otorgamiento TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  1228→    CONSTRAINT pk_permisos_granulares PRIMARY KEY (id),
+  1229→    CONSTRAINT uq_permiso_por_usuario_modulo_accion UNIQUE (usuario_id, modulo, accion),
+  1230→    CONSTRAINT fk_pg_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  1231→    CONSTRAINT fk_pg_otorgador FOREIGN KEY (otorgado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+  1232→);
+  1233→
+  1234→-- ─────────────────────────────────────────────────────────────
+  1235→-- TABLA: historial_contrasenas
+  1236→-- Hashes de las últimas 5 contraseñas por usuario.
+  1237→-- Previene la reutilización de contraseñas recientes.
+  1238→-- ─────────────────────────────────────────────────────────────
+  1239→CREATE TABLE historial_contrasenas (
+  1240→    id              UUID        NOT NULL DEFAULT gen_random_uuid(),
+  1241→    usuario_id      UUID        NOT NULL,
+  1242→    password_hash   VARCHAR(255) NOT NULL,  -- bcrypt hash de la contraseña antigua
+  1243→    cambiada_en     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  1244→    CONSTRAINT pk_historial_contrasenas PRIMARY KEY (id),
+  1245→    CONSTRAINT fk_hc_usuario FOREIGN KEY (usuario_id)
+  1246→        REFERENCES usuarios(id) ON DELETE CASCADE
+  1247→);
+  1248→CREATE INDEX idx_historial_contrasenas_usuario ON historial_contrasenas (usuario_id, cambiada_en DESC);
+  1249→COMMENT ON TABLE historial_contrasenas IS
+  1250→    'Almacena los bcrypt hashes de las últimas 5 contraseñas. '
+  1251→    'Al cambiar contraseña, comparar contra estos hashes y rechazar si coincide con alguno.';
+  1252→
+  1253→-- ─────────────────────────────────────────────────────────────
+  1254→-- TABLA: documentos_empleado
+  1255→-- Expediente documental digital. Archivos cifrados (AES-256) en almacenamiento.
+  1256→-- ─────────────────────────────────────────────────────────────
+  1257→CREATE TABLE documentos_empleado (
+  1258→    id                  UUID                        NOT NULL DEFAULT gen_random_uuid(),
+  1259→    empleado_id         UUID                        NOT NULL,
+  1260→    categoria           tipo_documento_expediente   NOT NULL,
+  1261→    tipo_documento      VARCHAR(100)                NOT NULL,   -- De catálogo predefinido por categoría
+  1262→    nombre_archivo      VARCHAR(255)                NOT NULL,
+  1263→    url_almacenamiento  TEXT                        NOT NULL,   -- URL interna (nunca pública directamente)
+  1264→    hash_sha256         VARCHAR(64)                 NOT NULL,   -- Integridad del archivo original
+  1265→    tamano_bytes        INTEGER                     NOT NULL CHECK (tamano_bytes > 0),
+  1266→    formato_mime        VARCHAR(50)                 NOT NULL,
+  1267→    fecha_vigencia      DATE,                                   -- NULL para documentos sin vencimiento
+  1268→    estado              VARCHAR(20)                 NOT NULL DEFAULT 'VIGENTE',  -- VIGENTE, VENCIDO, PENDIENTE
+  1269→    eliminado           BOOLEAN                     NOT NULL DEFAULT FALSE,      -- Soft delete (requerimiento legal)
+  1270→    motivo_eliminacion  TEXT,
+  1271→    fecha_carga         TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+  1272→    cargado_por_id      UUID,
+  1273→    CONSTRAINT pk_documentos_empleado PRIMARY KEY (id),
+  1274→    CONSTRAINT fk_de_empleado FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE RESTRICT,
+  1275→    CONSTRAINT fk_de_usuario FOREIGN KEY (cargado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+  1276→    CONSTRAINT ck_de_tamano CHECK (tamano_bytes <= 10485760)   -- Máx 10 MB por archivo
+  1277→);
+  1278→COMMENT ON TABLE documentos_empleado IS
+  1279→    'Expediente documental. Archivos cifrados con AES-256 en almacenamiento. '
+  1280→    'URL pública generada con firma temporal (TTL 1h) solo al momento de descarga. '
+  1281→    'Eliminación: soft-delete (eliminado=TRUE). Los archivos físicos se conservan por requerimiento legal.';
+  1282→
+  1283→-- ─────────────────────────────────────────────────────────────
+  1284→-- TABLA: solicitudes_self_service
+  1285→-- Solicitudes de actualización de datos enviadas por los empleados desde el portal.
+  1286→-- ─────────────────────────────────────────────────────────────
+  1287→CREATE TABLE solicitudes_self_service (
+  1288→    id                  UUID            NOT NULL DEFAULT gen_random_uuid(),
+  1289→    empleado_id         UUID            NOT NULL,
+  1290→    tipo_solicitud      VARCHAR(50)     NOT NULL DEFAULT 'ACTUALIZACION_DATOS',
+  1291→    campos_solicitados  JSONB           NOT NULL DEFAULT '{}'::JSONB,   -- { campo: valor_nuevo }
+  1292→    estado              VARCHAR(20)     NOT NULL DEFAULT 'PENDIENTE',   -- PENDIENTE, APROBADA, RECHAZADA
+  1293→    revisado_por_id     UUID,
+  1294→    comentarios         TEXT,
+  1295→    fecha_solicitud     TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  1296→    fecha_resolucion    TIMESTAMPTZ,
+  1297→    CONSTRAINT pk_solicitudes_ss PRIMARY KEY (id),
+  1298→    CONSTRAINT fk_ss_empleado FOREIGN KEY (empleado_id) REFERENCES empleados(id) ON DELETE RESTRICT,
+  1299→    CONSTRAINT fk_ss_revisor FOREIGN KEY (revisado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+  1300→);
+  1301→
+  1302→-- ─────────────────────────────────────────────────────────────
+  1303→-- TABLA: retornos_bancarios
+  1304→-- Gestión de pagos devueltos por el banco (cuenta inexistente, bloqueada, etc.).
+  1305→-- ─────────────────────────────────────────────────────────────
+  1306→CREATE TABLE retornos_bancarios (
+  1307→    id                  UUID        NOT NULL DEFAULT gen_random_uuid(),
+  1308→    planilla_id         UUID        NOT NULL,
+  1309→    empleado_id         UUID        NOT NULL,
+  1310→    motivo_banco        TEXT        NOT NULL,
+  1311→    accion_tomada       VARCHAR(30) NOT NULL DEFAULT 'PENDIENTE',   -- PENDIENTE, CUENTA_CORREGIDA, CHEQUE_EMITIDO, PAGO_MANUAL
+  1312→    nueva_cuenta        TEXT,                   -- Si accion=CUENTA_CORREGIDA (cifrada)
+  1313→    fecha_retorno       DATE        NOT NULL,
+  1314→    procesado_en        TIMESTAMPTZ,
+  1315→    procesado_por_id    UUID,
+  1316→    CONSTRAINT pk_retornos PRIMARY KEY (id),
+  1317→    CONSTRAINT fk_ret_planilla  FOREIGN KEY (planilla_id)  REFERENCES planillas(id)  ON DELETE RESTRICT,
+  1318→    CONSTRAINT fk_ret_empleado  FOREIGN KEY (empleado_id)  REFERENCES empleados(id)  ON DELETE RESTRICT,
+  1319→    CONSTRAINT fk_ret_procesador FOREIGN KEY (procesado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+  1320→);
+  1321→
+  1322→-- ─────────────────────────────────────────────────────────────
+  1323→-- TABLA: integraciones_externas
+  1324→-- Configuración de conexiones con ISSS (OIS), AFP (SEPP), bancos (ACH), SMTP, firma digital.
+  1325→-- Credenciales almacenadas CIFRADAS (AES-256) nunca en texto plano.
+  1326→-- ─────────────────────────────────────────────────────────────
+  1327→CREATE TABLE integraciones_externas (
+  1328→    id                      UUID        NOT NULL DEFAULT gen_random_uuid(),
+  1329→    nombre                  VARCHAR(80) NOT NULL,
+  1330→    tipo                    VARCHAR(30) NOT NULL,    -- 'BANCO_ACH', 'ISSS_OIS', 'AFP_SEPP', 'SMTP', 'FIRMA_DIGITAL'
+  1331→    url_endpoint            TEXT,
+  1332→    version_protocolo       VARCHAR(20),
+  1333→    credenciales_cifradas   TEXT,                   -- AES-256; NUNCA en texto plano
+  1334→    configuracion           JSONB       DEFAULT '{}'::JSONB,  -- Parámetros no sensibles
+  1335→    activa                  BOOLEAN     NOT NULL DEFAULT FALSE,
+  1336→    ultima_operacion_ok_at  TIMESTAMPTZ,
+  1337→    estado_salud            VARCHAR(20) DEFAULT 'DESCONOCIDO',  -- OK, ERROR, DESCONOCIDO
+  1338→    fecha_creacion          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  1339→    fecha_actualizacion     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  1340→    CONSTRAINT pk_integraciones PRIMARY KEY (id),
+  1341→    CONSTRAINT uq_integraciones_nombre UNIQUE (nombre)
+  1342→);
+  1343→COMMENT ON TABLE integraciones_externas IS
+  1344→    'credenciales_cifradas: cifrado AES-256 en capa de aplicación. NUNCA texto plano en base de datos. '
+  1345→    'La bandera activa permite desactivar integraciones individualmente; el sistema procesa manualmente en ese caso.';
+  1346→
+  1347→-- ─────────────────────────────────────────────────────────────
+  1348→-- TABLA: log_integraciones
+  1349→-- Historial de operaciones realizadas a través de cada integración.
+  1350→-- ─────────────────────────────────────────────────────────────
+  1351→CREATE TABLE log_integraciones (
+  1352→    id                      UUID        NOT NULL DEFAULT gen_random_uuid(),
+  1353→    integracion_id          UUID        NOT NULL,
+  1354→    tipo_operacion          VARCHAR(50) NOT NULL,
+  1355→    exitoso                 BOOLEAN     NOT NULL,
+  1356→    registros_procesados    INTEGER     DEFAULT 0,
+  1357→    mensaje_error           TEXT,
+  1358→    detalle_tecnico         TEXT,       -- Solo visible para ADMIN
+  1359→    tiempo_respuesta_ms     INTEGER,
+  1360→    ejecutado_en            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  1361→    CONSTRAINT pk_log_integraciones PRIMARY KEY (id),
+  1362→    CONSTRAINT fk_li_integracion FOREIGN KEY (integracion_id)
+  1363→        REFERENCES integraciones_externas(id) ON DELETE CASCADE
+  1364→);
+  1365→
+  1366→-- ─────────────────────────────────────────────────────────────
+  1367→-- TABLA: checklist_aprobacion_planilla
+  1368→-- Ítems del checklist de verificación que el aprobador debe completar antes de firmar.
+  1369→-- ─────────────────────────────────────────────────────────────
+  1370→CREATE TABLE checklist_aprobacion_planilla (
+  1371→    id              UUID        NOT NULL DEFAULT gen_random_uuid(),
+  1372→    planilla_id     UUID        NOT NULL,
+  1373→    item_codigo     VARCHAR(30) NOT NULL,
+  1374→    descripcion     TEXT        NOT NULL,
+  1375→    marcado         BOOLEAN     NOT NULL DEFAULT FALSE,
+  1376→    marcado_por_id  UUID,
+  1377→    marcado_en      TIMESTAMPTZ,
+  1378→    CONSTRAINT pk_checklist PRIMARY KEY (id),
+  1379→    CONSTRAINT uq_checklist_item UNIQUE (planilla_id, item_codigo),
+  1380→    CONSTRAINT fk_ck_planilla FOREIGN KEY (planilla_id) REFERENCES planillas(id) ON DELETE CASCADE,
+  1381→    CONSTRAINT fk_ck_usuario FOREIGN KEY (marcado_por_id) REFERENCES usuarios(id) ON DELETE SET NULL
+  1382→);
+  1383→
+  1384→
+  1385→-- ============================================================================================================================
+  1386→-- SECCIÓN 6: TABLA DE AUDITORÍA INMUTABLE (BITÁCORA)
+  1387→-- ============================================================================================================================
+  1388→
+  1389→-- ─────────────────────────────────────────────────────────────
+  1390→-- TABLA: bitacora_auditoria
+  1391→-- INMUTABLE: ningún usuario (incluyendo el ADMIN) puede modificar o eliminar registros.
+  1392→-- Evidencia ante inspecciones del MTPS, ISSS, AFP o Ministerio de Hacienda.
+  1393→-- ─────────────────────────────────────────────────────────────
+  1394→CREATE TABLE bitacora_auditoria (
+  1395→    id                  UUID                    NOT NULL DEFAULT gen_random_uuid(),
+  1396→    usuario_id          UUID,                               -- NULL si acción del sistema; SET NULL en soft-delete del usuario
+  1397→    usuario_email       VARCHAR(100),                       -- Snapshot del email al momento del evento (para histórico)
+  1398→    usuario_rol         tipo_rol_sistema,                   -- Snapshot del rol al momento del evento
+  1399→    timestamp_evento    TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+  1400→    direccion_ip        INET,
+  1401→    user_agent          TEXT,
+  1402→    modulo              VARCHAR(20),                        -- M-01 a M-06
+  1403→    accion              tipo_accion_auditoria   NOT NULL,
+  1404→    tabla_afectada      VARCHAR(100),
+  1405→    registro_id         UUID,                               -- ID del registro afectado
+  1406→    valor_anterior      JSONB,                              -- Estado antes del cambio (para UPDATE/DELETE)
+  1407→    valor_nuevo         JSONB,                              -- Estado después del cambio (para INSERT/UPDATE)
+  1408→    resultado           VARCHAR(20)             NOT NULL DEFAULT 'EXITOSO',  -- EXITOSO, FALLIDO, RECHAZADO
+  1409→    nivel_criticidad    VARCHAR(10)             NOT NULL DEFAULT 'NORMAL',   -- NORMAL, ALTO, CRITICO
+  1410→    detalle_adicional   TEXT,
+  1411→    CONSTRAINT pk_bitacora PRIMARY KEY (id),
+  1412→    CONSTRAINT fk_bit_usuario FOREIGN KEY (usuario_id)
+  1413→        REFERENCES usuarios(id) ON DELETE SET NULL          -- ON DELETE SET NULL: el log se preserva aunque el usuario se elimine
+  1414→);
+  1415→
+  1416→-- Index de rendimiento para las consultas más frecuentes de auditoría
+  1417→CREATE INDEX idx_bitacora_usuario       ON bitacora_auditoria (usuario_id,       timestamp_evento DESC);
+  1418→CREATE INDEX idx_bitacora_tabla         ON bitacora_auditoria (tabla_afectada,   timestamp_evento DESC);
+  1419→CREATE INDEX idx_bitacora_accion        ON bitacora_auditoria (accion,           timestamp_evento DESC);
+  1420→CREATE INDEX idx_bitacora_criticidad    ON bitacora_auditoria (nivel_criticidad, timestamp_evento DESC);
+  1421→CREATE INDEX idx_bitacora_timestamp     ON bitacora_auditoria (timestamp_evento  DESC);
+  1422→
+  1423→COMMENT ON TABLE bitacora_auditoria IS
+  1424→    '⚠️  TABLA INMUTABLE. Ningún usuario puede modificar ni eliminar sus registros. '
+  1425→    'La capa de aplicación debe garantizar: INSERT-only. PROHIBIR UPDATE y DELETE a nivel de permisos de BD. '
+  1426→    'Conservación mínima: 10 años (igual a la obligación legal de conservación de planillas). '
+  1427→    'Es evidencia legal ante MTPS, ISSS, AFP y MH. El hash SHA-256 de exportaciones confirma integridad.';
+  1428→
+  1429→-- ─────────────────────────────────────────────────────────────
+  1430→-- FUNCIÓN Y TRIGGER: Prevención de modificaciones en la bitácora
+  1431→-- Hace cumplir la inmutabilidad a nivel de base de datos.
+  1432→-- ─────────────────────────────────────────────────────────────
+  1433→CREATE OR REPLACE FUNCTION fn_bitacora_proteger_inmutabilidad()
+  1434→RETURNS TRIGGER AS $$
+  1435→BEGIN
+  1436→    RAISE EXCEPTION
+  1437→        'VIOLACIÓN DE INMUTABILIDAD: La tabla bitacora_auditoria es de solo escritura. '
+  1438→        'Está prohibido modificar o eliminar registros de auditoría. '
+  1439→        'Acción intentada: % | Tabla: bitacora_auditoria | Registro: %',
+  1440→        TG_OP, OLD.id;
+  1441→    RETURN NULL;
+  1442→END;
+  1443→$$ LANGUAGE plpgsql SECURITY DEFINER;
+  1444→
+  1445→CREATE TRIGGER trg_bitacora_no_update
+  1446→    BEFORE UPDATE ON bitacora_auditoria
+  1447→    FOR EACH ROW EXECUTE FUNCTION fn_bitacora_proteger_inmutabilidad();
+  1448→
+  1449→CREATE TRIGGER trg_bitacora_no_delete
+  1450→    BEFORE DELETE ON bitacora_auditoria
+  1451→    FOR EACH ROW EXECUTE FUNCTION fn_bitacora_proteger_inmutabilidad();
+  1452→
+  1453→COMMENT ON FUNCTION fn_bitacora_proteger_inmutabilidad IS
+  1454→    'Trigger de protección: lanza EXCEPTION ante cualquier intento de UPDATE o DELETE en bitacora_auditoria. '
+  1455→    'Aplica incluso para el superusuario de PostgreSQL a menos que se desactive manualmente (operación CRÍTICA).';
+  1456→
+  1457→-- ─────────────────────────────────────────────────────────────
+  1458→-- FUNCIÓN: Cálculo de ISR mensual (helper reutilizable)
+  1459→-- Implementa la fórmula de tramos del Art. 37 Ley ISR.
+  1460→-- ─────────────────────────────────────────────────────────────
+  1461→CREATE OR REPLACE FUNCTION fn_calcular_isr_mensual(
+  1462→    p_renta_imponible   NUMERIC,
+  1463→    p_parametro_id      UUID
+  1464→)
+  1465→RETURNS NUMERIC AS $$
+  1466→DECLARE
+  1467→    v_tramo     RECORD;
+  1468→    v_isr       NUMERIC(10,2) := 0.00;
+  1469→BEGIN
+  1470→    IF p_renta_imponible <= 0 THEN
+  1471→        RETURN 0.00;
+  1472→    END IF;
+  1473→
+  1474→    SELECT INTO v_tramo *
+  1475→    FROM tramos_isr
+  1476→    WHERE parametro_legal_id = p_parametro_id
+  1477→      AND limite_inferior <= p_renta_imponible
+  1478→      AND (limite_superior IS NULL OR p_renta_imponible <= limite_superior)
+  1479→    ORDER BY numero_tramo
+  1480→    LIMIT 1;
+  1481→
+  1482→    IF FOUND THEN
+  1483→        v_isr := v_tramo.cuota_fija +
+  1484→                 ((p_renta_imponible - v_tramo.exceso_calculado_sobre) * v_tramo.tasa_marginal);
+  1485→        RETURN ROUND(GREATEST(v_isr, 0.00), 2);
+  1486→    END IF;
+  1487→
+  1488→    RETURN 0.00;
+  1489→END;
+  1490→$$ LANGUAGE plpgsql STABLE;
+  1491→
+  1492→COMMENT ON FUNCTION fn_calcular_isr_mensual IS
+  1493→    'Calcula la retención mensual de ISR aplicando la tabla de tramos vigente (Art. 37 Ley ISR). '
+  1494→    'Retorna NUMERIC(10,2) redondeado a 2 decimales. Sin uso de REAL ni DOUBLE PRECISION.';
+  1495→
+  1496→-- ─────────────────────────────────────────────────────────────
+  1497→-- FUNCIÓN: Obtener parámetro legal vigente en una fecha dada
+  1498→-- Crucial para recálculos históricos (usa los parámetros de su época).
+  1499→-- ─────────────────────────────────────────────────────────────
+  1500→CREATE OR REPLACE FUNCTION fn_parametro_vigente_en_fecha(p_fecha DATE)
+  1501→RETURNS UUID AS $$
+  1502→    SELECT id
+  1503→    FROM parametros_legales
+  1504→    WHERE fecha_vigencia_desde <= p_fecha
+  1505→      AND (fecha_vigencia_hasta IS NULL OR fecha_vigencia_hasta >= p_fecha)
+  1506→    ORDER BY fecha_vigencia_desde DESC
+  1507→    LIMIT 1;
+  1508→$$ LANGUAGE sql STABLE;
+  1509→
+  1510→COMMENT ON FUNCTION fn_parametro_vigente_en_fecha IS
+  1511→    'Retorna el UUID del parametro_legal vigente en la fecha indicada. '
+  1512→    'El motor de cálculo DEBE usar esta función para garantizar el principio de inmutabilidad retroactiva.';
+  1513→
+  1514→
+  1515→-- ============================================================================================================================
+  1516→-- SECCIÓN 7: DML DE CARGA INICIAL (SEMILLAS / INSERTS MAESTROS)
+  1517→-- Esta sección carga los datos mínimos para que el sistema sea funcional al ejecutarse por primera vez.
+  1518→-- ============================================================================================================================
+  1519→
+  1520→-- ─────────────────────────────────────────────────────────────
+  1521→-- SEMILLA: Catálogo de Bancos de El Salvador
+  1522→-- ─────────────────────────────────────────────────────────────
+  1523→INSERT INTO bancos (codigo, nombre, codigo_ach, formato_cuenta) VALUES
+  1524→    ('AGRIC', 'Banco Agrícola S.A.',                   'AGRI', '20 dígitos'),
+  1525→    ('DAVIVIENDA', 'Banco Davivienda Salvadoreño',     'DAVI', '14 dígitos'),
+  1526→    ('BAC', 'BAC Credomatic S.A.',                     'BACC', '10 dígitos'),
+  1527→    ('PROMERICA', 'Banco Promerica S.A.',               'PROM', '13 dígitos'),
+  1528→    ('G&T', 'Banco G&T Continental S.A.',              'GTCO', '11 dígitos'),
+  1529→    ('AZUL', 'Banco Azul de El Salvador S.A.',         'AZUL', '13 dígitos'),
+  1530→    ('BANCO_UNO', 'Banco Uno S.A.',                    'UNO1', '14 dígitos'),
+  1531→    ('ATLACATL', 'Banco Atlacatl S.A.',                'ATLA', '12 dígitos');
+  1532→
+  1533→-- ─────────────────────────────────────────────────────────────
+  1534→-- SEMILLA: Parámetros Legales Vigentes 2026
+  1535→-- Fuentes: Ley del Seguro Social, Ley SAP, Ley ISR, Decreto de Salarios Mínimos
+  1536→-- IMPORTANTE: Verificar y actualizar con los decretos oficiales más recientes antes de producción.
+  1537→-- ─────────────────────────────────────────────────────────────
+  1538→INSERT INTO parametros_legales (
+  1539→    descripcion_cambio, decreto_norma_origen,
+  1540→    tasa_isss_laboral, tasa_isss_patronal, tope_cotizacion_isss,
+  1541→    tasa_afp_laboral, tasa_afp_patronal,
+  1542→    tasa_insaforp, empleados_minimos_insaforp,
+  1543→    fecha_vigencia_desde, fecha_vigencia_hasta, estado
+  1544→) VALUES (
+  1545→    'Parámetros base vigentes 2026 — Carga inicial del sistema',
+  1546→    'Ley ISSS Art. 29; Ley SAP Arts. 16/38; Ley ISR Art. 37; Decreto salarios mínimos vigente',
+  1547→    0.0300,     -- 3.00% ISSS laboral
+  1548→    0.0750,     -- 7.50% ISSS patronal
+  1549→    1000.00,    -- Tope cotización ISSS: $1,000.00/mes
+  1550→    0.0725,     -- 7.25% AFP laboral
+  1551→    0.0875,     -- 8.75% AFP patronal
+  1552→    0.0100,     -- 1.00% INSAFORP
+  1553→    10,
+  1554→    '2026-01-01',
+  1555→    NULL,       -- NULL = actualmente vigente
+  1556→    'VIGENTE'
+  1557→);
+  1558→
+  1559→-- Tramos ISR Mensuales (Art. 37 Ley ISR — Tabla MH vigente 2026)
+  1560→-- NOTA: Verificar con el portal del Ministerio de Hacienda antes de producción.
+  1561→WITH p AS (SELECT id FROM parametros_legales WHERE estado = 'VIGENTE' LIMIT 1)
+  1562→INSERT INTO tramos_isr (
+  1563→    parametro_legal_id, numero_tramo,
+  1564→    limite_inferior, limite_superior,
+  1565→    cuota_fija, tasa_marginal, exceso_calculado_sobre
+  1566→)
+  1567→SELECT p.id, tramo, li, ls, cf, tm, es FROM p,
+  1568→(VALUES
+  1569→    (1,    0.00,   472.00,   0.00, 0.0000,    0.00),   -- 0% hasta $472.00
+  1570→    (2,  472.01,   895.24,   0.00, 0.1000,  472.00),   -- $0 + 10% s/exceso $472
+  1571→    (3,  895.25,  2038.10,  42.32, 0.2000,  895.24),   -- $42.32 + 20% s/exceso $895.24
+  1572→    (4, 2038.11,    NULL,  271.19, 0.3000, 2038.10)    -- $271.19 + 30% s/exceso $2,038.10
+  1573→) AS t(tramo, li, ls, cf, tm, es);
+  1574→
+  1575→-- Salarios Mínimos por Sector (vigentes 2026)
+  1576→-- NOTA: Confirmar con decretos del Ministerio de Trabajo antes de producción.
+  1577→WITH p AS (SELECT id FROM parametros_legales WHERE estado = 'VIGENTE' LIMIT 1)
+  1578→INSERT INTO salarios_minimos_sector (parametro_legal_id, sector, salario_mensual)
+  1579→SELECT p.id, sector::tipo_sector_laboral, monto FROM p,
+  1580→(VALUES
+  1581→    ('COMERCIO',      365.00),
+  1582→    ('INDUSTRIA',     359.16),
+  1583→    ('SERVICIOS',     365.00),
+  1584→    ('AGROPECUARIO',  274.22),
+  1585→    ('OTROS',         359.16)
+  1586→) AS t(sector, monto);
+  1587→
+  1588→-- ─────────────────────────────────────────────────────────────
+  1589→-- SEMILLA: Estructura Organizacional Base
+  1590→-- ─────────────────────────────────────────────────────────────
+  1591→INSERT INTO areas (codigo, nombre, descripcion, nivel) VALUES
+  1592→    ('EMP',     'Empresa',                      'Nivel raíz de la organización',         1),
+  1593→    ('RRHH',    'Recursos Humanos',             'Gestión del talento humano y nómina',   2),
+  1594→    ('FIN',     'Finanzas y Contabilidad',      'Control financiero y tributario',       2),
+  1595→    ('GER',     'Gerencia General',             'Dirección estratégica',                 2),
+  1596→    ('OPS',     'Operaciones',                  'Área operativa principal',              2),
+  1597→    ('SIT',     'Sistemas y Tecnología',        'Infraestructura y desarrollo TI',       2),
+  1598→    ('VEN',     'Ventas y Comercial',           'Gestión de ventas y clientes',          2);
+  1599→
+  1600→-- Actualizar áreas padre (excepto la raíz)
+  1601→UPDATE areas SET area_padre_id = (SELECT id FROM areas WHERE codigo = 'EMP')
+  1602→WHERE codigo IN ('RRHH','FIN','GER','OPS','SIT','VEN');
+  1603→
+  1604→-- ─────────────────────────────────────────────────────────────
+  1605→-- SEMILLA: Bandas Salariales Base
+  1606→-- ─────────────────────────────────────────────────────────────
+  1607→INSERT INTO bandas_salariales (nombre, sector, puntuacion_min, puntuacion_max, salario_minimo, salario_midpoint, salario_maximo) VALUES
+  1608→    ('Banda 1 — Operativo Básico',      'COMERCIO',  100, 199,   365.00,   450.00,   600.00),
+  1609→    ('Banda 2 — Operativo Calificado',  'COMERCIO',  200, 299,   500.00,   700.00,   900.00),
+  1610→    ('Banda 3 — Técnico',               'COMERCIO',  300, 399,   700.00,  1000.00,  1300.00),
+  1611→    ('Banda 4 — Profesional',           'COMERCIO',  400, 499,  1000.00,  1500.00,  2200.00),
+  1612→    ('Banda 5 — Jefatura',              'COMERCIO',  500, 599,  1500.00,  2200.00,  3200.00),
+  1613→    ('Banda 6 — Gerencia',              'COMERCIO',  600, 699,  2500.00,  3800.00,  5500.00),
+  1614→    ('Banda 7 — Dirección',             'COMERCIO',  700, 999,  4000.00,  6500.00, 12000.00);
+  1615→
+  1616→-- ─────────────────────────────────────────────────────────────
+  1617→-- SEMILLA: Usuario Administrador por Defecto
+  1618→-- CONTRASEÑA: Admin@2026! (hash bcrypt simulado — CAMBIAR OBLIGATORIAMENTE en primer login)
+  1619→-- El flag debe_cambiar_contrasena=TRUE fuerza el cambio en el primer acceso.
+  1620→-- ─────────────────────────────────────────────────────────────
+  1621→INSERT INTO usuarios (
+  1622→    email,
+  1623→    password_hash,
+  1624→    primer_nombre,
+  1625→    primer_apellido,
+  1626→    rol,
+  1627→    estado,
+  1628→    debe_cambiar_contrasena
+  1629→) VALUES (
+  1630→    'admin@empresa.com.sv',
+  1631→    -- Hash bcrypt factor 12 de la contraseña temporal 'Admin@2026!'
+  1632→    -- ⚠️  ESTE HASH ES SOLO PARA CARGA INICIAL. Cambiar en primer login.
+  1633→    '$2b$12$SimulatedHashForInitialSeedOnlyMustBeChangedOnFirstLogin',
+  1634→    'Administrador',
+  1635→    'Sistema',
+  1636→    'ADMIN',
+  1637→    'ACTIVO',
+  1638→    TRUE    -- Fuerza cambio de contraseña en el primer login
+  1639→);
+  1640→
+  1641→-- ─────────────────────────────────────────────────────────────
+  1642→-- SEMILLA: Integraciones Externas (desactivadas por defecto — configurar antes de usar)
+  1643→-- ─────────────────────────────────────────────────────────────
+  1644→INSERT INTO integraciones_externas (nombre, tipo, url_endpoint, activa) VALUES
+  1645→    ('ISSS — Sistema OIS',          'ISSS_OIS',       'https://ois.isss.gob.sv',      FALSE),
+  1646→    ('AFP Crecer — SEPP',           'AFP_SEPP',       'https://sepp.afpcrecer.com.sv', FALSE),
+  1647→    ('AFP Confía — SEPP',           'AFP_SEPP',       'https://sepp.afpconfia.com.sv', FALSE),
+  1648→    ('Banco Principal ACH',         'BANCO_ACH',       NULL,                           FALSE),
+  1649→    ('Servidor SMTP Corporativo',   'SMTP',            NULL,                           FALSE),
+  1650→    ('Servicio Firma Digital',      'FIRMA_DIGITAL',   NULL,                           FALSE);
+  1651→
+  1652→-- ─────────────────────────────────────────────────────────────
+  1653→-- SEMILLA: Perfil de Puesto base — Administrador del Sistema
+  1654→-- Necesario para vincular el usuario admin con un empleado si se requiere
+  1655→-- ─────────────────────────────────────────────────────────────
+  1656→INSERT INTO perfiles_puesto (
+  1657→    codigo, nombre_cargo, area_id, nivel_jerarquico,
+  1658→    tipo_jornada_cargo, sector_laboral, plazas_presupuestadas, estado
+  1659→)
+  1660→SELECT
+  1661→    'CARGO-001', 'Administrador del Sistema de Nómina',
+  1662→    a.id, 'PROFESIONAL', 'DIURNA', 'SERVICIOS', 1, 'VIGENTE'
+  1663→FROM areas a WHERE a.codigo = 'SIT';
+  1664→
+  1665→-- ─────────────────────────────────────────────────────────────
+  1666→-- REGISTRO INICIAL EN BITÁCORA
+  1667→-- El primer evento de auditoría documenta la carga inicial del schema.
+  1668→-- ─────────────────────────────────────────────────────────────
+  1669→INSERT INTO bitacora_auditoria (
+  1670→    usuario_email, accion, tabla_afectada,
+  1671→    resultado, nivel_criticidad, detalle_adicional
+  1672→) VALUES (
+  1673→    'system@nomina-sv.init',
+  1674→    'INSERT',
+  1675→    'SISTEMA',
+  1676→    'EXITOSO',
+  1677→    'CRITICO',
+  1678→    'Carga inicial del schema DDL/DML completada. Sistema de Nómina El Salvador v1.0. '
+  1679→    'Usuario administrador creado: admin@empresa.com.sv — Cambio de contraseña obligatorio en primer login. '
+  1680→    'Parámetros legales vigentes cargados al ' || NOW()::TEXT
+  1681→);
+  1682→
+  1683→-- ─────────────────────────────────────────────────────────────
+  1684→-- AGREGAR FKs DIFERIDAS (resolver dependencias circulares)
+  1685→-- ─────────────────────────────────────────────────────────────
+  1686→
+  1687→-- parametros_legales.creado_por_usuario_id → usuarios
+  1688→ALTER TABLE parametros_legales
+  1689→    ADD CONSTRAINT fk_pl_creador
+  1690→    FOREIGN KEY (creado_por_usuario_id)
+  1691→    REFERENCES usuarios(id) ON DELETE SET NULL;
+  1692→
+  1693→-- usuarios.empleado_id → empleados
+  1694→ALTER TABLE usuarios
+  1695→    ADD CONSTRAINT fk_usr_empleado
+  1696→    FOREIGN KEY (empleado_id)
+  1697→    REFERENCES empleados(id) ON DELETE SET NULL;
+  1698→
+  1699→-- usuarios.creado_por_id → usuarios (self-reference)
+  1700→ALTER TABLE usuarios
+  1701→    ADD CONSTRAINT fk_usr_creador
+  1702→    FOREIGN KEY (creado_por_id)
+  1703→    REFERENCES usuarios(id) ON DELETE SET NULL;
+  1704→
+  1705→-- vacaciones_empleado.liquidacion_id → liquidaciones (ya fue agregado previamente mediante ALTER TABLE)
+  1706→-- perfiles_puesto.creado_por_id → usuarios (ya definido)
+  1707→
+  1708→COMMIT;
+  1709→
+  1710→-- ============================================================================================================================
+  1711→-- FIN DEL SCRIPT
+  1712→-- ============================================================================================================================
+  1713→-- RESUMEN DE OBJETOS CREADOS:
+  1714→--   • 22 tipos ENUM
+  1715→--   •  2 funciones PL/pgSQL (fn_calcular_isr_mensual, fn_parametro_vigente_en_fecha)
+  1716→--   •  2 triggers de inmutabilidad en bitacora_auditoria
+  1717→--   • 35 tablas con PRIMARY KEY, FOREIGN KEY, CHECK y UNIQUE constraints
+  1718→--   •  8 índices adicionales de rendimiento
+  1719→--   • DML inicial: 8 bancos, parámetros legales 2026 (ISSS/AFP/ISR/salarios mínimos),
+  1720→--     7 áreas organizacionales, 7 bandas salariales, 1 usuario ADMIN,
+  1721→--     6 integraciones externas (inactivas), 1 perfil de puesto base.
+  1722→--
+  1723→-- PRÓXIMOS PASOS OBLIGATORIOS:
+  1724→--   1. Cambiar el hash de contraseña del admin en primer login.
+  1725→--   2. Verificar y actualizar parámetros legales con decretos oficiales vigentes.
+  1726→--   3. Configurar credenciales de integraciones (ISSS, AFP, bancos, SMTP).
+  1727→--   4. Crear un rol de PostgreSQL READ-ONLY para la bitácora_auditoria:
+  1728→--      GRANT SELECT ON bitacora_auditoria TO rol_auditor;
+  1729→--      REVOKE INSERT, UPDATE, DELETE ON bitacora_auditoria FROM PUBLIC;
+  1730→--   5. Ejecutar ANALYZE en todas las tablas después de la carga inicial de datos de producción.
+  1731→-- ============================================================================================================================
+  1732→

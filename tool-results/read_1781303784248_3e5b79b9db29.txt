@@ -1,0 +1,879 @@
+     1→import { db } from '../src/lib/db';
+     2→import { hashPassword } from '../src/lib/auth';
+     3→
+     4→async function main() {
+     5→  console.log('🌱 Seeding database...');
+     6→
+     7→  // ============================================================
+     8→  // 1. DEMO USERS
+     9→  // ============================================================
+    10→  console.log('\n📋 Creating demo users...');
+    11→  const users = [
+    12→    {
+    13→      email: 'admin@nomina.gob.sv',
+    14→      nombre: 'Carlos',
+    15→      apellido: 'Hernández',
+    16→      rol: 'ADMIN',
+    17→      password: 'Admin2026!',
+    18→    },
+    19→    {
+    20→      email: 'analista@nomina.gob.sv',
+    21→      nombre: 'María',
+    22→      apellido: 'López',
+    23→      rol: 'ANALISTA',
+    24→      password: 'Analista2026!',
+    25→    },
+    26→    {
+    27→      email: 'aprobador@nomina.gob.sv',
+    28→      nombre: 'Roberto',
+    29→      apellido: 'García',
+    30→      rol: 'APROBADOR',
+    31→      password: 'Aprobador2026!',
+    32→    },
+    33→    {
+    34→      email: 'gerencia@nomina.gob.sv',
+    35→      nombre: 'Ana',
+    36→      apellido: 'Martínez',
+    37→      rol: 'GERENCIA',
+    38→      password: 'Gerencia2026!',
+    39→    },
+    40→    {
+    41→      email: 'auditor@nomina.gob.sv',
+    42→      nombre: 'Jorge',
+    43→      apellido: 'Rivera',
+    44→      rol: 'AUDITOR',
+    45→      password: 'Auditor2026!',
+    46→    },
+    47→    {
+    48→      email: 'empleado@nomina.gob.sv',
+    49→      nombre: 'Laura',
+    50→      apellido: 'Peña',
+    51→      rol: 'EMPLEADO',
+    52→      password: 'Empleado2026!',
+    53→    },
+    54→  ];
+    55→
+    56→  const userMap: Record<string, string> = {};
+    57→  for (const u of users) {
+    58→    const existing = await db.usuario.findUnique({ where: { email: u.email } });
+    59→    if (!existing) {
+    60→      const passwordHash = await hashPassword(u.password);
+    61→      const created = await db.usuario.create({
+    62→        data: {
+    63→          email: u.email,
+    64→          password_hash: passwordHash,
+    65→          nombre: u.nombre,
+    66→          apellido: u.apellido,
+    67→          rol: u.rol,
+    68→          estado: 'ACTIVO',
+    69→          debe_cambiar_password: false,
+    70→        },
+    71→      });
+    72→      userMap[u.rol] = created.id;
+    73→      console.log(`  ✅ Created user: ${u.email} (${u.rol})`);
+    74→    } else {
+    75→      userMap[u.rol] = existing.id;
+    76→      console.log(`  ⏭️  User already exists: ${u.email}`);
+    77→    }
+    78→  }
+    79→
+    80→  // ============================================================
+    81→  // 2. BANKS
+    82→  // ============================================================
+    83→  console.log('\n🏦 Creating banks...');
+    84→  const banks = [
+    85→    { codigo: 'BAC', nombre: 'BAC Credomatic', codigo_ach: 'BAC', formato_cuenta: '17 dígitos', activo: true },
+    86→    { codigo: 'AGR', nombre: 'Banco Agrícola', codigo_ach: 'BAG', formato_cuenta: '14 dígitos', activo: true },
+    87→    { codigo: 'CUS', nombre: 'Banco Cuscatlán', codigo_ach: 'BCU', formato_cuenta: '14 dígitos', activo: true },
+    88→    { codigo: 'DAV', nombre: 'Banco Davivienda', codigo_ach: 'BDA', formato_cuenta: '14 dígitos', activo: true },
+    89→    { codigo: 'PRO', nombre: 'Banco Promérica', codigo_ach: 'BPR', formato_cuenta: '15 dígitos', activo: true },
+    90→    { codigo: 'SCO', nombre: 'Scotiabank', codigo_ach: 'SCO', formato_cuenta: '14 dígitos', activo: true },
+    91→    { codigo: 'ATL', nombre: 'Banco Atlántida', codigo_ach: 'BAT', formato_cuenta: '14 dígitos', activo: true },
+    92→    { codigo: 'ABA', nombre: 'Banco ABANK', codigo_ach: 'ABA', formato_cuenta: '14 dígitos', activo: true },
+    93→  ];
+    94→
+    95→  for (const bank of banks) {
+    96→    const existing = await db.banco.findUnique({ where: { codigo: bank.codigo } });
+    97→    if (!existing) {
+    98→      await db.banco.create({ data: bank });
+    99→      console.log(`  ✅ Created bank: ${bank.nombre}`);
+   100→    } else {
+   101→      console.log(`  ⏭️  Bank already exists: ${bank.nombre}`);
+   102→    }
+   103→  }
+   104→
+   105→  // ============================================================
+   106→  // 3. AREAS (with hierarchy)
+   107→  // ============================================================
+   108→  console.log('\n🏢 Creating areas...');
+   109→  const areaMap: Record<string, string> = {};
+   110→
+   111→  // Parent area: Gerencia General
+   112→  let ggArea = await db.area.findUnique({ where: { codigo: 'GG' } });
+   113→  if (!ggArea) {
+   114→    ggArea = await db.area.create({
+   115→      data: {
+   116→        nombre: 'Gerencia General',
+   117→        codigo: 'GG',
+   118→        descripcion: 'Gerencia General de la empresa',
+   119→        nivel: 1,
+   120→        activo: true,
+   121→      },
+   122→    });
+   123→    console.log('  ✅ Created area: Gerencia General');
+   124→  } else {
+   125→    console.log('  ⏭️  Area already exists: Gerencia General');
+   126→  }
+   127→  areaMap['GG'] = ggArea.id;
+   128→
+   129→  // Level 2 areas (children of GG)
+   130→  const level2Areas = [
+   131→    { nombre: 'Recursos Humanos', codigo: 'RRHH', descripcion: 'Departamento de Recursos Humanos', nivel: 2 },
+   132→    { nombre: 'Finanzas', codigo: 'FIN', descripcion: 'Departamento de Finanzas', nivel: 2 },
+   133→    { nombre: 'Operaciones', codigo: 'OPS', descripcion: 'Departamento de Operaciones', nivel: 2 },
+   134→    { nombre: 'Tecnología', codigo: 'TEC', descripcion: 'Departamento de Tecnología', nivel: 2 },
+   135→  ];
+   136→
+   137→  for (const area of level2Areas) {
+   138→    let existing = await db.area.findUnique({ where: { codigo: area.codigo } });
+   139→    if (!existing) {
+   140→      existing = await db.area.create({
+   141→        data: {
+   142→          nombre: area.nombre,
+   143→          codigo: area.codigo,
+   144→          descripcion: area.descripcion,
+   145→          nivel: area.nivel,
+   146→          area_padre_id: ggArea.id,
+   147→          activo: true,
+   148→        },
+   149→      });
+   150→      console.log(`  ✅ Created area: ${area.nombre}`);
+   151→    } else {
+   152→      console.log(`  ⏭️  Area already exists: ${area.nombre}`);
+   153→    }
+   154→    areaMap[area.codigo] = existing.id;
+   155→  }
+   156→
+   157→  // Level 3 areas (children of their respective parents)
+   158→  const level3Areas = [
+   159→    { nombre: 'Contabilidad', codigo: 'CON', descripcion: 'Sección de Contabilidad', nivel: 3, parentCodigo: 'FIN' },
+   160→    { nombre: 'Ventas', codigo: 'VEN', descripcion: 'Sección de Ventas', nivel: 3, parentCodigo: 'OPS' },
+   161→  ];
+   162→
+   163→  for (const area of level3Areas) {
+   164→    let existing = await db.area.findUnique({ where: { codigo: area.codigo } });
+   165→    if (!existing) {
+   166→      existing = await db.area.create({
+   167→        data: {
+   168→          nombre: area.nombre,
+   169→          codigo: area.codigo,
+   170→          descripcion: area.descripcion,
+   171→          nivel: area.nivel,
+   172→          area_padre_id: areaMap[area.parentCodigo],
+   173→          activo: true,
+   174→        },
+   175→      });
+   176→      console.log(`  ✅ Created area: ${area.nombre}`);
+   177→    } else {
+   178→      console.log(`  ⏭️  Area already exists: ${area.nombre}`);
+   179→    }
+   180→    areaMap[area.codigo] = existing.id;
+   181→  }
+   182→
+   183→  // ============================================================
+   184→  // 4. SALARY BANDS (replace existing if wrong count)
+   185→  // ============================================================
+   186→  console.log('\n💰 Creating salary bands...');
+   187→  const existingBandCount = await db.bandaSalarial.count();
+   188→  const bandMap: Record<number, string> = {};
+   189→
+   190→  if (existingBandCount === 0) {
+   191→    const bands = [
+   192→      { nombre: 'Banda 1 - Operativo', grado: 1, salario_minimo: 365.00, salario_medio: 480.00, salario_maximo: 600.00 },
+   193→      { nombre: 'Banda 2 - Técnico', grado: 2, salario_minimo: 500.00, salario_medio: 650.00, salario_maximo: 850.00 },
+   194→      { nombre: 'Banda 3 - Administrativo', grado: 3, salario_minimo: 700.00, salario_medio: 950.00, salario_maximo: 1200.00 },
+   195→      { nombre: 'Banda 4 - Profesional', grado: 4, salario_minimo: 1000.00, salario_medio: 1400.00, salario_maximo: 1800.00 },
+   196→      { nombre: 'Banda 5 - Supervisor', grado: 5, salario_minimo: 1500.00, salario_medio: 2000.00, salario_maximo: 2500.00 },
+   197→      { nombre: 'Banda 6 - Gerencia Media', grado: 6, salario_minimo: 2200.00, salario_medio: 3100.00, salario_maximo: 4000.00 },
+   198→      { nombre: 'Banda 7 - Alta Gerencia', grado: 7, salario_minimo: 3500.00, salario_medio: 5000.00, salario_maximo: 7000.00 },
+   199→    ];
+   200→
+   201→    for (const band of bands) {
+   202→      const created = await db.bandaSalarial.create({ data: band });
+   203→      bandMap[band.grado] = created.id;
+   204→      console.log(`  ✅ Created band: ${band.nombre}`);
+   205→    }
+   206→  } else {
+   207→    // Load existing bands into map
+   208→    const existingBands = await db.bandaSalarial.findMany({ orderBy: { grado: 'asc' } });
+   209→    for (const band of existingBands) {
+   210→      bandMap[band.grado] = band.id;
+   211→    }
+   212→    console.log(`  ⏭️  Salary bands already exist (${existingBandCount} bands)`);
+   213→  }
+   214→
+   215→  // ============================================================
+   216→  // 5. LEGAL PARAMETERS (with ISR Tramos + Salarios Mínimos)
+   217→  // ============================================================
+   218→  console.log('\n⚖️ Creating legal parameters...');
+   219→  const existingParams = await db.parametroLegal.findFirst({ where: { estado: 'ACTIVO' } });
+   220→  let parametroLegalId: string;
+   221→
+   222→  if (!existingParams) {
+   223→    const param = await db.parametroLegal.create({
+   224→      data: {
+   225→        descripcion_cambio: 'Parámetros legales iniciales 2026 - ISR y Salarios Mínimos',
+   226→        decreto_norma_origen: 'Decreto Legislativo 2026 - Código Tributario y Ley de Salario Mínimo',
+   227→        tasa_isss_laboral: 0.03,
+   228→        tasa_isss_patronal: 0.075,
+   229→        tope_cotizacion_isss: 1000.00,
+   230→        tasa_afp_laboral: 0.0725,
+   231→        tasa_afp_patronal: 0.0875,
+   232→        tasa_insaforp: 0.01,
+   233→        empleados_minimos_insaforp: 10,
+   234→        fecha_vigencia_desde: new Date('2026-01-01'),
+   235→        estado: 'ACTIVO',
+   236→        creado_por_id: userMap['ADMIN'],
+   237→        tramos_isr: {
+   238→          create: [
+   239→            { numero_tramo: 1, desde: 0.01, hasta: 472.00, porcentaje: 0.00, cuota_fija: 0.00 },
+   240→            { numero_tramo: 2, desde: 472.01, hasta: 895.24, porcentaje: 0.10, cuota_fija: 17.67 },
+   241→            { numero_tramo: 3, desde: 895.25, hasta: 2038.10, porcentaje: 0.20, cuota_fija: 107.39 },
+   242→            { numero_tramo: 4, desde: 2038.11, hasta: null, porcentaje: 0.30, cuota_fija: 310.76 },
+   243→          ],
+   244→        },
+   245→        salarios_minimos: {
+   246→          create: [
+   247→            { sector: 'COMERCIO', salario_mensual: 365.00 },
+   248→            { sector: 'INDUSTRIA', salario_mensual: 365.00 },
+   249→            { sector: 'SERVICIOS', salario_mensual: 365.00 },
+   250→            { sector: 'AGROPECUARIO', salario_mensual: 246.87 },
+   251→            { sector: 'MAQUILA', salario_mensual: 352.72 },
+   252→            { sector: 'TRANSPORTE', salario_mensual: 365.00 },
+   253→          ],
+   254→        },
+   255→      },
+   256→    });
+   257→    parametroLegalId = param.id;
+   258→    console.log('  ✅ Created legal parameters with ISR tramos and salarios mínimos');
+   259→  } else {
+   260→    parametroLegalId = existingParams.id;
+   261→    // Check if tramos exist for this parameter
+   262→    const existingTramos = await db.tramoISR.count({ where: { parametro_legal_id: existingParams.id } });
+   263→    if (existingTramos === 0) {
+   264→      await db.tramoISR.createMany({
+   265→        data: [
+   266→          { parametro_legal_id: existingParams.id, numero_tramo: 1, desde: 0.01, hasta: 472.00, porcentaje: 0.00, cuota_fija: 0.00 },
+   267→          { parametro_legal_id: existingParams.id, numero_tramo: 2, desde: 472.01, hasta: 895.24, porcentaje: 0.10, cuota_fija: 17.67 },
+   268→          { parametro_legal_id: existingParams.id, numero_tramo: 3, desde: 895.25, hasta: 2038.10, porcentaje: 0.20, cuota_fija: 107.39 },
+   269→          { parametro_legal_id: existingParams.id, numero_tramo: 4, desde: 2038.11, hasta: null, porcentaje: 0.30, cuota_fija: 310.76 },
+   270→        ],
+   271→      });
+   272→      console.log('  ✅ Added ISR tramos to existing parameter');
+   273→    } else {
+   274→      console.log('  ⏭️  ISR tramos already exist');
+   275→    }
+   276→
+   277→    // Check if salarios mínimos exist
+   278→    const existingSalarios = await db.salarioMinimoSector.count({ where: { parametro_legal_id: existingParams.id } });
+   279→    if (existingSalarios === 0) {
+   280→      await db.salarioMinimoSector.createMany({
+   281→        data: [
+   282→          { parametro_legal_id: existingParams.id, sector: 'COMERCIO', salario_mensual: 365.00 },
+   283→          { parametro_legal_id: existingParams.id, sector: 'INDUSTRIA', salario_mensual: 365.00 },
+   284→          { parametro_legal_id: existingParams.id, sector: 'SERVICIOS', salario_mensual: 365.00 },
+   285→          { parametro_legal_id: existingParams.id, sector: 'AGROPECUARIO', salario_mensual: 246.87 },
+   286→          { parametro_legal_id: existingParams.id, sector: 'MAQUILA', salario_mensual: 352.72 },
+   287→          { parametro_legal_id: existingParams.id, sector: 'TRANSPORTE', salario_mensual: 365.00 },
+   288→        ],
+   289→      });
+   290→      console.log('  ✅ Added salarios mínimos to existing parameter');
+   291→    } else {
+   292→      console.log('  ⏭️  Salarios mínimos already exist');
+   293→    }
+   294→    console.log('  ⏭️  Legal parameters already exist');
+   295→  }
+   296→
+   297→  // ============================================================
+   298→  // 6. JOB PROFILES (Perfiles de Puesto)
+   299→  // ============================================================
+   300→  console.log('\n📋 Creating job profiles...');
+   301→  const perfilMap: Record<string, string> = {};
+   302→
+   303→  // Get the admin user id for creado_por_id
+   304→  const adminUserId = userMap['ADMIN'];
+   305→
+   306→  const profiles = [
+   307→    {
+   308→      codigo: 'CARGO-001',
+   309→      nombre_puesto: 'Gerente General',
+   310→      area_codigo: 'GG',
+   311→      banda_grado: 7,
+   312→      sector_laboral: 'COMERCIO',
+   313→      puntos_total: 850,
+   314→      proposito: 'Dirigir y gestionar las operaciones generales de la empresa, asegurando el cumplimiento de los objetivos estratégicos y la rentabilidad del negocio.',
+   315→      funciones_esenciales: 'Establecer la visión y estrategia de la empresa|Supervisar a los gerentes de área|Aprobar presupuestos y planes operativos|Representar a la empresa ante autoridades y stakeholders|Tomar decisiones estratégicas de alto nivel',
+   316→      requisitos_educacion: 'Licenciatura en Administración de Empresas o afín, Maestría deseable',
+   317→      requisitos_experiencia: 'Mínimo 10 años de experiencia en gerencia, 5 en posiciones de alta dirección',
+   318→      requisitos_habilidades: 'Liderazgo estratégico|Toma de decisiones|Negociación|Comunicación efectiva|Gestión del cambio',
+   319→      estado: 'VIGENTE',
+   320→    },
+   321→    {
+   322→      codigo: 'CARGO-002',
+   323→      nombre_puesto: 'Gerente de RRHH',
+   324→      area_codigo: 'RRHH',
+   325→      banda_grado: 6,
+   326→      sector_laboral: 'COMERCIO',
+   327→      puntos_total: 720,
+   328→      proposito: 'Diseñar, implementar y supervisar las políticas de recursos humanos para atraer, retener y desarrollar el talento humano de la organización.',
+   329→      funciones_esenciales: 'Desarrollar políticas de RRHH alineadas a la estrategia|Gestionar nómina y compensaciones|Supervisar reclutamiento y selección|Administrar relaciones laborales|Garantizar cumplimiento legal laboral',
+   330→      requisitos_educacion: 'Licenciatura en Administración de Recursos Humanos o Psicología Industrial',
+   331→      requisitos_experiencia: 'Mínimo 7 años en gestión de recursos humanos, 3 en posición gerencial',
+   332→      requisitos_habilidades: 'Gestión de talento|Conocimiento laboral|Mediación|Análisis de datos|Liderazgo',
+   333→      estado: 'VIGENTE',
+   334→    },
+   335→    {
+   336→      codigo: 'CARGO-003',
+   337→      nombre_puesto: 'Analista de Nómina',
+   338→      area_codigo: 'RRHH',
+   339→      banda_grado: 3,
+   340→      sector_laboral: 'COMERCIO',
+   341→      puntos_total: 450,
+   342→      proposito: 'Procesar y administrar la nómina de la empresa, realizando los cálculos de salarios, deducciones y retenciones de acuerdo con la legislación laboral vigente.',
+   343→      funciones_esenciales: 'Calcular y procesar nómina mensual y quincenal|Elaborar planillas de ISSS, AFP y ISR|Gestionar incidencias de nómina|Preparar reportes de costos laborales|Mantener actualizada la información salarial',
+   344→      requisitos_educacion: 'Técnico o Licenciatura en Contabilidad o Administración de Empresas',
+   345→      requisitos_experiencia: 'Mínimo 2 años en procesamiento de nóminas',
+   346→      requisitos_habilidades: 'Cálculo numérico|Atención al detalle|Conocimiento de legislación laboral|Excel avanzado|Análisis de datos',
+   347→      estado: 'VIGENTE',
+   348→    },
+   349→    {
+   350→      codigo: 'CARGO-004',
+   351→      nombre_puesto: 'Contador',
+   352→      area_codigo: 'CON',
+   353→      banda_grado: 4,
+   354→      sector_laboral: 'COMERCIO',
+   355→      puntos_total: 510,
+   356→      proposito: 'Gestionar la contabilidad general de la empresa, asegurando el registro fiel de las operaciones financieras y el cumplimiento de las obligaciones tributarias.',
+   357→      funciones_esenciales: 'Registrar operaciones contables diarias|Elaborar estados financieros|Calcular y declarar impuestos|Conciliar cuentas bancarias|Preparar informes de gestión financiera',
+   358→      requisitos_educacion: 'Licenciatura en Contaduría Pública',
+   359→      requisitos_experiencia: 'Mínimo 3 años en contabilidad general, experiencia en declaraciones tributarias',
+   360→      requisitos_habilidades: 'Contabilidad general|Normas tributarias|Análisis financiero|Sistemas contables|Organización',
+   361→      estado: 'VIGENTE',
+   362→    },
+   363→    {
+   364→      codigo: 'CARGO-005',
+   365→      nombre_puesto: 'Desarrollador de Software',
+   366→      area_codigo: 'TEC',
+   367→      banda_grado: 4,
+   368→      sector_laboral: 'COMERCIO',
+   369→      puntos_total: 530,
+   370→      proposito: 'Diseñar, desarrollar y mantener aplicaciones de software que soporten los procesos de negocio de la empresa.',
+   371→      funciones_esenciales: 'Desarrollar aplicaciones web y móviles|Diseñar arquitectura de software|Realizar pruebas de calidad|Documentar código y procesos|Dar soporte técnico a sistemas en producción',
+   372→      requisitos_educacion: 'Ingeniería en Sistemas Informáticos o afín',
+   373→      requisitos_experiencia: 'Mínimo 3 años en desarrollo de software',
+   374→      requisitos_habilidades: 'TypeScript/JavaScript|React/Next.js|Bases de datos|APIs REST|Metodologías ágiles',
+   375→      estado: 'VIGENTE',
+   376→    },
+   377→    {
+   378→      codigo: 'CARGO-006',
+   379→      nombre_puesto: 'Vendedor',
+   380→      area_codigo: 'VEN',
+   381→      banda_grado: 1,
+   382→      sector_laboral: 'COMERCIO',
+   383→      puntos_total: 280,
+   384→      proposito: 'Promover y vender los productos o servicios de la empresa, alcanzando las metas comerciales establecidas.',
+   385→      funciones_esenciales: 'Atender clientes y prospects|Realizar cotizaciones|Seguir el proceso de venta|Cumplir metas de ventas|Mantener actualizado el CRM',
+   386→      requisitos_educacion: 'Bachillerato, estudios técnicos en ventas deseables',
+   387→      requisitos_experiencia: 'Mínimo 1 año en ventas o atención al cliente',
+   388→      requisitos_habilidades: 'Comunicación|Persuasión|Orientación a resultados|Servicio al cliente|Trabajo en equipo',
+   389→      estado: 'VIGENTE',
+   390→    },
+   391→    {
+   392→      codigo: 'CARGO-007',
+   393→      nombre_puesto: 'Operario',
+   394→      area_codigo: 'OPS',
+   395→      banda_grado: 1,
+   396→      sector_laboral: 'INDUSTRIA',
+   397→      puntos_total: 250,
+   398→      proposito: 'Ejecutar las operaciones de producción y manufactura de acuerdo con los procedimientos y estándares de calidad establecidos.',
+   399→      funciones_esenciales: 'Operar maquinaria y equipo de producción|Realizar tareas de ensamblaje|Controlar calidad del producto|Mantener orden y limpieza del área|Reportar anomalías en el proceso',
+   400→      requisitos_educacion: 'Educación básica completa, capacitación técnica en producción deseable',
+   401→      requisitos_experiencia: 'No requiere experiencia previa, se brinda capacitación',
+   402→      requisitos_habilidades: 'Destreza manual|Atención al detalle|Cumplimiento de normas|Trabajo en equipo|Responsabilidad',
+   403→      estado: 'VIGENTE',
+   404→    },
+   405→  ];
+   406→
+   407→  for (const profile of profiles) {
+   408→    const existing = await db.perfilPuesto.findUnique({ where: { codigo: profile.codigo } });
+   409→    if (!existing) {
+   410→      const created = await db.perfilPuesto.create({
+   411→        data: {
+   412→          codigo: profile.codigo,
+   413→          nombre_puesto: profile.nombre_puesto,
+   414→          area_id: areaMap[profile.area_codigo],
+   415→          banda_salarial_id: bandMap[profile.banda_grado] || null,
+   416→          sector_laboral: profile.sector_laboral,
+   417→          proposito: profile.proposito,
+   418→          funciones_esenciales: profile.funciones_esenciales,
+   419→          requisitos_educacion: profile.requisitos_educacion,
+   420→          requisitos_experiencia: profile.requisitos_experiencia,
+   421→          requisitos_habilidades: profile.requisitos_habilidades,
+   422→          puntos_total: profile.puntos_total,
+   423→          estado: profile.estado,
+   424→          creado_por_id: adminUserId,
+   425→        },
+   426→      });
+   427→      perfilMap[profile.nombre_puesto] = created.id;
+   428→      console.log(`  ✅ Created profile: ${profile.nombre_puesto} (${profile.codigo})`);
+   429→    } else {
+   430→      perfilMap[profile.nombre_puesto] = existing.id;
+   431→      console.log(`  ⏭️  Profile already exists: ${profile.nombre_puesto}`);
+   432→    }
+   433→  }
+   434→
+   435→  // ============================================================
+   436→  // 7. EMPLOYEES + CONTRACTS + VACATIONS
+   437→  // ============================================================
+   438→  console.log('\n👥 Creating employees...');
+   439→
+   440→  const employees = [
+   441→    {
+   442→      codigo_empleado: 'EMP-00001',
+   443→      primer_nombre: 'Juan',
+   444→      segundo_nombre: 'Carlos',
+   445→      primer_apellido: 'Pérez',
+   446→      segundo_apellido: 'García',
+   447→      dui: '12345678-1',
+   448→      nit: '1234-123456-101-0',
+   449→      fecha_nacimiento: new Date('1975-03-15'),
+   450→      genero: 'MASCULINO',
+   451→      estado_civil: 'CASADO',
+   452→      direccion: 'Col. Escalón, Av. Las Palmas #123, San Salvador',
+   453→      telefono: '2222-1234',
+   454→      email_personal: 'juan.perez@gmail.com',
+   455→      numero_isss: '12345678',
+   456→      numero_afp: 'AFP123456',
+   457→      afp_administradora: 'CONFIA',
+   458→      tipo_sangre: 'O+',
+   459→      contacto_emergencia_nombre: 'María Pérez',
+   460→      contacto_emergencia_telefono: '2222-5678',
+   461→      contacto_emergencia_relacion: 'Esposa',
+   462→      fecha_ingreso: new Date('2023-01-15'),
+   463→      salario_base: 5000.00,
+   464→      perfil_puesto_nombre: 'Gerente General',
+   465→      area_codigo: 'GG',
+   466→      tipo_contrato: 'INDEFINIDO',
+   467→      tipo_jornada: 'COMPLETA',
+   468→    },
+   469→    {
+   470→      codigo_empleado: 'EMP-00002',
+   471→      primer_nombre: 'María',
+   472→      segundo_nombre: 'Elena',
+   473→      primer_apellido: 'Rodríguez',
+   474→      segundo_apellido: 'López',
+   475→      dui: '23456789-2',
+   476→      nit: '2345-234567-102-0',
+   477→      fecha_nacimiento: new Date('1980-07-22'),
+   478→      genero: 'FEMENINO',
+   479→      estado_civil: 'CASADA',
+   480→      direccion: 'Col. San Benito, Pje. 3 #456, San Salvador',
+   481→      telefono: '2222-3456',
+   482→      email_personal: 'maria.rodriguez@gmail.com',
+   483→      numero_isss: '23456789',
+   484→      numero_afp: 'AFP234567',
+   485→      afp_administradora: 'CRECER',
+   486→      tipo_sangre: 'A+',
+   487→      contacto_emergencia_nombre: 'José Rodríguez',
+   488→      contacto_emergencia_telefono: '2222-7890',
+   489→      contacto_emergencia_relacion: 'Esposo',
+   490→      fecha_ingreso: new Date('2023-03-01'),
+   491→      salario_base: 3100.00,
+   492→      perfil_puesto_nombre: 'Gerente de RRHH',
+   493→      area_codigo: 'RRHH',
+   494→      tipo_contrato: 'INDEFINIDO',
+   495→      tipo_jornada: 'COMPLETA',
+   496→    },
+   497→    {
+   498→      codigo_empleado: 'EMP-00003',
+   499→      primer_nombre: 'Carlos',
+   500→      segundo_nombre: 'Alberto',
+   501→      primer_apellido: 'López',
+   502→      segundo_apellido: 'Martínez',
+   503→      dui: '34567890-3',
+   504→      nit: null,
+   505→      fecha_nacimiento: new Date('1992-11-08'),
+   506→      genero: 'MASCULINO',
+   507→      estado_civil: 'SOLTERO',
+   508→      direccion: 'Col. Flor Blanca, Calle El Progreso #789, San Salvador',
+   509→      telefono: '7777-1234',
+   510→      email_personal: 'carlos.lopez@gmail.com',
+   511→      numero_isss: '34567890',
+   512→      numero_afp: 'AFP345678',
+   513→      afp_administradora: 'CRECER',
+   514→      tipo_sangre: 'B+',
+   515→      contacto_emergencia_nombre: 'Ana López',
+   516→      contacto_emergencia_telefono: '7777-5678',
+   517→      contacto_emergencia_relacion: 'Madre',
+   518→      fecha_ingreso: new Date('2024-06-15'),
+   519→      salario_base: 950.00,
+   520→      perfil_puesto_nombre: 'Analista de Nómina',
+   521→      area_codigo: 'RRHH',
+   522→      tipo_contrato: 'INDEFINIDO',
+   523→      tipo_jornada: 'COMPLETA',
+   524→    },
+   525→    {
+   526→      codigo_empleado: 'EMP-00004',
+   527→      primer_nombre: 'Ana',
+   528→      segundo_nombre: 'Lucía',
+   529→      primer_apellido: 'Martínez',
+   530→      segundo_apellido: 'Hernández',
+   531→      dui: '45678901-4',
+   532→      nit: '4567-456789-103-0',
+   533→      fecha_nacimiento: new Date('1988-05-30'),
+   534→      genero: 'FEMENINO',
+   535→      estado_civil: 'CASADA',
+   536→      apellido_casada: 'de Torres',
+   537→      direccion: 'Col. La Sultana, Blvr. El Hipódromo #321, San Salvador',
+   538→      telefono: '2222-4321',
+   539→      email_personal: 'ana.martinez@gmail.com',
+   540→      numero_isss: '45678901',
+   541→      numero_afp: 'AFP456789',
+   542→      afp_administradora: 'CONFIA',
+   543→      tipo_sangre: 'AB+',
+   544→      contacto_emergencia_nombre: 'Roberto Torres',
+   545→      contacto_emergencia_telefono: '2222-8765',
+   546→      contacto_emergencia_relacion: 'Esposo',
+   547→      fecha_ingreso: new Date('2023-09-01'),
+   548→      salario_base: 1400.00,
+   549→      perfil_puesto_nombre: 'Contador',
+   550→      area_codigo: 'CON',
+   551→      tipo_contrato: 'INDEFINIDO',
+   552→      tipo_jornada: 'COMPLETA',
+   553→    },
+   554→    {
+   555→      codigo_empleado: 'EMP-00005',
+   556→      primer_nombre: 'Roberto',
+   557→      segundo_nombre: 'Antonio',
+   558→      primer_apellido: 'Hernández',
+   559→      segundo_apellido: 'Torres',
+   560→      dui: '56789012-5',
+   561→      nit: '5678-567890-104-0',
+   562→      fecha_nacimiento: new Date('1990-01-12'),
+   563→      genero: 'MASCULINO',
+   564→      estado_civil: 'SOLTERO',
+   565→      direccion: 'Col. Escalón, Calle El Mirador #654, San Salvador',
+   566→      telefono: '7777-4321',
+   567→      email_personal: 'roberto.hernandez@gmail.com',
+   568→      numero_isss: '56789012',
+   569→      numero_afp: 'AFP567890',
+   570→      afp_administradora: 'CONFIA',
+   571→      tipo_sangre: 'O-',
+   572→      contacto_emergencia_nombre: 'Carmen Hernández',
+   573→      contacto_emergencia_telefono: '7777-8765',
+   574→      contacto_emergencia_relacion: 'Madre',
+   575→      fecha_ingreso: new Date('2024-02-01'),
+   576→      salario_base: 1400.00,
+   577→      perfil_puesto_nombre: 'Desarrollador de Software',
+   578→      area_codigo: 'TEC',
+   579→      tipo_contrato: 'INDEFINIDO',
+   580→      tipo_jornada: 'COMPLETA',
+   581→    },
+   582→    {
+   583→      codigo_empleado: 'EMP-00006',
+   584→      primer_nombre: 'Laura',
+   585→      segundo_nombre: 'Patricia',
+   586→      primer_apellido: 'Gómez',
+   587→      segundo_apellido: 'Peña',
+   588→      dui: '67890123-6',
+   589→      nit: '6789-678901-105-0',
+   590→      fecha_nacimiento: new Date('1995-09-18'),
+   591→      genero: 'FEMENINO',
+   592→      estado_civil: 'SOLTERA',
+   593→      direccion: 'Soyapango, Col. Monte Sinaí #987, San Salvador',
+   594→      telefono: '7777-6543',
+   595→      email_personal: 'laura.gomez@gmail.com',
+   596→      numero_isss: '67890123',
+   597→      numero_afp: 'AFP678901',
+   598→      afp_administradora: 'CRECER',
+   599→      tipo_sangre: 'A-',
+   600→      contacto_emergencia_nombre: 'Pedro Gómez',
+   601→      contacto_emergencia_telefono: '7777-1098',
+   602→      contacto_emergencia_relacion: 'Padre',
+   603→      fecha_ingreso: new Date('2025-01-10'),
+   604→      salario_base: 480.00,
+   605→      perfil_puesto_nombre: 'Vendedor',
+   606→      area_codigo: 'VEN',
+   607→      tipo_contrato: 'INDEFINIDO',
+   608→      tipo_jornada: 'COMPLETA',
+   609→    },
+   610→    {
+   611→      codigo_empleado: 'EMP-00007',
+   612→      primer_nombre: 'Miguel',
+   613→      segundo_nombre: 'Ángel',
+   614→      primer_apellido: 'Torres',
+   615→      segundo_apellido: 'Ruiz',
+   616→      dui: '78901234-7',
+   617→      nit: '7890-789012-106-0',
+   618→      fecha_nacimiento: new Date('1993-04-05'),
+   619→      genero: 'MASCULINO',
+   620→      estado_civil: 'CASADO',
+   621→      direccion: 'Apopa, Col. Fátima #147, San Salvador',
+   622→      telefono: '7777-3210',
+   623→      email_personal: 'miguel.torres@gmail.com',
+   624→      numero_isss: '78901234',
+   625→      numero_afp: 'AFP789012',
+   626→      afp_administradora: 'CRECER',
+   627→      tipo_sangre: 'B-',
+   628→      contacto_emergencia_nombre: 'Sandra Torres',
+   629→      contacto_emergencia_telefono: '7777-7654',
+   630→      contacto_emergencia_relacion: 'Esposa',
+   631→      fecha_ingreso: new Date('2024-08-20'),
+   632→      salario_base: 450.00,
+   633→      perfil_puesto_nombre: 'Operario',
+   634→      area_codigo: 'OPS',
+   635→      tipo_contrato: 'INDEFINIDO',
+   636→      tipo_jornada: 'COMPLETA',
+   637→    },
+   638→  ];
+   639→
+   640→  const empleadoMap: Record<string, string> = {};
+   641→
+   642→  for (const emp of employees) {
+   643→    const existing = await db.empleado.findUnique({ where: { codigo_empleado: emp.codigo_empleado } });
+   644→    if (!existing) {
+   645→      const created = await db.empleado.create({
+   646→        data: {
+   647→          codigo_empleado: emp.codigo_empleado,
+   648→          primer_nombre: emp.primer_nombre,
+   649→          segundo_nombre: emp.segundo_nombre,
+   650→          primer_apellido: emp.primer_apellido,
+   651→          segundo_apellido: emp.segundo_apellido,
+   652→          apellido_casada: emp.apellido_casada || null,
+   653→          dui: emp.dui,
+   654→          nit: emp.nit,
+   655→          fecha_nacimiento: emp.fecha_nacimiento,
+   656→          genero: emp.genero,
+   657→          estado_civil: emp.estado_civil,
+   658→          direccion: emp.direccion,
+   659→          telefono: emp.telefono,
+   660→          email_personal: emp.email_personal,
+   661→          numero_isss: emp.numero_isss,
+   662→          numero_afp: emp.numero_afp,
+   663→          afp_administradora: emp.afp_administradora,
+   664→          tipo_sangre: emp.tipo_sangre,
+   665→          contacto_emergencia_nombre: emp.contacto_emergencia_nombre,
+   666→          contacto_emergencia_telefono: emp.contacto_emergencia_telefono,
+   667→          contacto_emergencia_relacion: emp.contacto_emergencia_relacion,
+   668→          fecha_ingreso: emp.fecha_ingreso,
+   669→          salario_base: emp.salario_base,
+   670→          perfil_puesto_id: perfilMap[emp.perfil_puesto_nombre] || null,
+   671→          area_id: areaMap[emp.area_codigo] || null,
+   672→          estado: 'ACTIVO',
+   673→        },
+   674→      });
+   675→      empleadoMap[emp.codigo_empleado] = created.id;
+   676→      console.log(`  ✅ Created employee: ${emp.primer_nombre} ${emp.primer_apellido} (${emp.codigo_empleado})`);
+   677→
+   678→      // Create contract
+   679→      await db.contrato.create({
+   680→        data: {
+   681→          empleado_id: created.id,
+   682→          perfil_puesto_id: perfilMap[emp.perfil_puesto_nombre] || null,
+   683→          tipo_contrato: emp.tipo_contrato,
+   684→          salario_base_contrato: emp.salario_base,
+   685→          tipo_jornada: emp.tipo_jornada,
+   686→          fecha_inicio: emp.fecha_ingreso,
+   687→          activo: true,
+   688→        },
+   689→      });
+   690→      console.log(`    ✅ Created contract for ${emp.primer_nombre}`);
+   691→
+   692→      // Create vacation record for 2026
+   693→      const existingVacation = await db.vacacionEmpleado.findFirst({
+   694→        where: { empleado_id: created.id, anio: 2026 },
+   695→      });
+   696→      if (!existingVacation) {
+   697→        await db.vacacionEmpleado.create({
+   698→          data: {
+   699→            empleado_id: created.id,
+   700→            anio: 2026,
+   701→            dias_derecho: 15,
+   702→            dias_tomados: 0,
+   703→            dias_pendientes: 15,
+   704→            dias_vendidos: 0,
+   705→            estado: 'ABIERTO',
+   706→          },
+   707→        });
+   708→        console.log(`    ✅ Created vacation record 2026 for ${emp.primer_nombre}`);
+   709→      }
+   710→    } else {
+   711→      empleadoMap[emp.codigo_empleado] = existing.id;
+   712→      console.log(`  ⏭️  Employee already exists: ${emp.primer_nombre} ${emp.primer_apellido}`);
+   713→    }
+   714→  }
+   715→
+   716→  // ============================================================
+   717→  // 8. LINK EMPLOYEE TO USER (Laura Gómez Peña -> empleado@nomina.gob.sv)
+   718→  // ============================================================
+   719→  console.log('\n🔗 Linking employee to user...');
+   720→  const empleadoUser = await db.usuario.findUnique({ where: { email: 'empleado@nomina.gob.sv' } });
+   721→  const lauraEmpleadoId = empleadoMap['EMP-00006'];
+   722→
+   723→  if (empleadoUser && lauraEmpleadoId) {
+   724→    if (!empleadoUser.empleado_id) {
+   725→      try {
+   726→        await db.usuario.update({
+   727→          where: { id: empleadoUser.id },
+   728→          data: { empleado_id: lauraEmpleadoId },
+   729→        });
+   730→        console.log('  ✅ Linked Laura Gómez Peña to empleado@nomina.gob.sv');
+   731→      } catch (e: unknown) {
+   732→        const errMsg = e instanceof Error ? e.message : String(e);
+   733→        if (errMsg.includes('P2002') || errMsg.includes('Unique constraint')) {
+   734→          console.log('  ⏭️  Employee already linked to another user (unique constraint)');
+   735→        } else {
+   736→          throw e;
+   737→        }
+   738→      }
+   739→    } else {
+   740→      console.log('  ⏭️  User already linked to employee');
+   741→    }
+   742→  } else {
+   743→    console.log('  ⚠️  Could not link employee to user - missing records');
+   744→  }
+   745→
+   746→  // ============================================================
+   747→  // 9. EXTERNAL INTEGRATIONS
+   748→  // ============================================================
+   749→  console.log('\n🔌 Creating external integrations...');
+   750→  const integraciones = [
+   751→    { tipo: 'BANCO', nombre: 'BAC Credomatic - Dispersión ACH', activo: true, estado_test: 'NO_CONFIGURADO' },
+   752→    { tipo: 'ISSS', nombre: 'ISSS - Planilla OIS', activo: true, estado_test: 'NO_CONFIGURADO' },
+   753→    { tipo: 'AFP', nombre: 'AFP CRECER - Archivo SEPP', activo: true, estado_test: 'NO_CONFIGURADO' },
+   754→    { tipo: 'AFP', nombre: 'AFP CONFIA - Archivo SEPP', activo: true, estado_test: 'NO_CONFIGURADO' },
+   755→    { tipo: 'SMTP', nombre: 'Servidor de Correo', activo: true, estado_test: 'NO_CONFIGURADO' },
+   756→  ];
+   757→
+   758→  for (const integ of integraciones) {
+   759→    const existing = await db.integracionExterna.findFirst({ where: { nombre: integ.nombre } });
+   760→    if (!existing) {
+   761→      await db.integracionExterna.create({
+   762→        data: {
+   763→          tipo: integ.tipo,
+   764→          nombre: integ.nombre,
+   765→          activo: integ.activo,
+   766→          estado_test: integ.estado_test,
+   767→        },
+   768→      });
+   769→      console.log(`  ✅ Created integration: ${integ.nombre}`);
+   770→    } else {
+   771→      console.log(`  ⏭️  Integration already exists: ${integ.nombre}`);
+   772→    }
+   773→  }
+   774→
+   775→  // ============================================================
+   776→  // 10. GRANULAR PERMISSIONS FOR ADMIN
+   777→  // ============================================================
+   778→  console.log('\n🔐 Creating granular permissions for ADMIN...');
+   779→  const adminId = userMap['ADMIN'];
+   780→  if (adminId) {
+   781→    const permissions = [
+   782→      // Module: Empleados
+   783→      { modulo: 'EMPLEADOS', vista: 'DIRECTORIO', permiso: 'VER' },
+   784→      { modulo: 'EMPLEADOS', vista: 'DIRECTORIO', permiso: 'CREAR' },
+   785→      { modulo: 'EMPLEADOS', vista: 'DIRECTORIO', permiso: 'EDITAR' },
+   786→      { modulo: 'EMPLEADOS', vista: 'DIRECTORIO', permiso: 'ELIMINAR' },
+   787→      { modulo: 'EMPLEADOS', vista: 'DETALLE', permiso: 'VER' },
+   788→      { modulo: 'EMPLEADOS', vista: 'NUEVO', permiso: 'VER' },
+   789→      { modulo: 'EMPLEADOS', vista: 'NUEVO', permiso: 'CREAR' },
+   790→      { modulo: 'EMPLEADOS', vista: 'INCIDENCIAS', permiso: 'VER' },
+   791→      { modulo: 'EMPLEADOS', vista: 'INCIDENCIAS', permiso: 'CREAR' },
+   792→      { modulo: 'EMPLEADOS', vista: 'INCIDENCIAS', permiso: 'APROBAR' },
+   793→
+   794→      // Module: Perfiles
+   795→      { modulo: 'PERFILES', vista: 'CATALOGO', permiso: 'VER' },
+   796→      { modulo: 'PERFILES', vista: 'CATALOGO', permiso: 'CREAR' },
+   797→      { modulo: 'PERFILES', vista: 'CATALOGO', permiso: 'EDITAR' },
+   798→      { modulo: 'PERFILES', vista: 'BANDAS', permiso: 'VER' },
+   799→      { modulo: 'PERFILES', vista: 'BANDAS', permiso: 'EDITAR' },
+   800→
+   801→      // Module: Nómina
+   802→      { modulo: 'NOMINA', vista: 'DASHBOARD', permiso: 'VER' },
+   803→      { modulo: 'NOMINA', vista: 'PERIODOS', permiso: 'VER' },
+   804→      { modulo: 'NOMINA', vista: 'PERIODOS', permiso: 'CREAR' },
+   805→      { modulo: 'NOMINA', vista: 'CALCULO', permiso: 'VER' },
+   806→      { modulo: 'NOMINA', vista: 'CALCULO', permiso: 'EJECUTAR' },
+   807→      { modulo: 'NOMINA', vista: 'APROBACION', permiso: 'VER' },
+   808→      { modulo: 'NOMINA', vista: 'APROBACION', permiso: 'APROBAR' },
+   809→      { modulo: 'NOMINA', vista: 'DISPERSION', permiso: 'VER' },
+   810→      { modulo: 'NOMINA', vista: 'DISPERSION', permiso: 'EJECUTAR' },
+   811→      { modulo: 'NOMINA', vista: 'AGUINALDO', permiso: 'VER' },
+   812→      { modulo: 'NOMINA', vista: 'AGUINALDO', permiso: 'CALCULAR' },
+   813→      { modulo: 'NOMINA', vista: 'LIQUIDACION', permiso: 'VER' },
+   814→      { modulo: 'NOMINA', vista: 'LIQUIDACION', permiso: 'CALCULAR' },
+   815→
+   816→      // Module: Reportes
+   817→      { modulo: 'REPORTES', vista: 'ISSS', permiso: 'VER' },
+   818→      { modulo: 'REPORTES', vista: 'AFP', permiso: 'VER' },
+   819→      { modulo: 'REPORTES', vista: 'ISR', permiso: 'VER' },
+   820→      { modulo: 'REPORTES', vista: 'TALENTO', permiso: 'VER' },
+   821→
+   822→      // Module: Administración
+   823→      { modulo: 'ADMIN', vista: 'PARAMETROS', permiso: 'VER' },
+   824→      { modulo: 'ADMIN', vista: 'PARAMETROS', permiso: 'CREAR' },
+   825→      { modulo: 'ADMIN', vista: 'ORGANIGRAMA', permiso: 'VER' },
+   826→      { modulo: 'ADMIN', vista: 'ORGANIGRAMA', permiso: 'EDITAR' },
+   827→      { modulo: 'ADMIN', vista: 'INTEGRACIONES', permiso: 'VER' },
+   828→      { modulo: 'ADMIN', vista: 'INTEGRACIONES', permiso: 'EDITAR' },
+   829→      { modulo: 'ADMIN', vista: 'BITACORA', permiso: 'VER' },
+   830→      { modulo: 'ADMIN', vista: 'USUARIOS', permiso: 'VER' },
+   831→      { modulo: 'ADMIN', vista: 'USUARIOS', permiso: 'CREAR' },
+   832→      { modulo: 'ADMIN', vista: 'USUARIOS', permiso: 'EDITAR' },
+   833→
+   834→      // Module: Self-service
+   835→      { modulo: 'SELFSERVICE', vista: 'PORTAL', permiso: 'VER' },
+   836→    ];
+   837→
+   838→    let createdCount = 0;
+   839→    for (const perm of permissions) {
+   840→      const existing = await db.permisoGranularUsuario.findFirst({
+   841→        where: {
+   842→          usuario_id: adminId,
+   843→          modulo: perm.modulo,
+   844→          vista: perm.vista,
+   845→          permiso: perm.permiso,
+   846→        },
+   847→      });
+   848→      if (!existing) {
+   849→        await db.permisoGranularUsuario.create({
+   850→          data: {
+   851→            usuario_id: adminId,
+   852→            modulo: perm.modulo,
+   853→            vista: perm.vista,
+   854→            permiso: perm.permiso,
+   855→            concedido: true,
+   856→          },
+   857→        });
+   858→        createdCount++;
+   859→      }
+   860→    }
+   861→    if (createdCount > 0) {
+   862→      console.log(`  ✅ Created ${createdCount} permissions for ADMIN`);
+   863→    } else {
+   864→      console.log('  ⏭️  ADMIN permissions already exist');
+   865→    }
+   866→  }
+   867→
+   868→  console.log('\n🎉 Seeding complete!');
+   869→}
+   870→
+   871→main()
+   872→  .catch((e) => {
+   873→    console.error('Seed error:', e);
+   874→    process.exit(1);
+   875→  })
+   876→  .finally(async () => {
+   877→    await db.$disconnect();
+   878→  });
+   879→
