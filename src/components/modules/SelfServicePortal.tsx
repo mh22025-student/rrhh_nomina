@@ -59,6 +59,7 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
   const [data, setData] = useState<SelfServiceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showRequestDialog, setShowRequestDialog] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [requestType, setRequestType] = useState('');
   const [requestDetail, setRequestDetail] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -107,6 +108,28 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
       toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDownloadBoleta = async (planillaId: string) => {
+    try {
+      setDownloadingId(planillaId);
+      const res = await fetch(`/api/nomina/planillas/${planillaId}/boleta?empleado_id=${data!.empleado.id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error('Error al generar boleta');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Boleta_${data!.empleado.codigo_empleado}_${planillaId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: 'Boleta descargada', description: 'El PDF de su recibo ha sido descargado' });
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo generar la boleta', variant: 'destructive' });
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -257,8 +280,15 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
                       <span>Neto: <span className="font-mono font-semibold text-emerald-700">{fmt(recibo.salario_neto)}</span></span>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" className="shrink-0 ml-2 h-8 text-xs gap-1.5">
-                    <Download className="h-3.5 w-3.5" />
+                  <Button variant="outline" size="sm" className="shrink-0 ml-2 h-8 text-xs gap-1.5"
+                    onClick={() => handleDownloadBoleta(recibo.id)}
+                    disabled={downloadingId === recibo.id}
+                  >
+                    {downloadingId === recibo.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
+                    )}
                     <span className="hidden sm:inline">PDF</span>
                   </Button>
                 </div>

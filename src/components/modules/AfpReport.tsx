@@ -35,6 +35,7 @@ export default function AfpReport({ accessToken }: AfpReportProps) {
     presentaciones: { id: string; administradora: string; estado: string; fecha_presentacion: string | null; archivo_sepp: string | null }[];
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloadingAdmin, setDownloadingAdmin] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -54,24 +55,26 @@ export default function AfpReport({ accessToken }: AfpReportProps) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const generateSEPP = (admin: string) => {
-    if (!data) return;
-    const adminData = data.por_administradora[admin];
-    if (!adminData) return;
-
-    const lines = adminData.empleados.map((e) =>
-      `${e.nup || '0000000000'}|${e.dui}|${e.nombre}|${e.ibc.toFixed(2)}|${e.cotizacion_laboral.toFixed(2)}|${e.cotizacion_patronal.toFixed(2)}`
-    );
-    const content = `SEPP|${admin}|${data.periodo.mes}|${data.periodo.anio}\n${lines.join('\n')}\nT|${adminData.total}|${adminData.total_cot_laboral.toFixed(2)}|${adminData.total_cot_patronal.toFixed(2)}`;
-
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `SEPP_${admin}_${data.periodo.mes}_${data.periodo.anio}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: `Archivo SEPP ${admin} generado`, description: 'El archivo ha sido descargado' });
+  const generateSEPP = async (admin: string) => {
+    try {
+      setDownloadingAdmin(admin);
+      const res = await fetch(`/api/reportes/afp/download?mes=${mes}&anio=${anio}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error('Error al generar archivo');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SEPP_${admin}_${mes}_${anio}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: `Archivo SEPP ${admin} generado`, description: 'El archivo CSV ha sido descargado' });
+    } catch {
+      toast({ title: 'Error', description: `No se pudo generar el archivo SEPP ${admin}`, variant: 'destructive' });
+    } finally {
+      setDownloadingAdmin(null);
+    }
   };
 
   return (
@@ -143,11 +146,11 @@ export default function AfpReport({ accessToken }: AfpReportProps) {
       {/* SEPP generation buttons */}
       {data && (
         <div className="flex gap-3 flex-wrap">
-          <Button onClick={() => generateSEPP('CRECER')} disabled={!data.por_administradora.CRECER?.total} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-            <Download className="h-3.5 w-3.5 mr-1" /> Generar SEPP CRECER
+          <Button onClick={() => generateSEPP('CRECER')} disabled={!data.por_administradora.CRECER?.total || downloadingAdmin === 'CRECER'} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+            {downloadingAdmin === 'CRECER' ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1" />} Generar SEPP CRECER
           </Button>
-          <Button onClick={() => generateSEPP('CONFIA')} disabled={!data.por_administradora.CONFIA?.total} size="sm" className="bg-teal-600 hover:bg-teal-700">
-            <Download className="h-3.5 w-3.5 mr-1" /> Generar SEPP CONFIA
+          <Button onClick={() => generateSEPP('CONFIA')} disabled={!data.por_administradora.CONFIA?.total || downloadingAdmin === 'CONFIA'} size="sm" className="bg-teal-600 hover:bg-teal-700">
+            {downloadingAdmin === 'CONFIA' ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1" />} Generar SEPP CONFIA
           </Button>
         </div>
       )}

@@ -40,6 +40,7 @@ export default function IsssReport({ accessToken }: IsssReportProps) {
     presentacion: { id: string; estado: string; fecha_presentacion: string | null; archivo_ois: string | null } | null;
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -59,22 +60,26 @@ export default function IsssReport({ accessToken }: IsssReportProps) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const generateOIS = () => {
-    if (!data) return;
-    // Simulate OIS file generation
-    const lines = data.empleados.map((e) =>
-      `${e.numero_isss || '0000000000'}|${e.dui}|${e.nombre}|${e.salario_cotizable.toFixed(2)}|${e.cotizacion_laboral.toFixed(2)}|${e.cotizacion_patronal.toFixed(2)}`
-    );
-    const content = `OIS|${data.periodo.mes}|${data.periodo.anio}\n${lines.join('\n')}\nT|${data.totales.total_empleados}|${data.totales.total_salario_cotizable.toFixed(2)}|${data.totales.total_cotizacion_laboral.toFixed(2)}|${data.totales.total_cotizacion_patronal.toFixed(2)}`;
-
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `OIS_${data.periodo.mes}_${data.periodo.anio}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: 'Archivo OIS generado', description: 'El archivo ha sido descargado' });
+  const generateOIS = async () => {
+    try {
+      setDownloading(true);
+      const res = await fetch(`/api/reportes/isss/download?mes=${mes}&anio=${anio}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error('Error al generar archivo');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `OIS_${mes}_${anio}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: 'Archivo OIS generado', description: 'El archivo CSV ha sido descargado' });
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo generar el archivo OIS', variant: 'destructive' });
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -153,8 +158,8 @@ export default function IsssReport({ accessToken }: IsssReportProps) {
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="h-4 w-4 text-emerald-600" /> Datos de Cotización
           </CardTitle>
-          <Button onClick={generateOIS} disabled={!data || data.empleados.length === 0} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-            <Download className="h-3.5 w-3.5 mr-1" /> Generar OIS
+          <Button onClick={generateOIS} disabled={!data || data.empleados.length === 0 || downloading} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+            {downloading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1" />} Generar OIS
           </Button>
         </CardHeader>
         <CardContent className="p-0">

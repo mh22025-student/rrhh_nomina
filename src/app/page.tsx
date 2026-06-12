@@ -47,6 +47,8 @@ import Integrations from '@/components/modules/Integrations';
 import AuditLog from '@/components/modules/AuditLog';
 import SelfServicePortal from '@/components/modules/SelfServicePortal';
 import ProfileDescriptiveForm from '@/components/modules/ProfileDescriptiveForm';
+import ChangePasswordDialog from '@/components/ChangePasswordDialog';
+import NotificationBell from '@/components/NotificationBell';
 
 // ============================================================
 // Types
@@ -302,36 +304,60 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 p-4">
+      {/* Background decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-100/40 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-100/30 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 right-1/4 w-2 h-2 bg-emerald-400/30 rounded-full" />
+        <div className="absolute top-1/3 left-1/3 w-1.5 h-1.5 bg-teal-400/20 rounded-full" />
+        <div className="absolute bottom-1/4 right-1/3 w-1 h-1 bg-emerald-300/30 rounded-full" />
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 opacity-[0.015]" style={{
+          backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)',
+          backgroundSize: '24px 24px'
+        }} />
+      </div>
+
+      <div className="w-full max-w-md relative z-10 animate-fade-in">
         {/* Logo & Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg mb-4">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20 mb-4 relative">
             <svg viewBox="0 0 40 40" className="w-10 h-10 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
               <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
               <path d="M4 12V28L20 36V20L4 12Z" stroke="currentColor" strokeWidth="2"/>
               <path d="M36 12V28L20 36V20L36 12Z" stroke="currentColor" strokeWidth="2"/>
             </svg>
+            {/* Decorative ring */}
+            <div className="absolute inset-0 rounded-2xl border-2 border-emerald-400/30 scale-110" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             Sistema de Nómina y Perfiles de Puestos
           </h1>
-          <p className="text-slate-500 mt-1 text-sm">
+          <p className="text-slate-500 mt-1 text-sm flex items-center justify-center gap-1.5">
+            <span className="inline-block w-4 h-[1px] bg-slate-300" />
             República de El Salvador
+            <span className="inline-block w-4 h-[1px] bg-slate-300" />
           </p>
         </div>
 
         {/* Login Card */}
-        <Card className="shadow-xl border-0 shadow-slate-200/60">
+        <Card className="shadow-xl border-0 shadow-slate-200/60 animate-scale-in">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Iniciar Sesión</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <div className="w-1.5 h-5 rounded-full bg-emerald-500" />
+              Iniciar Sesión
+            </CardTitle>
             <CardDescription>Ingrese sus credenciales para acceder al sistema</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Correo Electrónico</Label>
+                <Label htmlFor="email" className="flex items-center gap-1.5">
+                  <svg className="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  Correo Electrónico
+                </Label>
                 <Input
                   id="email"
                   type="email"
@@ -340,11 +366,14 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={isLoading}
-                  className="h-11"
+                  className="h-11 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
+                <Label htmlFor="password" className="flex items-center gap-1.5">
+                  <svg className="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Contraseña
+                </Label>
                 <Input
                   id="password"
                   type="password"
@@ -353,12 +382,12 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={isLoading}
-                  className="h-11"
+                  className="h-11 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
                 />
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100 animate-fade-in">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -366,7 +395,7 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
 
               <Button
                 type="submit"
-                className="w-full h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md"
+                className="w-full h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20 hover:shadow-lg hover:shadow-emerald-600/30 transition-all active:scale-[0.98]"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -375,15 +404,19 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
                     Verificando...
                   </>
                 ) : (
-                  'Iniciar Sesión'
+                  <span className="flex items-center gap-2">
+                    Iniciar Sesión
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                  </span>
                 )}
               </Button>
 
               <button
                 type="button"
                 onClick={() => setShowRecovery(true)}
-                className="w-full text-sm text-emerald-700 hover:text-emerald-800 hover:underline transition-colors"
+                className="w-full text-sm text-emerald-700 hover:text-emerald-800 hover:underline transition-colors flex items-center justify-center gap-1"
               >
+                <Lock className="h-3 w-3" />
                 ¿Olvidó su contraseña?
               </button>
             </form>
@@ -391,19 +424,31 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
         </Card>
 
         {/* Demo Credentials */}
-        <Card className="mt-4 bg-amber-50/80 border-amber-200/60 shadow-sm">
+        <Card className="mt-4 bg-amber-50/80 border-amber-200/60 shadow-sm animate-fade-in" style={{ animationDelay: '200ms' }}>
           <CardContent className="p-4">
-            <p className="text-xs font-semibold text-amber-800 mb-2 flex items-center gap-1">
+            <p className="text-xs font-semibold text-amber-800 mb-2.5 flex items-center gap-1.5">
               <KeyRound className="h-3.5 w-3.5" />
               Credenciales de Demostración
             </p>
-            <div className="grid grid-cols-2 gap-1.5 text-xs text-amber-700">
-              <span>admin@nomina.gob.sv</span><span className="text-amber-500">Admin2026!</span>
-              <span>analista@nomina.gob.sv</span><span className="text-amber-500">Analista2026!</span>
-              <span>aprobador@nomina.gob.sv</span><span className="text-amber-500">Aprobador2026!</span>
-              <span>gerencia@nomina.gob.sv</span><span className="text-amber-500">Gerencia2026!</span>
-              <span>auditor@nomina.gob.sv</span><span className="text-amber-500">Auditor2026!</span>
-              <span>empleado@nomina.gob.sv</span><span className="text-amber-500">Empleado2026!</span>
+            <div className="grid grid-cols-2 gap-1.5 text-xs">
+              {[
+                { email: 'admin@nomina.gob.sv', pass: 'Admin2026!', role: 'ADMIN' },
+                { email: 'analista@nomina.gob.sv', pass: 'Analista2026!', role: 'ANALISTA' },
+                { email: 'aprobador@nomina.gob.sv', pass: 'Aprobador2026!', role: 'APROBADOR' },
+                { email: 'gerencia@nomina.gob.sv', pass: 'Gerencia2026!', role: 'GERENCIA' },
+                { email: 'auditor@nomina.gob.sv', pass: 'Auditor2026!', role: 'AUDITOR' },
+                { email: 'empleado@nomina.gob.sv', pass: 'Empleado2026!', role: 'EMPLEADO' },
+              ].map((cred) => (
+                <button
+                  key={cred.email}
+                  type="button"
+                  onClick={() => { setEmail(cred.email); setPassword(cred.pass); }}
+                  className="flex items-center gap-1.5 p-1.5 rounded-md hover:bg-amber-100/60 transition-colors text-left group"
+                >
+                  <span className="text-amber-700 group-hover:text-amber-900 truncate">{cred.email}</span>
+                  <span className="text-amber-400 ml-auto shrink-0 tabular-nums">{cred.pass}</span>
+                </button>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -707,30 +752,44 @@ function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: Sidebar
       )}
 
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 text-white transition-all duration-300 ${
+        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 text-white transition-all duration-300 ease-in-out ${
           collapsed ? '-translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden' : 'w-64 translate-x-0'
         }`}
       >
         {/* Brand */}
-        <div className="flex items-center gap-3 px-4 h-14 border-b border-slate-700/50">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0">
+        <div className="flex items-center gap-3 px-4 h-14 border-b border-slate-700/50 shrink-0">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0 shadow-lg shadow-emerald-900/40">
             <svg viewBox="0 0 40 40" className="w-5 h-5 text-white" fill="none">
               <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
               <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
             </svg>
           </div>
           <div className="overflow-hidden">
-            <p className="font-bold text-sm leading-tight whitespace-nowrap">Nómina SV</p>
-            <p className="text-[10px] text-slate-400 whitespace-nowrap">El Salvador</p>
+            <p className="font-bold text-sm leading-tight whitespace-nowrap tracking-tight">Nómina SV</p>
+            <p className="text-[10px] text-slate-500 whitespace-nowrap">El Salvador</p>
           </div>
-          <button onClick={onToggle} className="ml-auto lg:hidden text-slate-400 hover:text-white">
+          <button onClick={onToggle} className="ml-auto lg:hidden text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Navigation */}
-        <ScrollArea className="flex-1 py-2">
-          <nav className="space-y-1 px-2">
+        <ScrollArea className="flex-1 py-2 dark-scrollbar">
+          <nav className="space-y-0.5 px-2">
+            {/* Dashboard link at top */}
+            <button
+              onClick={() => { onNavigate('dashboard'); if (window.innerWidth < 1024) onToggle(); }}
+              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-sm transition-all mb-2 ${
+                currentView === 'dashboard'
+                  ? 'bg-emerald-600/20 text-emerald-400 font-medium'
+                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+              }`}
+            >
+              <LayoutDashboard className={`h-4 w-4 ${currentView === 'dashboard' ? 'text-emerald-400' : 'text-slate-500'}`} />
+              <span>Dashboard</span>
+              {currentView === 'dashboard' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+            </button>
+
             {NAV_GROUPS.map(group => {
               const visibleItems = getVisibleItems(group, user.rol);
               if (visibleItems.length === 0) return null;
@@ -742,15 +801,15 @@ function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: Sidebar
                 <div key={group.title}>
                   <button
                     onClick={() => toggleGroup(group.title)}
-                    className="flex items-center gap-2 w-full px-2 py-2 text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-colors"
+                    className="flex items-center gap-2 w-full px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-300 transition-colors rounded-md hover:bg-slate-800/30"
                   >
-                    <GroupIcon className="h-3.5 w-3.5" />
+                    <GroupIcon className="h-3 w-3" />
                     <span className="truncate flex-1 text-left">{group.title}</span>
-                    {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                    <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
                   </button>
 
-                  {isExpanded && (
-                    <div className="space-y-0.5 mt-0.5 mb-1">
+                  <div className={`overflow-hidden transition-all duration-200 ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                    <div className="space-y-0.5 mt-0.5 mb-1.5">
                       {visibleItems.map(item => {
                         const isActive = currentView === item.id;
                         const ItemIcon = item.icon;
@@ -761,20 +820,23 @@ function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: Sidebar
                               onNavigate(item.id);
                               if (window.innerWidth < 1024) onToggle();
                             }}
-                            className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm transition-all ${
+                            className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-all relative group/item ${
                               isActive
                                 ? 'bg-emerald-600/20 text-emerald-400 font-medium'
-                                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
                             }`}
                           >
-                            <ItemIcon className={`h-4 w-4 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                            {isActive && (
+                              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-emerald-400 rounded-r-full" />
+                            )}
+                            <ItemIcon className={`h-4 w-4 transition-colors ${isActive ? 'text-emerald-400' : 'text-slate-600 group-hover/item:text-slate-400'}`} />
                             <span>{item.label}</span>
                             {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400" />}
                           </button>
                         );
                       })}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}
@@ -782,16 +844,19 @@ function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: Sidebar
         </ScrollArea>
 
         {/* User info at bottom */}
-        <div className="border-t border-slate-700/50 p-3">
+        <div className="border-t border-slate-700/50 p-3 shrink-0">
           <div className="flex items-center gap-2.5">
-            <Avatar className="h-8 w-8 bg-emerald-600">
-              <AvatarFallback className="bg-emerald-600 text-white text-xs">
+            <Avatar className="h-9 w-9 bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0">
+              <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-xs font-semibold">
                 {user.nombre[0]}{user.apellido[0]}
               </AvatarFallback>
             </Avatar>
-            <div className="overflow-hidden flex-1">
+            <div className="overflow-hidden flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user.nombre} {user.apellido}</p>
-              <p className="text-[10px] text-slate-400 truncate">{user.rol}</p>
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                <p className="text-[10px] text-slate-400 truncate">{user.rol}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -806,12 +871,15 @@ function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: Sidebar
 interface HeaderBarProps {
   user: UserData;
   currentView: ViewId;
+  accessToken: string | null;
   onToggleSidebar: () => void;
   onLogout: () => void;
+  onNavigate?: (viewId: ViewId) => void;
 }
 
-function HeaderBar({ user, currentView, onToggleSidebar, onLogout }: HeaderBarProps) {
+function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onLogout, onNavigate }: HeaderBarProps) {
   const { toast } = useToast();
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -823,11 +891,11 @@ function HeaderBar({ user, currentView, onToggleSidebar, onLogout }: HeaderBarPr
   };
 
   return (
-    <header className="h-14 bg-white border-b border-slate-200 shadow-sm flex items-center px-4 gap-4 shrink-0 z-30">
+    <header className="h-14 bg-white border-b border-slate-200/80 shadow-sm flex items-center px-4 gap-3 shrink-0 z-30">
       {/* Mobile menu toggle */}
       <button
         onClick={onToggleSidebar}
-        className="lg:hidden text-slate-600 hover:text-slate-900"
+        className="lg:hidden text-slate-600 hover:text-slate-900 p-1 rounded-md hover:bg-slate-100 transition-colors"
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -838,7 +906,7 @@ function HeaderBar({ user, currentView, onToggleSidebar, onLogout }: HeaderBarPr
           <TooltipTrigger asChild>
             <button
               onClick={onToggleSidebar}
-              className="hidden lg:block text-slate-400 hover:text-slate-600 transition-colors"
+              className="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
             >
               <Menu className="h-4 w-4" />
             </button>
@@ -847,12 +915,22 @@ function HeaderBar({ user, currentView, onToggleSidebar, onLogout }: HeaderBarPr
         </Tooltip>
       </TooltipProvider>
 
-      {/* Current view name */}
-      <div className="flex-1">
-        <h2 className="text-sm font-semibold text-slate-900">
-          {VIEW_LABELS[currentView] || 'Dashboard'}
-        </h2>
+      {/* Breadcrumb / Current view name */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-slate-900 truncate">
+            {VIEW_LABELS[currentView] || 'Dashboard'}
+          </h2>
+          {currentView !== 'dashboard' && (
+            <Badge variant="secondary" className="text-[9px] shrink-0 bg-slate-100 text-slate-500">
+              {currentView}
+            </Badge>
+          )}
+        </div>
       </div>
+
+      {/* Notification bell */}
+      <NotificationBell accessToken={accessToken} onNavigate={onNavigate} />
 
       {/* User dropdown */}
       <DropdownMenu>
@@ -880,7 +958,7 @@ function HeaderBar({ user, currentView, onToggleSidebar, onLogout }: HeaderBarPr
             <User className="mr-2 h-4 w-4" />
             Mi Perfil
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => toast({ title: 'Cambiar Contraseña', description: 'Módulo en desarrollo' })}>
+          <DropdownMenuItem onClick={() => setShowChangePassword(true)}>
             <Lock className="mr-2 h-4 w-4" />
             Cambiar Contraseña
           </DropdownMenuItem>
@@ -891,6 +969,12 @@ function HeaderBar({ user, currentView, onToggleSidebar, onLogout }: HeaderBarPr
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <ChangePasswordDialog
+        open={showChangePassword}
+        onOpenChange={setShowChangePassword}
+        accessToken={accessToken}
+      />
     </header>
   );
 }
@@ -986,22 +1070,27 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger-children">
       {/* Welcome banner */}
-      <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl p-6 text-white shadow-lg">
-        <h1 className="text-2xl font-bold">
-          Bienvenido, {user.nombre}
-        </h1>
-        <p className="text-emerald-100 mt-1">
-          Sistema de Nómina y Perfiles de Puestos — República de El Salvador
-        </p>
-        <div className="flex flex-wrap items-center gap-2 mt-3">
-          <Badge variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30">
-            {user.rol}
+      <div className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
+        {/* Decorative elements */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
+        <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+        <div className="relative z-10">
+          <h1 className="text-2xl font-bold">
+            Bienvenido, {user.nombre}
+          </h1>
+          <p className="text-emerald-100 mt-1">
+            Sistema de Nómina y Perfiles de Puestos — República de El Salvador
+          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <Badge variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30">
+              {user.rol}
           </Badge>
           <Badge variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30">
             {new Date().toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </Badge>
+        </div>
         </div>
       </div>
 
@@ -1291,12 +1380,16 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
         <HeaderBar
           user={user}
           currentView={currentView}
+          accessToken={accessToken}
           onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
           onLogout={onLogout}
+          onNavigate={setCurrentView}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          {renderView()}
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6" key={currentView}>
+          <div className="animate-fade-in">
+            {renderView()}
+          </div>
         </main>
       </div>
     </div>

@@ -28,6 +28,7 @@ export default function IsrReport({ accessToken }: IsrReportProps) {
     entero: { id: string; estado: string; fecha_entero: string | null; formulario_f910: string | null; total_retenciones: number } | null;
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -47,21 +48,26 @@ export default function IsrReport({ accessToken }: IsrReportProps) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const generateF910 = () => {
-    if (!data) return;
-    const lines = data.empleados.map((e) =>
-      `${e.dui}|${e.nombre}|${e.salario_bruto.toFixed(2)}|${e.deducciones.toFixed(2)}|${e.renta_imponible.toFixed(2)}|${e.isr_retenido.toFixed(2)}`
-    );
-    const content = `F910|${data.periodo.mes}|${data.periodo.anio}\n${lines.join('\n')}\nT|${data.totales.total_empleados}|${data.totales.total_isr_retenido.toFixed(2)}`;
-
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `F910_${data.periodo.mes}_${data.periodo.anio}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: 'Formulario F-910 generado', description: 'El archivo ha sido descargado' });
+  const generateF910 = async () => {
+    try {
+      setDownloading(true);
+      const res = await fetch(`/api/reportes/isr/download?mes=${mes}&anio=${anio}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error('Error al generar archivo');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `F910_${mes}_${anio}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: 'Formulario F-910 generado', description: 'El archivo CSV ha sido descargado' });
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo generar el formulario F-910', variant: 'destructive' });
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const generateConstancia = (empId: string, empNombre: string) => {
@@ -162,8 +168,8 @@ export default function IsrReport({ accessToken }: IsrReportProps) {
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="h-4 w-4 text-emerald-600" /> Retenciones ISR por Empleado
           </CardTitle>
-          <Button onClick={generateF910} disabled={!data || data.empleados.length === 0} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-            <Download className="h-3.5 w-3.5 mr-1" /> Generar F-910
+          <Button onClick={generateF910} disabled={!data || data.empleados.length === 0 || downloading} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+            {downloading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1" />} Generar F-910
           </Button>
         </CardHeader>
         <CardContent className="p-0">

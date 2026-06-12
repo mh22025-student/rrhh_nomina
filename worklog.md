@@ -1,8 +1,8 @@
 # Sistema de Nómina y Perfiles de Puestos — El Salvador
 
-## Project Status: ALL 6 MODULES BUILT, 27 VIEWS IMPLEMENTED + QA PASS
+## Project Status: ALL 6 MODULES BUILT, 27 VIEWS + NEW FEATURES + UI POLISH
 
-### Overall Progress: ~92% Complete
+### Overall Progress: ~97% Complete
 - Phase 0: Prisma Schema (35 tables) + Seed Data ✅
 - Phase 1: Auth Module (login, JWT, RBAC, user management) ✅
 - Phase 2: Employee Management (directory, detail, new employee, incidencias) ✅
@@ -231,4 +231,384 @@ Created full-featured profile descriptive form with:
 - Payroll calculation engine legally correct (verified against El Salvador law)
 - RBAC working correctly across all endpoints
 - Dashboard shows real data with proper KPIs
-- Key remaining work: PDF generation, file download for OIS/SEPP/F-910, approval workflow testing
+- Key remaining work: PDF generation, approval workflow testing
+
+---
+
+## Task 4: Change Password Dialog (Completed 2026-03-05)
+
+### Summary
+Implemented a fully functional "Cambiar Contraseña" dialog replacing the placeholder toast. Includes frontend dialog component with password strength meter and backend API endpoint with JWT verification, bcrypt validation, and audit logging.
+
+### Files Created
+1. **`/src/components/ChangePasswordDialog.tsx`** — New component (200+ lines)
+   - Three password fields: current, new, confirm — each with show/hide toggle
+   - Password strength meter (Débil/Media/Fuerte) using Progress component with color-coded indicators
+   - Real-time requirement checklist: min 8 chars, uppercase, lowercase, number, special character
+   - Confirm password match/mismatch indicator
+   - "Different from current" validation
+   - Inline error messages (red alert box with icon)
+   - Loading state with spinner during submission
+   - Form reset on dialog close
+   - Success toast notification on completion
+
+2. **`/src/app/api/auth/change-password/route.ts`** — New API endpoint
+   - POST endpoint with JWT verification via `verifyAuth`
+   - Validates current password against bcrypt hash using `comparePassword`
+   - Validates new password minimum 8 characters
+   - Validates new password differs from current
+   - Hashes new password with bcrypt factor 12 via `hashPassword`
+   - Updates `password_hash` and clears `debe_cambiar_password` flag
+   - Records action in `bitacora_auditoria` (CAMBIO_PASSWORD, ALTO criticidad)
+   - Error responses: 401 (not authenticated), 400 (validation errors), 500 (server error)
+
+### Files Modified
+3. **`/src/app/page.tsx`** — Wired dialog into HeaderBar
+   - Added `import ChangePasswordDialog from '@/components/ChangePasswordDialog'`
+   - Added `accessToken` prop to `HeaderBarProps` interface
+   - Added `accessToken` parameter to `HeaderBar` function signature
+   - Added `showChangePassword` state in HeaderBar
+   - Replaced toast placeholder with `setShowChangePassword(true)` on "Cambiar Contraseña" click
+   - Rendered `<ChangePasswordDialog>` inside HeaderBar with open/onOpenChange/accessToken props
+   - Passed `accessToken` from AppLayout to HeaderBar
+
+### Testing
+- ✅ API returns 401 when no token provided
+- ✅ API returns "La contraseña actual es incorrecta" for wrong current password
+- ✅ API returns "La nueva contraseña debe ser diferente a la actual" when same password
+- ✅ API successfully changes password and returns success message
+- ✅ Audit log entry created in bitacora_auditoria
+- ✅ `bun run lint` passes with 0 errors
+- ✅ Dev server running without compilation errors
+
+---
+
+## Task 3: File Download API Endpoints for Compliance Reports (Completed 2026-03-06)
+
+### Work Done
+Created 3 CSV download API endpoints for compliance report file generation.
+
+### Files Created
+1. `/src/app/api/reportes/isss/download/route.ts` — ISSS OIS report CSV download
+2. `/src/app/api/reportes/afp/download/route.ts` — AFP SEPP report CSV download
+3. `/src/app/api/reportes/isr/download/route.ts` — ISR F-910 report CSV download
+
+### Implementation Details
+
+#### ISSS OIS Download (`/api/reportes/isss/download?mes=&anio=`)
+- **Auth**: Bearer token required, roles: ADMIN, GERENCIA, AUDITOR (401/403 on failure)
+- **Data Source**: Queries `parametroLegal` for ISSS rates + `empleado` for active employees with ISSS numbers + `planilla` for actual calculated amounts
+- **CSV Format**: Semicolon-delimited with BOM (`\uFEFF`) for Excel compatibility
+- **Header rows**: Periodo, Fecha de Generación, Tasa Laboral (3%), Tasa Patronal (7.5%), Tope Cotización
+- **Data columns**: Número ISSS, DUI, Nombre del Trabajador, Salario Cotizable, Cotización Laboral, Cotización Patronal, Total Cotización
+- **Footer**: Totals row with employee count and sum amounts
+- **Filename**: `OIS-{MM}-{YYYY}.csv`
+
+#### AFP SEPP Download (`/api/reportes/afp/download?mes=&anio=`)
+- **Auth**: Same RBAC as ISSS
+- **Data Source**: Queries `parametroLegal` for AFP rates + `empleado` for active employees with AFP data + `planilla` for actual amounts
+- **CSV Format**: Same semicolon+BOM format
+- **Header rows**: Periodo, Fecha de Generación, Tasa Laboral (7.25%), Tasa Patronal (8.75%)
+- **Data columns**: NUP, DUI, Nombre del Trabajador, Administradora AFP, IBC, Cotización Laboral, Cotización Patronal, Total Cotización
+- **Grouping**: Employees grouped by AFP administradora (CRECER, CONFIA) with subtotals per group
+- **Footer**: Grand totals row
+- **Filename**: `SEPP-{MM}-{YYYY}.csv`
+
+#### ISR F-910 Download (`/api/reportes/isr/download?mes=&anio=`)
+- **Auth**: Same RBAC as ISSS
+- **Data Source**: Queries `parametroLegal` with `tramos_isr` for ISR calculation + `empleado` for all active employees + `planilla` for actual amounts
+- **CSV Format**: Same semicolon+BOM format
+- **Header rows**: Periodo, Fecha de Generación, ISSS/AFP rates, Tope ISSS, plus full ISR tramo table (Desde, Hasta, Porcentaje, Cuota Fija)
+- **Data columns**: DUI, Nombre del Trabajador, Salario Bruto, ISSS Laboral, AFP Laboral, Renta Neta, ISR Retenido, Tramo ISR
+- **ISR Calculation**: Full tramo-based calculation matching the payroll engine, with planilla detail override when available
+- **Footer**: Totals row
+- **Filename**: `F-910-{MM}-{YYYY}.csv`
+
+### Design Decisions
+- Used planilla detail data when available (CALCULADA/APROBADA/PAGADA states) for accurate actual amounts, falling back to on-the-fly calculation
+- Semicolon delimiter (Latin American standard for Excel)
+- BOM prefix for proper UTF-8 display in Excel
+- Numbers formatted with 2 decimal places and $ prefix
+- Dates in DD/MM/YYYY format
+- All three endpoints follow the same auth/RBAC pattern for consistency
+
+### Lint: Clean, 0 errors
+
+---
+
+## Task 2: PDF Pay Stub (Boleta de Pago) Generation API (Completed 2026-03-05)
+
+### Summary
+Created two API endpoints for generating professional PDF pay stubs (boletas de pago) conforming to Art. 138 of the Código de Trabajo de El Salvador.
+
+### Files Created
+1. **`/src/lib/pdf-boleta.ts`** — Shared PDF generation utility
+   - Compact single-page Letter-size layout with emerald/green accent colors
+   - Two-column layout: Earnings (left) | Deductions (right)
+   - Sections: Company Header, Planilla Info, Employee Info, Devengados/Deducciones (side-by-side), Summary Box, Cargas Patronales, Legal Footer
+   - INSAFORP estimation from planilla total_cargas_patronales
+   - Exports `generateBoletaPdf()` and `generateBoletasPdf()`
+
+2. **`/src/app/api/nomina/planillas/[id]/boleta/route.ts`** — Single employee pay stub
+   - `GET /api/nomina/planillas/[id]/boleta?empleado_id=xxx`
+   - Auth: Bearer token, EMPLEADO can only access their own boleta
+   - Returns downloadable PDF
+
+3. **`/src/app/api/nomina/planillas/[id]/boletas/route.ts`** — All employees pay stubs
+   - `GET /api/nomina/planillas/[id]/boletas`
+   - Auth: Restricted to ADMIN/ANALISTA/APROBADOR/GERENCIA/AUDITOR roles
+   - Returns single PDF with one pay stub per page
+
+### Files Modified
+4. **`/next.config.ts`** — Added `serverExternalPackages: ["pdfkit"]` to fix font path resolution
+
+### Dependencies Installed
+- `pdfkit@0.19.1`, `@types/pdfkit@0.17.6`
+
+### Testing
+- ✅ Single boleta: 200 OK, 1-page PDF
+- ✅ Multi-boleta: 200 OK, 7-page PDF for 7 employees
+- ✅ Missing empleado_id: 400 error
+- ✅ Non-existent planilla: 404 error
+- ✅ No auth token: 401 error
+- ✅ EMPLEADO accessing own boleta: 200 OK
+- ✅ EMPLEADO accessing all boletas: 403 Forbidden
+- ✅ `bun run lint` passes with 0 errors
+
+---
+
+## Task 7: Wire PDF/CSV Download APIs into Frontend Components (Completed 2026-03-06)
+
+### Summary
+Wired the existing PDF boleta and CSV report download API endpoints into 4 frontend components, replacing placeholder/client-side-only download logic with real API-backed downloads with loading states and toast notifications.
+
+### Files Modified
+
+1. **`/src/components/modules/SelfServicePortal.tsx`** — Pay slip PDF download
+   - Added `downloadingId` state (string | null) to track which pay slip is being downloaded
+   - Added `handleDownloadBoleta(planillaId: string)` async function that:
+     - Fetches PDF from `/api/nomina/planillas/[planillaId]/boleta?empleado_id=[empleadoId]` with Bearer auth
+     - Creates a blob URL and triggers browser download with filename `Boleta_[codigo_empleado]_[planillaId].pdf`
+     - Shows success/error toast notifications
+     - Sets `downloadingId` to null in `finally` block
+   - Updated Download PDF button: added `onClick` handler, `disabled` when downloading, shows `Loader2` spinner while loading
+
+2. **`/src/components/modules/IsssReport.tsx`** — ISSS OIS CSV download
+   - Added `downloading` state (boolean)
+   - Replaced client-side `generateOIS()` (which built a simple text file from table data) with async version that:
+     - Fetches CSV from `/api/reportes/isss/download?mes=${mes}&anio=${anio}` with Bearer auth
+     - Downloads as `OIS_[mes]_[anio].csv`
+     - Shows success/error toasts
+   - Updated "Generar OIS" button: disabled while downloading, shows `Loader2` spinner
+
+3. **`/src/components/modules/AfpReport.tsx`** — AFP SEPP CSV download
+   - Added `downloadingAdmin` state (string | null) to track which AFP admin button is loading
+   - Replaced client-side `generateSEPP(admin)` (text file from table data) with async version that:
+     - Fetches CSV from `/api/reportes/afp/download?mes=${mes}&anio=${anio}` with Bearer auth
+     - Downloads as `SEPP_[admin]_[mes]_[anio].csv`
+     - Shows success/error toasts with admin name
+   - Updated both CRECER and CONFIA buttons: each tracks its own loading state, shows spinner, disabled while downloading
+
+4. **`/src/components/modules/IsrReport.tsx`** — ISR F-910 CSV download
+   - Added `downloading` state (boolean)
+   - Replaced client-side `generateF910()` (text file from table data) with async version that:
+     - Fetches CSV from `/api/reportes/isr/download?mes=${mes}&anio=${anio}` with Bearer auth
+     - Downloads as `F910_[mes]_[anio].csv`
+     - Shows success/error toasts
+   - Updated "Generar F-910" button: disabled while downloading, shows `Loader2` spinner
+   - Kept `generateConstancia()` unchanged (generates simple per-employee text file)
+
+### Key Changes
+- All download functions now use real API endpoints instead of generating files from frontend data
+- Loading states prevent duplicate clicks and provide visual feedback with spinner icons
+- Error handling with toast notifications for success/failure
+- Proper Bearer token authentication on all API requests
+- `Loader2` icon was already imported in all 4 components
+
+### Lint: Clean, 0 errors
+
+---
+
+## Task 5: Notification Bell System (Completed 2026-03-05)
+
+### Summary
+Implemented a complete notification bell system in the main application header that shows real-time alerts for compliance deadlines, planilla status changes, pending incidences, and system alerts.
+
+### Files Created
+1. **`/src/components/NotificationBell.tsx`** — New client component (~200 lines)
+   - Bell icon with badge count showing unread notifications
+   - Popover dropdown with notification list (max 380px wide, 400px max height)
+   - Four notification types with colored icons: VENCIMIENTO (amber), PLANILLA (emerald), INCIDENCIA (sky), SISTEMA (slate)
+   - Mark as read on click (optimistic UI + server call)
+   - Mark all as read button
+   - Time ago display (e.g., "hace 2 horas")
+   - Auto-refresh every 60 seconds
+   - localStorage persistence for read state
+   - Subtle ping animation on bell when unread notifications exist
+   - Unread notifications have left border accent color
+   - Click on notification with `link` navigates to the relevant view via `onNavigate` callback
+
+2. **`/src/app/api/notificaciones/route.ts`** — GET endpoint
+   - Fetches upcoming ISSS, AFP, ISR compliance deadlines from real DB data (historialPresentacionISSS, historialPresentacionAFP, historialEnteroISR)
+   - Checks for planillas in CALCULADA state (pending approval)
+   - Checks for recently approved planillas (APROBADA in last 7 days)
+   - Counts pending incidencias (PENDIENTE state)
+   - Checks employees missing ISSS/AFP numbers or without active contracts
+   - Role-appropriate filtering (EMPLEADO only sees vencimientos, ADMIN/ANALISTA see everything)
+   - In-memory Set for tracking read notification IDs server-side
+   - Supports `?solo_no_leidas=true` query param
+   - Returns sorted notifications array with `total_no_leidas` count
+
+3. **`/src/app/api/notificaciones/[id]/route.ts`** — PUT endpoint
+   - Marks a notification as read by adding its ID to the in-memory Set
+   - Exports `markRead` and `isRead` functions for use by the GET endpoint
+   - Returns `{ success: true, id, leida: true }` on success
+
+### Files Modified
+4. **`/src/app/page.tsx`** — Wired NotificationBell into HeaderBar
+   - Added `import NotificationBell from '@/components/NotificationBell'`
+   - Added `onNavigate?: (viewId: ViewId) => void` to HeaderBarProps interface
+   - Added `onNavigate` parameter to HeaderBar function signature
+   - Added `<NotificationBell accessToken={accessToken} onNavigate={onNavigate} />` between view name and user dropdown
+   - Passed `onNavigate={setCurrentView}` from AppLayout to HeaderBar
+
+### API Test Results
+- ✅ GET /api/notificaciones returns 4 notifications for ADMIN (ISSS deadline, incidences, planilla pending, AFP deadline)
+- ✅ PUT /api/notificaciones/[id] marks notification as read
+- ✅ Role filtering works (EMPLEADO only sees compliance deadlines)
+- ✅ `bun run lint` passes with 0 errors
+
+### Bug Fixed
+- Renamed local variable `isRead` to `isNotifRead` in notificaciones route to avoid conflict with exported `isRead` function (ReferenceError: Cannot access 'isRead' before initialization)
+
+---
+
+## Session: Major Feature Addition + UI Polish + QA (2026-06-13)
+
+### Task IDs: 2, 3, 4, 5, 6, 7
+
+### Work Log
+- Performed comprehensive QA testing using agent-browser across all views and roles
+- Tested all 38+ API endpoints for correctness
+- Verified payroll calculation engine produces correct legal amounts
+- Identified and implemented 6 major new features
+- Polished UI across login, sidebar, header, and global styles
+
+### New Features Implemented
+
+#### 1. PDF Pay Stub (Boleta de Pago) Generation - Task 2
+- Created `/src/lib/pdf-boleta.ts` — Shared PDF generation utility using pdfkit
+- Created `/src/app/api/nomina/planillas/[id]/boleta/route.ts` — Single employee pay stub endpoint
+- Created `/src/app/api/nomina/planillas/[id]/boletas/route.ts` — All employees pay stubs in one PDF
+- PDF includes: Company header, planilla info, employee info, earnings/deductions breakdown, summary, cargas patronales, legal footer (Art. 138 CT)
+- EMPLEADO role can only access their own boleta; ADMIN/ANALISTA/APROBADOR/GERENCIA/AUDITOR can access all
+- Modified `next.config.ts` to add `serverExternalPackages: ["pdfkit"]`
+
+#### 2. CSV File Download for Compliance Reports - Task 3
+- Created `/src/app/api/reportes/isss/download/route.ts` — ISSS OIS report in CSV (semicolon-delimited, UTF-8 BOM)
+- Created `/src/app/api/reportes/afp/download/route.ts` — AFP SEPP report in CSV (grouped by administradora with subtotals)
+- Created `/src/app/api/reportes/isr/download/route.ts` — ISR F-910 report in CSV (includes tramo parameters)
+- All endpoints: auth required, role-based access (ADMIN/GERENCIA/AUDITOR), proper Content-Disposition headers
+
+#### 3. Change Password Dialog - Task 4
+- Created `/src/components/ChangePasswordDialog.tsx` — Full-featured dialog with:
+  - Current password, new password, confirm password fields
+  - Show/hide password toggle
+  - Password strength meter (Débil/Media/Fuerte)
+  - Real-time requirement checklist (8+ chars, uppercase, lowercase, number, special)
+  - Match/mismatch validation
+  - Auto-reset on close
+- Created `/src/app/api/auth/change-password/route.ts` — Backend API with:
+  - JWT verification, current password validation, bcrypt hashing
+  - Audit log entry (CAMBIO_PASSWORD, ALTO criticidad)
+- Wired into HeaderBar in page.tsx replacing placeholder toast
+
+#### 4. Notification Bell System - Task 5
+- Created `/src/components/NotificationBell.tsx` — Bell icon with badge, popover dropdown
+- Created `/src/app/api/notificaciones/route.ts` — Generates notifications from real DB data:
+  - VENCIMIENTO: ISSS/AFP/ISR compliance deadlines
+  - PLANILLA: Payroll status changes (CALCULADA pending approval)
+  - INCIDENCIA: Pending incidences count
+  - SISTEMA: System alerts
+- Created `/src/app/api/notificaciones/[id]/route.ts` — Mark-as-read endpoint
+- Auto-refresh every 60 seconds, localStorage persistence, ping animation on bell
+- Wired into HeaderBar between view name and user dropdown
+
+#### 5. Report Download Integration - Task 7
+- Updated SelfServicePortal.tsx: Pay slip "PDF" buttons now download actual PDF boletas from API
+- Updated IsssReport.tsx: "Generar OIS" button now uses CSV download API with spinner
+- Updated AfpReport.tsx: "Generar SEPP" buttons now use CSV download API with per-admin loading state
+- Updated IsrReport.tsx: "Generar F-910" button now uses CSV download API with spinner
+
+#### 6. UI/UX Polish - Task 6
+- Enhanced login screen: Background decorative blur circles, subtle grid pattern, animated logo ring, gradient shadows, credential auto-fill buttons, arrow icon on submit button
+- Enhanced sidebar: Smooth expand/collapse animation (max-height transition), active item left accent bar, chevron rotation animation, gradient avatar, Dashboard link always visible at top, user role with green dot indicator
+- Enhanced header: View code badge, rounded toggle buttons with hover states
+- Added global CSS animations: fade-in, slide-in-right, slide-in-left, scale-in, pulse-ring
+- Added staggered children animation (.stagger-children)
+- Added custom scrollbar styles (6px, rounded, transparent track)
+- Added dark scrollbar for sidebar
+- Added glass effect (.glass) and gradient text (.gradient-text) utilities
+- Added view transition animation (key-based re-render with animate-fade-in)
+- Welcome dashboard: Decorative circles on gradient banner, staggered card animations
+
+### API Testing Results
+- ✅ Single Boleta PDF: 200 OK, valid PDF content
+- ✅ Multi-Boleta PDF (7 employees): 200 OK
+- ✅ ISSS OIS CSV: 200 OK, proper semicolon-delimited content with header
+- ✅ AFP SEPP CSV: 200 OK, grouped by administradora (CRECER/CONFIA)
+- ✅ ISR F-910 CSV: 200 OK, includes tramo parameters table
+- ✅ Change Password: Validates wrong password, same password
+- ✅ Notifications: 4 notifications returned (ISSS deadline, AFP deadline, 3 pending incidences, planilla pending approval)
+- ✅ All 38+ original API endpoints still working
+
+### UI QA Testing Results
+- ✅ Login screen: Animated, decorative background, clickable demo credentials
+- ✅ Sidebar: Smooth transitions, active indicators, Dashboard link
+- ✅ Notification bell: Shows 3 unread, dropdown with 4 notifications
+- ✅ Change Password dialog: 3 fields, strength meter, validation
+- ✅ Payroll Dashboard: All KPIs, trend indicators, traffic light
+- ✅ Employee Directory: Search, filters, pagination
+- ✅ Self-Service Portal: PDF download buttons with loading states
+- ✅ All report views: Download buttons with spinners
+- ✅ View transitions: Fade-in animation on navigation
+
+### Files Created (New)
+- `/src/lib/pdf-boleta.ts`
+- `/src/app/api/nomina/planillas/[id]/boleta/route.ts`
+- `/src/app/api/nomina/planillas/[id]/boletas/route.ts`
+- `/src/app/api/reportes/isss/download/route.ts`
+- `/src/app/api/reportes/afp/download/route.ts`
+- `/src/app/api/reportes/isr/download/route.ts`
+- `/src/app/api/auth/change-password/route.ts`
+- `/src/components/ChangePasswordDialog.tsx`
+- `/src/components/NotificationBell.tsx`
+- `/src/app/api/notificaciones/route.ts`
+- `/src/app/api/notificaciones/[id]/route.ts`
+
+### Files Modified
+- `/src/app/page.tsx` — Enhanced login, sidebar, header, welcome dashboard, animations
+- `/src/app/globals.css` — Custom scrollbars, animations, utilities
+- `/src/components/modules/SelfServicePortal.tsx` — PDF download wiring
+- `/src/components/modules/IsssReport.tsx` — CSV download wiring
+- `/src/components/modules/AfpReport.tsx` — CSV download wiring
+- `/src/components/modules/IsrReport.tsx` — CSV download wiring
+- `/next.config.ts` — serverExternalPackages for pdfkit
+
+### Lint: Clean, 0 errors
+### Dev Server: Running, all APIs responding correctly
+
+### Current State Assessment
+- System is feature-complete with all 6 modules, 27+ views, 45+ API routes
+- PDF generation for pay stubs working (Art. 138 CT compliance)
+- CSV file downloads for OIS, SEPP, F-910 working
+- Change Password fully functional with strength meter
+- Notification system operational with real data
+- UI polished with animations, transitions, custom scrollbars
+- All 6 user roles tested and working correctly
+
+### Remaining Items (3%)
+1. **PDF Constancia ISR** — The ISR report per-employee constancia could be upgraded from text to PDF
+2. **Payroll Approval Workflow** — Full CALCULADA → APROBADA → PAGADA flow could be tested more thoroughly
+3. **Aguinaldo/Liquidación PDF** — PDF generation for aguinaldo and liquidation documents
+4. **Dark Mode** — CSS variables are set but no toggle implementation yet
