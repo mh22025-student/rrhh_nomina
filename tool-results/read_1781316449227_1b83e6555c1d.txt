@@ -1,0 +1,584 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→import { BarChart3, Download, Users, DollarSign, TrendingUp, Shield, Loader2, Briefcase, CheckCircle2, Target, Layers } from 'lucide-react';
+     5→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Badge } from '@/components/ui/badge';
+     8→import { Skeleton } from '@/components/ui/skeleton';
+     9→import { useToast } from '@/hooks/use-toast';
+    10→
+    11→interface TalentReportProps {
+    12→  accessToken: string;
+    13→  userRole: string;
+    14→}
+    15→
+    16→interface PerfilPuesto {
+    17→  id: string;
+    18→  codigo: string;
+    19→  nombre_puesto: string;
+    20→  estado: string;
+    21→  puntos_total: number;
+    22→  requisitos_habilidades: string | null;
+    23→  responsabilidades: string | null;
+    24→  condiciones_trabajo: string | null;
+    25→  banda_salarial: { id: string; nombre: string; grado: number; salario_minimo: number; salario_maximo: number } | null;
+    26→  _count: { empleados_perfil: number };
+    27→  area: { nombre: string; codigo: string };
+    28→}
+    29→
+    30→export default function TalentReport({ accessToken }: TalentReportProps) {
+    31→  const { toast } = useToast();
+    32→  const [data, setData] = useState<{
+    33→    costo_personal: { por_departamento: { area_nombre: string; area_codigo: string; num_empleados: number; costo_total: number; costo_promedio: number }[]; total_empleados: number; costo_total: number; costo_promedio: number };
+    34→    equidad_salarial: { por_genero: { masculino: { count: number; promedio: number }; femenino: { count: number; promedio: number } }; brecha_salarial_pct: number; distribucion_banda: Record<string, { M: number; F: number }> };
+    35→    rotacion: { tasa_rotacion_pct: number; nuevas_contrataciones: number; terminaciones: number; empleados_activos: number };
+    36→    pasivos_laborales: { reserva_vacaciones: number; reserva_aguinaldo: number; reserva_indemnizacion: number; total_pasivos: number };
+    37→  } | null>(null);
+    38→  const [perfiles, setPerfiles] = useState<PerfilPuesto[]>([]);
+    39→  const [loading, setLoading] = useState(true);
+    40→
+    41→  const fetchData = useCallback(async () => {
+    42→    setLoading(true);
+    43→    try {
+    44→      const [talentRes, perfilesRes] = await Promise.all([
+    45→        fetch('/api/reportes/talento', {
+    46→          headers: { Authorization: `Bearer ${accessToken}` },
+    47→        }),
+    48→        fetch('/api/perfiles', {
+    49→          headers: { Authorization: `Bearer ${accessToken}` },
+    50→        }),
+    51→      ]);
+    52→      if (talentRes.ok) {
+    53→        setData(await talentRes.json());
+    54→      }
+    55→      if (perfilesRes.ok) {
+    56→        setPerfiles(await perfilesRes.json());
+    57→      }
+    58→    } catch (err) {
+    59→      console.error(err);
+    60→    } finally {
+    61→      setLoading(false);
+    62→    }
+    63→  }, [accessToken]);
+    64→
+    65→  useEffect(() => { fetchData(); }, [fetchData]);
+    66→
+    67→  const exportCSV = (section: string) => {
+    68→    if (!data) return;
+    69→    let content = '';
+    70→
+    71→    if (section === 'costo') {
+    72→      content = 'Departamento,Código,Empleados,Costo Total,Costo Promedio\n';
+    73→      content += data.costo_personal.por_departamento.map((d) =>
+    74→        `"${d.area_nombre}",${d.area_codigo},${d.num_empleados},${d.costo_total.toFixed(2)},${d.costo_promedio.toFixed(2)}`
+    75→      ).join('\n');
+    76→    } else if (section === 'equidad') {
+    77→      content = 'Género,Empleados,Salario Promedio\n';
+    78→      content += `Masculino,${data.equidad_salarial.por_genero.masculino.count},${data.equidad_salarial.por_genero.masculino.promedio.toFixed(2)}\n`;
+    79→      content += `Femenino,${data.equidad_salarial.por_genero.femenino.count},${data.equidad_salarial.por_genero.femenino.promedio.toFixed(2)}\n`;
+    80→      content += `\nBrecha Salarial,${data.equidad_salarial.brecha_salarial_pct.toFixed(2)}%\n`;
+    81→    } else if (section === 'rotacion') {
+    82→      content = 'Métrica,Valor\n';
+    83→      content += `Tasa Rotación,${data.rotacion.tasa_rotacion_pct.toFixed(2)}%\n`;
+    84→      content += `Nuevas Contrataciones,${data.rotacion.nuevas_contrataciones}\n`;
+    85→      content += `Terminaciones,${data.rotacion.terminaciones}\n`;
+    86→      content += `Empleados Activos,${data.rotacion.empleados_activos}\n`;
+    87→    } else if (section === 'pasivos') {
+    88→      content = 'Concepto,Monto\n';
+    89→      content += `Reserva Vacaciones,${data.pasivos_laborales.reserva_vacaciones.toFixed(2)}\n`;
+    90→      content += `Reserva Aguinaldo,${data.pasivos_laborales.reserva_aguinaldo.toFixed(2)}\n`;
+    91→      content += `Reserva Indemnización,${data.pasivos_laborales.reserva_indemnizacion.toFixed(2)}\n`;
+    92→      content += `Total Pasivos,${data.pasivos_laborales.total_pasivos.toFixed(2)}\n`;
+    93→    }
+    94→
+    95→    const blob = new Blob([content], { type: 'text/csv' });
+    96→    const url = URL.createObjectURL(blob);
+    97→    const a = document.createElement('a');
+    98→    a.href = url;
+    99→    a.download = `reporte_${section}_${new Date().toISOString().slice(0, 10)}.csv`;
+   100→    a.click();
+   101→    URL.revokeObjectURL(url);
+   102→    toast({ title: 'CSV exportado', description: `Reporte de ${section} descargado` });
+   103→  };
+   104→
+   105→  // Compute profile stats
+   106→  const totalPerfiles = perfiles.length;
+   107→  const puestosVigentes = perfiles.filter((p) => p.estado === 'VIGENTE').length;
+   108→  const avgPuntos = totalPerfiles > 0
+   109→    ? perfiles.reduce((s, p) => s + p.puntos_total, 0) / totalPerfiles
+   110→    : 0;
+   111→  const uniqueBandas = new Set(perfiles.filter((p) => p.banda_salarial).map((p) => p.banda_salarial!.id)).size;
+   112→
+   113→  // Compute radar chart dimensions (average points as a proportion of a max scale)
+   114→  const radarMax = 500; // assumed max points for scaling
+   115→  const avgHabilidades = avgPuntos * 0.30;
+   116→  const avgEsfuerzo = avgPuntos * 0.25;
+   117→  const avgResponsabilidad = avgPuntos * 0.28;
+   118→  const avgCondiciones = avgPuntos * 0.17;
+   119→  const radarData = [
+   120→    { label: 'Habilidades', value: avgHabilidades, pct: Math.min((avgHabilidades / radarMax) * 100, 100) },
+   121→    { label: 'Esfuerzo', value: avgEsfuerzo, pct: Math.min((avgEsfuerzo / radarMax) * 100, 100) },
+   122→    { label: 'Responsabilidad', value: avgResponsabilidad, pct: Math.min((avgResponsabilidad / radarMax) * 100, 100) },
+   123→    { label: 'Condiciones', value: avgCondiciones, pct: Math.min((avgCondiciones / radarMax) * 100, 100) },
+   124→  ];
+   125→
+   126→  // Compute employee distribution by band
+   127→  const bandDistribution: Record<string, number> = {};
+   128→  perfiles.forEach((p) => {
+   129→    const bandName = p.banda_salarial?.nombre || 'Sin Banda';
+   130→    bandDistribution[bandName] = (bandDistribution[bandName] || 0) + p._count.empleados_perfil;
+   131→  });
+   132→  const maxBandCount = Math.max(...Object.values(bandDistribution), 1);
+   133→  const bandColors = ['bg-emerald-500', 'bg-teal-500', 'bg-cyan-500', 'bg-sky-500', 'bg-amber-500', 'bg-orange-500', 'bg-rose-500', 'bg-violet-500'];
+   134→
+   135→  if (loading) {
+   136→    return (
+   137→      <div className="space-y-4">
+   138→        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Gestión de Talento</h2>
+   139→        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   140→          {[1, 2, 3, 4].map((i) => (
+   141→            <Card key={i} className="shadow-sm"><CardContent className="p-4"><Skeleton className="h-16 w-full" /></CardContent></Card>
+   142→          ))}
+   143→        </div>
+   144→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   145→          {[1, 2, 3, 4].map((i) => (
+   146→            <Card key={i} className="shadow-sm">
+   147→              <CardContent className="p-6"><Skeleton className="h-40 w-full" /></CardContent>
+   148→            </Card>
+   149→          ))}
+   150→        </div>
+   151→      </div>
+   152→    );
+   153→  }
+   154→
+   155→  if (!data) {
+   156→    return (
+   157→      <Card className="shadow-sm">
+   158→        <CardContent className="p-12 text-center text-slate-500 dark:text-slate-400">
+   159→          <BarChart3 className="h-12 w-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+   160→          <p>No se pudieron cargar los datos del reporte</p>
+   161→        </CardContent>
+   162→      </Card>
+   163→    );
+   164→  }
+   165→
+   166→  const maxCosto = Math.max(...data.costo_personal.por_departamento.map((d) => d.costo_total), 1);
+   167→
+   168→  return (
+   169→    <div className="space-y-4">
+   170→      {/* Header */}
+   171→      <div>
+   172→        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Gestión de Talento</h2>
+   173→        <p className="text-sm text-slate-500 dark:text-slate-400">Dashboard de indicadores de gestión de recursos humanos</p>
+   174→      </div>
+   175→
+   176→      {/* Stat Cards Header */}
+   177→      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   178→        {/* Total Perfiles */}
+   179→        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-4 text-white shadow-sm">
+   180→          <div className="absolute -right-2 -top-2 opacity-20">
+   181→            <Briefcase className="h-16 w-16" />
+   182→          </div>
+   183→          <p className="text-xs font-medium uppercase tracking-wider opacity-90">Total Perfiles</p>
+   184→          <p className="mt-1 text-2xl font-bold font-mono">{totalPerfiles}</p>
+   185→          <p className="text-xs opacity-80">de puesto</p>
+   186→        </div>
+   187→
+   188→        {/* Puestos Vigentes */}
+   189→        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 p-4 text-white shadow-sm">
+   190→          <div className="absolute -right-2 -top-2 opacity-20">
+   191→            <CheckCircle2 className="h-16 w-16" />
+   192→          </div>
+   193→          <p className="text-xs font-medium uppercase tracking-wider opacity-90">Puestos Vigentes</p>
+   194→          <p className="mt-1 text-2xl font-bold font-mono">{puestosVigentes}</p>
+   195→          <p className="text-xs opacity-80">{totalPerfiles > 0 ? ((puestosVigentes / totalPerfiles) * 100).toFixed(0) : 0}% del total</p>
+   196→        </div>
+   197→
+   198→        {/* Promedio Valuación */}
+   199→        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-700 p-4 text-white shadow-sm">
+   200→          <div className="absolute -right-2 -top-2 opacity-20">
+   201→            <Target className="h-16 w-16" />
+   202→          </div>
+   203→          <p className="text-xs font-medium uppercase tracking-wider opacity-90">Prom. Puntos</p>
+   204→          <p className="mt-1 text-2xl font-bold font-mono">{avgPuntos.toFixed(0)}</p>
+   205→          <p className="text-xs opacity-80">valuación promedio</p>
+   206→        </div>
+   207→
+   208→        {/* Bandas Salariales */}
+   209→        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 p-4 text-white shadow-sm">
+   210→          <div className="absolute -right-2 -top-2 opacity-20">
+   211→            <Layers className="h-16 w-16" />
+   212→          </div>
+   213→          <p className="text-xs font-medium uppercase tracking-wider opacity-90">Bandas</p>
+   214→          <p className="mt-1 text-2xl font-bold font-mono">{uniqueBandas}</p>
+   215→          <p className="text-xs opacity-80">salariales activas</p>
+   216→        </div>
+   217→      </div>
+   218→
+   219→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   220→        {/* Skills Radar Chart */}
+   221→        <Card className="shadow-sm">
+   222→          <CardHeader className="pb-3">
+   223→            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
+   224→              <Target className="h-4 w-4 text-emerald-600" /> Valuación por Dimensiones
+   225→            </CardTitle>
+   226→          </CardHeader>
+   227→          <CardContent>
+   228→            <div className="flex items-center justify-center py-4">
+   229→              {/* CSS Radar/Spider Chart - Diamond shape */}
+   230→              <div className="relative" style={{ width: '220px', height: '220px' }}>
+   231→                {/* Grid lines (concentric diamonds) */}
+   232→                {[25, 50, 75, 100].map((pct) => (
+   233→                  <div
+   234→                    key={pct}
+   235→                    className="absolute border border-slate-200 dark:border-slate-700 rounded-sm"
+   236→                    style={{
+   237→                      width: `${pct}%`,
+   238→                      height: `${pct}%`,
+   239→                      top: `${(100 - pct) / 2}%`,
+   240→                      left: `${(100 - pct) / 2}%`,
+   241→                      transform: 'rotate(45deg)',
+   242→                    }}
+   243→                  />
+   244→                ))}
+   245→
+   246→                {/* Data polygon */}
+   247→                <svg
+   248→                  viewBox="0 0 220 220"
+   249→                  className="absolute inset-0"
+   250→                  style={{ width: '100%', height: '100%' }}
+   251→                >
+   252→                  {/* Axis lines */}
+   253→                  <line x1="110" y1="110" x2="110" y2="10" stroke="currentColor" strokeWidth="0.5" className="text-slate-300 dark:text-slate-600" />
+   254→                  <line x1="110" y1="110" x2="210" y2="110" stroke="currentColor" strokeWidth="0.5" className="text-slate-300 dark:text-slate-600" />
+   255→                  <line x1="110" y1="110" x2="110" y2="210" stroke="currentColor" strokeWidth="0.5" className="text-slate-300 dark:text-slate-600" />
+   256→                  <line x1="110" y1="110" x2="10" y2="110" stroke="currentColor" strokeWidth="0.5" className="text-slate-300 dark:text-slate-600" />
+   257→
+   258→                  {/* Data shape */}
+   259→                  <polygon
+   260→                    points={radarData.map((d, i) => {
+   261→                      const angle = (i * 90 - 90) * (Math.PI / 180);
+   262→                      const r = (d.pct / 100) * 100;
+   263→                      const x = 110 + r * Math.cos(angle);
+   264→                      const y = 110 + r * Math.sin(angle);
+   265→                      return `${x},${y}`;
+   266→                    }).join(' ')}
+   267→                    fill="rgba(16, 185, 129, 0.2)"
+   268→                    stroke="rgb(16, 185, 129)"
+   269→                    strokeWidth="2"
+   270→                  />
+   271→
+   272→                  {/* Data points */}
+   273→                  {radarData.map((d, i) => {
+   274→                    const angle = (i * 90 - 90) * (Math.PI / 180);
+   275→                    const r = (d.pct / 100) * 100;
+   276→                    const x = 110 + r * Math.cos(angle);
+   277→                    const y = 110 + r * Math.sin(angle);
+   278→                    return (
+   279→                      <circle key={i} cx={x} cy={y} r="4" fill="rgb(16, 185, 129)" stroke="white" strokeWidth="1.5" />
+   280→                    );
+   281→                  })}
+   282→                </svg>
+   283→
+   284→                {/* Labels */}
+   285→                <span className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+   286→                  Hab. {avgHabilidades.toFixed(0)}
+   287→                </span>
+   288→                <span className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+   289→                  Esf. {avgEsfuerzo.toFixed(0)}
+   290→                </span>
+   291→                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+   292→                  Res. {avgResponsabilidad.toFixed(0)}
+   293→                </span>
+   294→                <span className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+   295→                  Con. {avgCondiciones.toFixed(0)}
+   296→                </span>
+   297→              </div>
+   298→            </div>
+   299→          </CardContent>
+   300→        </Card>
+   301→
+   302→        {/* Employee Distribution by Band */}
+   303→        <Card className="shadow-sm">
+   304→          <CardHeader className="pb-3">
+   305→            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
+   306→              <Users className="h-4 w-4 text-teal-600" /> Distribución por Banda Salarial
+   307→            </CardTitle>
+   308→          </CardHeader>
+   309→          <CardContent>
+   310→            <div className="space-y-3">
+   311→              {Object.entries(bandDistribution).length === 0 ? (
+   312→                <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-6">Sin datos de distribución</p>
+   313→              ) : (
+   314→                Object.entries(bandDistribution).map(([bandName, count], idx) => (
+   315→                  <div key={bandName} className="flex items-center gap-3">
+   316→                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300 w-24 truncate" title={bandName}>
+   317→                      {bandName}
+   318→                    </span>
+   319→                    <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-7 relative overflow-hidden">
+   320→                      <div
+   321→                        className={`h-full rounded-full ${bandColors[idx % bandColors.length]} transition-all duration-500`}
+   322→                        style={{ width: `${(count / maxBandCount) * 100}%` }}
+   323→                      />
+   324→                      <span className="absolute inset-0 flex items-center justify-start pl-3 text-xs font-bold text-white mix-blend-difference">
+   325→                        {count} empleado{count !== 1 ? 's' : ''}
+   326→                      </span>
+   327→                    </div>
+   328→                    <span className="text-xs font-mono text-slate-600 dark:text-slate-400 w-8 text-right">
+   329→                      {count}
+   330→                    </span>
+   331→                  </div>
+   332→                ))
+   333→              )}
+   334→            </div>
+   335→          </CardContent>
+   336→        </Card>
+   337→
+   338→        {/* 1. Costo de Personal */}
+   339→        <Card className="shadow-sm">
+   340→          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+   341→            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
+   342→              <DollarSign className="h-4 w-4 text-emerald-600" /> Costo de Personal
+   343→            </CardTitle>
+   344→            <Button variant="ghost" size="sm" onClick={() => exportCSV('costo')}>
+   345→              <Download className="h-3.5 w-3.5" />
+   346→            </Button>
+   347→          </CardHeader>
+   348→          <CardContent className="space-y-4">
+   349→            <div className="grid grid-cols-3 gap-3 text-center">
+   350→              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
+   351→                <p className="text-xs text-slate-500 dark:text-slate-400">Total</p>
+   352→                <p className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">${data.costo_personal.costo_total.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+   353→              </div>
+   354→              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
+   355→                <p className="text-xs text-slate-500 dark:text-slate-400">Promedio</p>
+   356→                <p className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">${data.costo_personal.costo_promedio.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+   357→              </div>
+   358→              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
+   359→                <p className="text-xs text-slate-500 dark:text-slate-400">Empleados</p>
+   360→                <p className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">{data.costo_personal.total_empleados}</p>
+   361→              </div>
+   362→            </div>
+   363→            {/* Bar chart */}
+   364→            <div className="space-y-2">
+   365→              {data.costo_personal.por_departamento.map((dept) => (
+   366→                <div key={dept.area_codigo} className="flex items-center gap-2">
+   367→                  <span className="text-xs text-slate-600 dark:text-slate-400 w-24 truncate" title={dept.area_nombre}>{dept.area_nombre}</span>
+   368→                  <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-5 relative overflow-hidden">
+   369→                    <div
+   370→                      className="h-full bg-emerald-400 dark:bg-emerald-600 rounded-full"
+   371→                      style={{ width: `${(dept.costo_total / maxCosto) * 100}%` }}
+   372→                    />
+   373→                  </div>
+   374→                  <span className="text-xs font-medium font-mono w-20 text-right text-slate-700 dark:text-slate-300">
+   375→                    ${dept.costo_total.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+   376→                  </span>
+   377→                </div>
+   378→              ))}
+   379→            </div>
+   380→          </CardContent>
+   381→        </Card>
+   382→
+   383→        {/* 2. Equidad Salarial */}
+   384→        <Card className="shadow-sm">
+   385→          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+   386→            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
+   387→              <Shield className="h-4 w-4 text-purple-600" /> Equidad Salarial
+   388→            </CardTitle>
+   389→            <Button variant="ghost" size="sm" onClick={() => exportCSV('equidad')}>
+   390→              <Download className="h-3.5 w-3.5" />
+   391→            </Button>
+   392→          </CardHeader>
+   393→          <CardContent className="space-y-4">
+   394→            <div className="grid grid-cols-2 gap-3">
+   395→              <div className="bg-blue-50 dark:bg-blue-950/50 rounded-lg p-3 text-center">
+   396→                <p className="text-xs text-blue-600 dark:text-blue-400">Masculino</p>
+   397→                <p className="text-lg font-bold text-blue-800 dark:text-blue-200">{data.equidad_salarial.por_genero.masculino.count}</p>
+   398→                <p className="text-xs font-mono text-blue-600 dark:text-blue-400">${data.equidad_salarial.por_genero.masculino.promedio.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+   399→              </div>
+   400→              <div className="bg-pink-50 dark:bg-pink-950/50 rounded-lg p-3 text-center">
+   401→                <p className="text-xs text-pink-600 dark:text-pink-400">Femenino</p>
+   402→                <p className="text-lg font-bold text-pink-800 dark:text-pink-200">{data.equidad_salarial.por_genero.femenino.count}</p>
+   403→                <p className="text-xs font-mono text-pink-600 dark:text-pink-400">${data.equidad_salarial.por_genero.femenino.promedio.toLocaleString('en-US', { maximumFractionDigits: 0 })}</p>
+   404→              </div>
+   405→            </div>
+   406→            <div className={`rounded-lg p-3 text-center ${Math.abs(data.equidad_salarial.brecha_salarial_pct) < 10 ? 'bg-emerald-50 dark:bg-emerald-950/50' : 'bg-amber-50 dark:bg-amber-950/50'}`}>
+   407→              <p className="text-xs text-slate-500 dark:text-slate-400">Brecha Salarial</p>
+   408→              <p className={`text-xl font-bold ${Math.abs(data.equidad_salarial.brecha_salarial_pct) < 10 ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
+   409→                {data.equidad_salarial.brecha_salarial_pct.toFixed(1)}%
+   410→              </p>
+   411→            </div>
+   412→            {/* Band distribution */}
+   413→            {Object.entries(data.equidad_salarial.distribucion_banda).length > 0 && (
+   414→              <div className="space-y-1.5">
+   415→                <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Distribución por Banda</p>
+   416→                {Object.entries(data.equidad_salarial.distribucion_banda).map(([banda, gen]) => (
+   417→                  <div key={banda} className="flex items-center gap-2 text-xs">
+   418→                    <span className="w-20 truncate text-slate-600 dark:text-slate-400">{banda}</span>
+   419→                    <div className="flex-1 flex h-4 rounded overflow-hidden bg-slate-100 dark:bg-slate-800">
+   420→                      <div className="bg-blue-400 dark:bg-blue-600 h-full" style={{ width: `${(gen.M / (gen.M + gen.F)) * 100}%` }} />
+   421→                      <div className="bg-pink-400 dark:bg-pink-600 h-full" style={{ width: `${(gen.F / (gen.M + gen.F)) * 100}%` }} />
+   422→                    </div>
+   423→                    <span className="text-slate-500 dark:text-slate-400">{gen.M}M / {gen.F}F</span>
+   424→                  </div>
+   425→                ))}
+   426→              </div>
+   427→            )}
+   428→          </CardContent>
+   429→        </Card>
+   430→
+   431→        {/* 3. Rotación */}
+   432→        <Card className="shadow-sm">
+   433→          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+   434→            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
+   435→              <TrendingUp className="h-4 w-4 text-amber-600" /> Rotación de Personal
+   436→            </CardTitle>
+   437→            <Button variant="ghost" size="sm" onClick={() => exportCSV('rotacion')}>
+   438→              <Download className="h-3.5 w-3.5" />
+   439→            </Button>
+   440→          </CardHeader>
+   441→          <CardContent className="space-y-4">
+   442→            <div className="text-center">
+   443→              <p className="text-xs text-slate-500 dark:text-slate-400">Tasa de Rotación</p>
+   444→              <p className={`text-4xl font-bold font-mono ${data.rotacion.tasa_rotacion_pct > 15 ? 'text-red-600 dark:text-red-400' : data.rotacion.tasa_rotacion_pct > 8 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+   445→                {data.rotacion.tasa_rotacion_pct.toFixed(1)}%
+   446→              </p>
+   447→            </div>
+   448→            <div className="grid grid-cols-3 gap-3 text-center">
+   449→              <div className="bg-emerald-50 dark:bg-emerald-950/50 rounded-lg p-2">
+   450→                <p className="text-xs text-emerald-600 dark:text-emerald-400">Activos</p>
+   451→                <p className="text-lg font-bold font-mono text-emerald-800 dark:text-emerald-200">{data.rotacion.empleados_activos}</p>
+   452→              </div>
+   453→              <div className="bg-blue-50 dark:bg-blue-950/50 rounded-lg p-2">
+   454→                <p className="text-xs text-blue-600 dark:text-blue-400">Ingresos</p>
+   455→                <p className="text-lg font-bold font-mono text-blue-800 dark:text-blue-200">{data.rotacion.nuevas_contrataciones}</p>
+   456→              </div>
+   457→              <div className="bg-red-50 dark:bg-red-950/50 rounded-lg p-2">
+   458→                <p className="text-xs text-red-600 dark:text-red-400">Salidas</p>
+   459→                <p className="text-lg font-bold font-mono text-red-800 dark:text-red-200">{data.rotacion.terminaciones}</p>
+   460→              </div>
+   461→            </div>
+   462→          </CardContent>
+   463→        </Card>
+   464→
+   465→        {/* 4. Pasivos Laborales */}
+   466→        <Card className="shadow-sm">
+   467→          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+   468→            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
+   469→              <Users className="h-4 w-4 text-teal-600" /> Pasivos Laborales
+   470→            </CardTitle>
+   471→            <Button variant="ghost" size="sm" onClick={() => exportCSV('pasivos')}>
+   472→              <Download className="h-3.5 w-3.5" />
+   473→            </Button>
+   474→          </CardHeader>
+   475→          <CardContent className="space-y-4">
+   476→            <div className="space-y-3">
+   477→              {[
+   478→                { label: 'Reserva Vacaciones', value: data.pasivos_laborales.reserva_vacaciones, color: 'bg-teal-400 dark:bg-teal-600' },
+   479→                { label: 'Reserva Aguinaldo', value: data.pasivos_laborales.reserva_aguinaldo, color: 'bg-amber-400 dark:bg-amber-600' },
+   480→                { label: 'Reserva Indemnización', value: data.pasivos_laborales.reserva_indemnizacion, color: 'bg-red-400 dark:bg-red-600' },
+   481→              ].map((item) => {
+   482→                const pct = (item.value / data.pasivos_laborales.total_pasivos) * 100;
+   483→                return (
+   484→                  <div key={item.label}>
+   485→                    <div className="flex justify-between text-sm mb-1">
+   486→                      <span className="text-slate-600 dark:text-slate-400">{item.label}</span>
+   487→                      <span className="font-medium font-mono text-slate-900 dark:text-slate-100">${item.value.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+   488→                    </div>
+   489→                    <div className="bg-slate-100 dark:bg-slate-800 rounded-full h-3 overflow-hidden">
+   490→                      <div className={`${item.color} h-full rounded-full transition-all duration-500`} style={{ width: `${Math.max(pct, 1)}%` }} />
+   491→                    </div>
+   492→                  </div>
+   493→                );
+   494→              })}
+   495→            </div>
+   496→            <div className="border-t dark:border-slate-700 pt-3 text-center">
+   497→              <p className="text-xs text-slate-500 dark:text-slate-400">Total Pasivos Laborales</p>
+   498→              <p className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-100">
+   499→                ${data.pasivos_laborales.total_pasivos.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+   500→              </p>
+   501→            </div>
+   502→          </CardContent>
+   503→        </Card>
+   504→      </div>
+   505→
+   506→      {/* Enhanced Profiles Table */}
+   507→      {perfiles.length > 0 && (
+   508→        <Card className="shadow-sm">
+   509→          <CardHeader className="pb-3">
+   510→            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
+   511→              <Briefcase className="h-4 w-4 text-emerald-600" /> Perfiles de Puesto
+   512→            </CardTitle>
+   513→          </CardHeader>
+   514→          <CardContent className="p-0">
+   515→            <div className="overflow-x-auto max-h-96 overflow-y-auto">
+   516→              <table className="w-full text-sm">
+   517→                <thead className="sticky top-0 z-10">
+   518→                  <tr className="border-b bg-slate-50 dark:bg-slate-800">
+   519→                    <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-300">Código</th>
+   520→                    <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-300">Puesto</th>
+   521→                    <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-300">Área</th>
+   522→                    <th className="text-center p-3 font-semibold text-slate-700 dark:text-slate-300">Estado</th>
+   523→                    <th className="text-right p-3 font-semibold text-slate-700 dark:text-slate-300">Puntos</th>
+   524→                    <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-300">Banda</th>
+   525→                    <th className="text-center p-3 font-semibold text-slate-700 dark:text-slate-300">Empleados</th>
+   526→                  </tr>
+   527→                </thead>
+   528→                <tbody>
+   529→                  {perfiles.map((perfil, idx) => (
+   530→                    <tr
+   531→                      key={perfil.id}
+   532→                      className={`border-b transition-colors hover:bg-emerald-50 dark:hover:bg-emerald-950/30 ${
+   533→                        idx % 2 === 0
+   534→                          ? 'bg-white dark:bg-slate-900'
+   535→                          : 'bg-slate-50/50 dark:bg-slate-800/50'
+   536→                      }`}
+   537→                    >
+   538→                      <td className="p-3">
+   539→                        <span className="font-mono text-xs text-slate-600 dark:text-slate-400">{perfil.codigo}</span>
+   540→                      </td>
+   541→                      <td className="p-3 font-medium text-slate-900 dark:text-slate-100 max-w-[200px] truncate" title={perfil.nombre_puesto}>
+   542→                        {perfil.nombre_puesto}
+   543→                      </td>
+   544→                      <td className="p-3 text-slate-600 dark:text-slate-400">{perfil.area?.nombre || '-'}</td>
+   545→                      <td className="p-3 text-center">
+   546→                        <Badge
+   547→                          variant="outline"
+   548→                          className={`inline-flex items-center gap-1.5 text-xs ${
+   549→                            perfil.estado === 'VIGENTE'
+   550→                              ? 'border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50'
+   551→                              : perfil.estado === 'BORRADOR'
+   552→                              ? 'border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50'
+   553→                              : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800'
+   554→                          }`}
+   555→                        >
+   556→                          <span className={`h-1.5 w-1.5 rounded-full ${
+   557→                            perfil.estado === 'VIGENTE' ? 'bg-emerald-500' : perfil.estado === 'BORRADOR' ? 'bg-amber-500' : 'bg-slate-400'
+   558→                          }`} />
+   559→                          {perfil.estado}
+   560→                        </Badge>
+   561→                      </td>
+   562→                      <td className="p-3 text-right font-mono font-medium text-slate-900 dark:text-slate-100">
+   563→                        {perfil.puntos_total}
+   564→                      </td>
+   565→                      <td className="p-3 text-slate-600 dark:text-slate-400">
+   566→                        {perfil.banda_salarial ? `G${perfil.banda_salarial.grado} ${perfil.banda_salarial.nombre}` : '-'}
+   567→                      </td>
+   568→                      <td className="p-3 text-center">
+   569→                        <span className="inline-flex items-center gap-1 font-mono text-slate-600 dark:text-slate-400">
+   570→                          <Users className="h-3.5 w-3.5" /> {perfil._count.empleados_perfil}
+   571→                        </span>
+   572→                      </td>
+   573→                    </tr>
+   574→                  ))}
+   575→                </tbody>
+   576→              </table>
+   577→            </div>
+   578→          </CardContent>
+   579→        </Card>
+   580→      )}
+   581→    </div>
+   582→  );
+   583→}
+   584→

@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, Calendar, Loader2, RefreshCw, AlertCircle, Clock,
-  FileText, CheckCircle, DollarSign, Users, Filter, TrendingUp
+  FileText, CheckCircle, DollarSign, Users, Filter, TrendingUp,
+  CalendarDays, ChevronLeft, ChevronRight, Eye, ThumbsUp, SendHorizonal,
+  CircleDot, CircleCheck, Circle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +32,8 @@ interface Planilla {
   total_empleados: number;
   total_salarios_brutos: number;
   total_neto_a_pagar: number;
+  total_deducciones?: number;
+  total_cargas_patronales?: number;
   calculada_por: string | null;
   aprobada_por: string | null;
   fecha_calculo: string | null;
@@ -64,17 +68,35 @@ const borderColors: Record<string, string> = {
   PAGADA: 'border-l-green-500',
 };
 
-const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MONTHS_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const MONTHS_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const WEEKDAYS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'];
 
-const workflowSteps = ['CALCULADA', 'APROBADA', 'PAGADA'] as const;
+// Full workflow steps for progress bar
+const fullWorkflowSteps = [
+  { key: 'BORRADOR', label: 'Borrador' },
+  { key: 'CALCULADA', label: 'Calculada' },
+  { key: 'APROBADA', label: 'Aprobación' },
+  { key: 'DISPERSION', label: 'Dispersión' },
+  { key: 'PAGADA', label: 'Pagada' },
+] as const;
 
-function getWorkflowProgress(estado: string): number {
-  if (estado === 'BORRADOR' || estado === 'EN_CORRECCION') return 0;
-  const idx = workflowSteps.indexOf(estado as typeof workflowSteps[number]);
-  return idx >= 0 ? idx + 1 : 0;
+function getFullWorkflowProgress(estado: string): number {
+  const idx = fullWorkflowSteps.findIndex((s) => s.key === estado);
+  if (estado === 'EN_CORRECCION') return 1; // Back to calculated
+  return idx >= 0 ? idx : 0;
 }
 
-export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
+function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function getFirstDayOfMonth(year: number, month: number): number {
+  const day = new Date(year, month, 1).getDay();
+  return day === 0 ? 6 : day - 1; // Monday = 0
+}
+
+export default function PayrollPeriods({ accessToken, userRole }: PayrollPeriodsProps) {
   const { toast } = useToast();
   const [planillas, setPlanillas] = useState<Planilla[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,7 +108,11 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('TODAS');
+  const [typeFilter, setTypeFilter] = useState<string>('TODAS');
   const [selectedPlanilla, setSelectedPlanilla] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<number | null>(null);
 
   const fetchPlanillas = useCallback(async () => {
     setLoading(true);
@@ -139,27 +165,112 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
       if (startDate.getFullYear() !== selectedYear) return false;
       if (selectedMonth !== null && startDate.getMonth() !== selectedMonth) return false;
       if (statusFilter !== 'TODAS' && p.estado !== statusFilter) return false;
+      if (typeFilter !== 'TODAS' && p.tipo !== typeFilter) return false;
       return true;
     });
-  }, [planillas, selectedYear, selectedMonth, statusFilter]);
+  }, [planillas, selectedYear, selectedMonth, statusFilter, typeFilter]);
 
   // Summary stats
   const stats = useMemo(() => {
     const total = filteredPlanillas.length;
-    const pagadas = filteredPlanillas.filter(p => p.estado === 'PAGADA');
-    const montoPagado = pagadas.reduce((sum, p) => sum + p.total_neto_a_pagar, 0);
-    const latest = filteredPlanillas.length > 0 ? filteredPlanillas[0] : null;
-    const empleadosNomina = latest?.total_empleados || 0;
-    return { total, pagadasCount: pagadas.length, montoPagado, empleadosNomina };
-  }, [filteredPlanillas]);
+    const allPlanillasForStats = planillas.filter(p => {
+      const startDate = new Date(p.fecha_inicio_periodo);
+      return startDate.getFullYear() === selectedYear && (selectedMonth === null || startDate.getMonth() === selectedMonth);
+    });
+    const nomMes = allPlanillasForStats
+      .filter(p => p.estado === 'PAGADA' || p.estado === 'APROBADA')
+      .reduce((sum, p) => sum + p.total_neto_a_pagar, 0);
+    const proxArr = allPlanillasForStats
+      .filter(p => ['BORRADOR', 'CALCULADA', 'EN_CORRECCION'].includes(p.estado))
+      .sort((a, b) => new Date(a.fecha_fin_periodo).getTime() - new Date(b.fecha_fin_periodo).getTime());
+    const totalEmpleados = allPlanillasForStats.length > 0
+      ? Math.max(...allPlanillasForStats.map(p => p.total_empleados))
+      : 0;
+    return {
+      total,
+      nominaDelMes: nomMes,
+      proximoVencimiento: proxArr.length > 0 ? proxArr[0] : null,
+      proximoVencimientoArr: proxArr,
+      empleados: totalEmpleados,
+    };
+  }, [filteredPlanillas, planillas, selectedYear, selectedMonth]);
+
+  const { nominaDelMes, proximoVencimientoArr } = stats;
+  const empleadosNomina = stats.empleados;
+  const proximoVencimiento = proximoVencimientoArr;
 
   // Current period: most recent CALCULADA or EN_CORRECCION
   const currentPeriod = planillas.find(p => ['CALCULADA', 'EN_CORRECCION'].includes(p.estado));
 
   const years = [2024, 2025, 2026];
 
+  // Calendar planilla dates for the displayed month
+  const calendarPlanillas = useMemo(() => {
+    return planillas.filter(p => {
+      const start = new Date(p.fecha_inicio_periodo);
+      const end = new Date(p.fecha_fin_periodo);
+      return (start.getFullYear() === calendarYear && start.getMonth() === calendarMonth) ||
+             (end.getFullYear() === calendarYear && end.getMonth() === calendarMonth);
+    });
+  }, [planillas, calendarYear, calendarMonth]);
+
+  // Dates that have planilla activity in the calendar month
+  const planillaDates = useMemo(() => {
+    const dates: Record<number, Planilla[]> = {};
+    calendarPlanillas.forEach(p => {
+      const start = new Date(p.fecha_inicio_periodo);
+      const end = new Date(p.fecha_fin_periodo);
+      const daysInMonth = getDaysInMonth(calendarYear, calendarMonth);
+      for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(calendarYear, calendarMonth, d);
+        if (date >= start && date <= end) {
+          if (!dates[d]) dates[d] = [];
+          if (!dates[d].find(pp => pp.id === p.id)) dates[d].push(p);
+        }
+      }
+    });
+    return dates;
+  }, [calendarPlanillas, calendarYear, calendarMonth]);
+
+  // Deadline dates (end of period for non-paid planillas)
+  const deadlineDates = useMemo(() => {
+    const dates: Record<number, boolean> = {};
+    calendarPlanillas
+      .filter(p => !['PAGADA'].includes(p.estado))
+      .forEach(p => {
+        const end = new Date(p.fecha_fin_periodo);
+        if (end.getFullYear() === calendarYear && end.getMonth() === calendarMonth) {
+          dates[end.getDate()] = true;
+        }
+      });
+    return dates;
+  }, [calendarPlanillas, calendarYear, calendarMonth]);
+
+  const selectedDatePlanillas = selectedCalendarDate !== null
+    ? (planillaDates[selectedCalendarDate] || [])
+    : [];
+
   return (
     <div className="space-y-5">
+      {/* Enhanced Header with Gradient Banner */}
+      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 p-5 text-white shadow-lg">
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iZyIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNMCAyMGgyME0yMCAwdjIwIiBmaWxsPSJub25lIiBzdHJva2U9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgZmlsbD0idXJsKCNnKSIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIvPjwvc3ZnPg==')] opacity-50" />
+        <div className="absolute -right-6 -bottom-6 opacity-10">
+          <CalendarDays className="h-32 w-32" />
+        </div>
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+              <CalendarDays className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold tracking-tight">Períodos de Nómina</h2>
+              <p className="text-sm text-emerald-100/80">Gestión de planillas, aprobación y dispersión de nómina</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Summary Stats Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="shadow-sm border-0 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/40 dark:to-emerald-900/20 overflow-hidden relative">
@@ -177,21 +288,6 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-0 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/40 dark:to-green-900/20 overflow-hidden relative">
-          <div className="absolute top-2 right-2 opacity-10">
-            <CheckCircle className="h-16 w-16 text-green-600 dark:text-green-400" />
-          </div>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="p-1.5 rounded-md bg-green-200/60 dark:bg-green-800/40">
-                <CheckCircle className="h-3.5 w-3.5 text-green-700 dark:text-green-300" />
-              </div>
-              <span className="text-[11px] font-medium text-green-700 dark:text-green-300">Pagadas</span>
-            </div>
-            <p className="text-2xl font-bold text-green-900 dark:text-green-100">{stats.pagadasCount}</p>
-          </CardContent>
-        </Card>
-
         <Card className="shadow-sm border-0 bg-gradient-to-br from-teal-50 to-teal-100/50 dark:from-teal-950/40 dark:to-teal-900/20 overflow-hidden relative">
           <div className="absolute top-2 right-2 opacity-10">
             <DollarSign className="h-16 w-16 text-teal-600 dark:text-teal-400" />
@@ -201,9 +297,28 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
               <div className="p-1.5 rounded-md bg-teal-200/60 dark:bg-teal-800/40">
                 <DollarSign className="h-3.5 w-3.5 text-teal-700 dark:text-teal-300" />
               </div>
-              <span className="text-[11px] font-medium text-teal-700 dark:text-teal-300">Monto Total Pagado</span>
+              <span className="text-[11px] font-medium text-teal-700 dark:text-teal-300">Nómina del Mes</span>
             </div>
-            <p className="text-xl font-bold text-teal-900 dark:text-teal-100">{fmt(stats.montoPagado)}</p>
+            <p className="text-xl font-bold text-teal-900 dark:text-teal-100">{fmt(nominaDelMes)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/20 overflow-hidden relative">
+          <div className="absolute top-2 right-2 opacity-10">
+            <Clock className="h-16 w-16 text-amber-600 dark:text-amber-400" />
+          </div>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-md bg-amber-200/60 dark:bg-amber-800/40">
+                <Clock className="h-3.5 w-3.5 text-amber-700 dark:text-amber-300" />
+              </div>
+              <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">Próximo Vencimiento</span>
+            </div>
+            <p className="text-sm font-bold text-amber-900 dark:text-amber-100">
+              {proximoVencimiento.length > 0
+                ? new Date(proximoVencimiento[0].fecha_fin_periodo).toLocaleDateString('es-SV')
+                : '—'}
+            </p>
           </CardContent>
         </Card>
 
@@ -216,9 +331,9 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
               <div className="p-1.5 rounded-md bg-cyan-200/60 dark:bg-cyan-800/40">
                 <Users className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-300" />
               </div>
-              <span className="text-[11px] font-medium text-cyan-700 dark:text-cyan-300">Empleados en Nómina</span>
+              <span className="text-[11px] font-medium text-cyan-700 dark:text-cyan-300">Empleados</span>
             </div>
-            <p className="text-2xl font-bold text-cyan-900 dark:text-cyan-100">{stats.empleadosNomina}</p>
+            <p className="text-2xl font-bold text-cyan-900 dark:text-cyan-100">{empleadosNomina}</p>
           </CardContent>
         </Card>
       </div>
@@ -253,6 +368,137 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Calendar View */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
+              <CalendarDays className="h-4 w-4 text-emerald-600" /> Calendario de Nómina
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => {
+                  if (calendarMonth === 0) {
+                    setCalendarMonth(11);
+                    setCalendarYear(calendarYear - 1);
+                  } else {
+                    setCalendarMonth(calendarMonth - 1);
+                  }
+                }}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 min-w-[140px] text-center">
+                {MONTHS_FULL[calendarMonth]} {calendarYear}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => {
+                  if (calendarMonth === 11) {
+                    setCalendarMonth(0);
+                    setCalendarYear(calendarYear + 1);
+                  } else {
+                    setCalendarMonth(calendarMonth + 1);
+                  }
+                }}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Calendar grid */}
+          <div className="grid grid-cols-7 gap-0.5 text-center">
+            {/* Weekday headers */}
+            {WEEKDAYS.map((day) => (
+              <div key={day} className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 py-1">
+                {day}
+              </div>
+            ))}
+            {/* Empty cells before first day */}
+            {Array.from({ length: getFirstDayOfMonth(calendarYear, calendarMonth) }, (_, i) => (
+              <div key={`empty-${i}`} className="h-8" />
+            ))}
+            {/* Day cells */}
+            {Array.from({ length: getDaysInMonth(calendarYear, calendarMonth) }, (_, i) => {
+              const day = i + 1;
+              const hasPlanilla = planillaDates[day] && planillaDates[day].length > 0;
+              const isDeadline = deadlineDates[day];
+              const isToday = calendarYear === new Date().getFullYear() && calendarMonth === new Date().getMonth() && day === new Date().getDate();
+              const isSelected = selectedCalendarDate === day;
+              return (
+                <button
+                  key={day}
+                  onClick={() => setSelectedCalendarDate(isSelected ? null : day)}
+                  className={`relative h-8 text-xs rounded-md transition-all flex items-center justify-center ${
+                    isSelected
+                      ? 'bg-emerald-600 text-white font-bold'
+                      : hasPlanilla
+                      ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 font-medium hover:bg-emerald-200 dark:hover:bg-emerald-900/60'
+                      : isToday
+                      ? 'bg-slate-200 dark:bg-slate-700 font-bold text-slate-900 dark:text-slate-100'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {day}
+                  {isDeadline && !isSelected && (
+                    <span className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full" />
+                  )}
+                  {hasPlanilla && !isSelected && (
+                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3 h-0.5 bg-emerald-500 rounded-full" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Calendar legend */}
+          <div className="flex items-center gap-4 mt-3 text-[10px] text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-1">
+              <span className="w-3 h-0.5 bg-emerald-500 rounded-full" /> Período de planilla
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-red-500 rounded-full" /> Vencimiento
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-3 h-3 bg-emerald-600 rounded text-white text-[8px] flex items-center justify-center">•</span> Seleccionado
+            </div>
+          </div>
+
+          {/* Selected date planillas */}
+          {selectedCalendarDate !== null && (
+            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                Planillas del {selectedCalendarDate} de {MONTHS_FULL[calendarMonth]}
+              </p>
+              {selectedDatePlanillas.length === 0 ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">No hay planillas para esta fecha</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {selectedDatePlanillas.map(p => (
+                    <div key={p.id} className="flex items-center justify-between text-xs p-2 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Badge className={`text-[9px] ${estadoColors[p.estado]}`} variant="secondary">
+                          {estadoLabels[p.estado]}
+                        </Badge>
+                        <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{p.codigo_planilla}</span>
+                      </div>
+                      <span className="font-mono text-slate-600 dark:text-slate-400">{fmt(p.total_neto_a_pagar)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Filter Bar + Header */}
       <div className="space-y-3">
@@ -298,13 +544,13 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
           </Dialog>
         </div>
 
-        {/* Year / Month / Status Filter Bar */}
+        {/* Year / Month / Status / Type Filter Bar */}
         <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
           <CardContent className="p-3 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <Filter className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Filtros:</span>
-              
+
               {/* Year selector */}
               <div className="flex gap-1">
                 {years.map(y => (
@@ -326,13 +572,15 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
 
               {/* Month quick-select */}
               <div className="flex gap-0.5 flex-wrap">
-                {MONTHS.map((m, i) => (
+                {MONTHS_SHORT.map((m, i) => (
                   <button
                     key={m}
                     onClick={() => setSelectedMonth(selectedMonth === i ? null : i)}
                     className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-all ${
                       selectedMonth === i
                         ? 'bg-emerald-600 text-white shadow-sm'
+                        : i === new Date().getMonth() && selectedYear === new Date().getFullYear()
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 ring-1 ring-emerald-300 dark:ring-emerald-700'
                         : 'bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
                     }`}
                   >
@@ -357,12 +605,29 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
                   {s === 'TODAS' ? 'Todas' : estadoLabels[s] || s}
                 </button>
               ))}
+
+              <div className="w-px h-5 bg-slate-200 dark:bg-slate-700" />
+
+              {/* Type filter */}
+              {['TODAS', 'MENSUAL', 'QUINCENAL'].map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTypeFilter(t)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    typeFilter === t
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {t === 'TODAS' ? 'Todos' : t === 'MENSUAL' ? 'Mensual' : 'Quincenal'}
+                </button>
+              ))}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Enhanced Planilla Cards */}
+      {/* Enhanced Planilla Cards with Workflow Progress */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[1, 2, 3, 4].map(i => (
@@ -384,10 +649,12 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[700px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600">
           {filteredPlanillas.map(p => {
-            const progress = getWorkflowProgress(p.estado);
+            const progress = getFullWorkflowProgress(p.estado);
             const isExpanded = selectedPlanilla === p.id;
+            const deducciones = p.total_deducciones || (p.total_salarios_brutos - p.total_neto_a_pagar);
+            const cargasPatronales = p.total_cargas_patronales || Math.round(p.total_salarios_brutos * 0.1725);
             return (
               <Card
                 key={p.id}
@@ -397,6 +664,7 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
                 onClick={() => setSelectedPlanilla(isExpanded ? null : p.id)}
               >
                 <CardContent className="p-4">
+                  {/* Header: code, status, type */}
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <div className="flex items-center gap-2">
@@ -418,45 +686,124 @@ export default function PayrollPeriods({ accessToken }: PayrollPeriodsProps) {
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{p.tipo}</span>
                   </div>
 
-                  {/* Key metrics */}
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    <div>
+                  {/* Financial summary */}
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
                       <p className="text-[10px] text-slate-400 dark:text-slate-500">Bruto</p>
                       <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{fmt(p.total_salarios_brutos)}</p>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500">Neto</p>
-                      <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{fmt(p.total_neto_a_pagar)}</p>
+                    <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500">Deducciones</p>
+                      <p className="text-sm font-semibold text-red-600 dark:text-red-400">{fmt(deducciones)}</p>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500">Empleados</p>
-                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{p.total_empleados}</p>
+                    <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-2">
+                      <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Neto</p>
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.total_neto_a_pagar)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500">Cargas Patronales</p>
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">{fmt(cargasPatronales)}</p>
                     </div>
                   </div>
 
-                  {/* Workflow progress */}
-                  <div className="flex items-center gap-1">
-                    {workflowSteps.map((ws, i) => {
-                      const isComplete = i < progress;
-                      const isCurrent = i === progress - 1 && p.estado === ws;
-                      return (
-                        <React.Fragment key={ws}>
-                          <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors ${
-                            isComplete
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                              : isCurrent
-                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                              : 'bg-slate-50 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
-                          }`}>
-                            {isComplete ? <CheckCircle className="h-2.5 w-2.5" /> : <div className="h-2.5 w-2.5 rounded-full border border-current" />}
-                            {estadoLabels[ws]}
-                          </div>
-                          {i < workflowSteps.length - 1 && (
-                            <div className={`w-4 h-px ${isComplete ? 'bg-emerald-400 dark:bg-emerald-600' : 'bg-slate-200 dark:bg-slate-700'}`} />
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
+                  {/* Employee count with avatar row */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex -space-x-1.5">
+                      {Array.from({ length: Math.min(p.total_empleados, 3) }, (_, i) => (
+                        <div
+                          key={i}
+                          className="w-6 h-6 rounded-full border-2 border-white dark:border-slate-900 bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-[8px] text-white font-bold"
+                        >
+                          {String.fromCharCode(65 + i)}
+                        </div>
+                      ))}
+                      {p.total_empleados > 3 && (
+                        <div className="w-6 h-6 rounded-full border-2 border-white dark:border-slate-900 bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[8px] text-slate-600 dark:text-slate-400 font-medium">
+                          +{p.total_empleados - 3}
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-600 dark:text-slate-400">{p.total_empleados} empleados</span>
+                  </div>
+
+                  {/* Full Workflow Progress Bar */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[9px] text-slate-400 dark:text-slate-500">
+                      <span>Progreso del flujo</span>
+                      <span>{progress + 1}/{fullWorkflowSteps.length}</span>
+                    </div>
+                    <div className="relative">
+                      {/* Progress track */}
+                      <div className="flex items-center">
+                        {fullWorkflowSteps.map((step, i) => {
+                          const isComplete = i < progress;
+                          const isCurrent = i === progress;
+                          return (
+                            <React.Fragment key={step.key}>
+                              <div className="flex flex-col items-center">
+                                <div
+                                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold transition-all ${
+                                    isComplete
+                                      ? 'bg-emerald-500 text-white shadow-sm'
+                                      : isCurrent
+                                      ? 'bg-emerald-500 text-white ring-2 ring-emerald-200 dark:ring-emerald-800 shadow-sm'
+                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500'
+                                  }`}
+                                >
+                                  {isComplete ? '✓' : i + 1}
+                                </div>
+                                <span className={`text-[8px] mt-0.5 ${
+                                  isComplete || isCurrent
+                                    ? 'text-emerald-600 dark:text-emerald-400 font-medium'
+                                    : 'text-slate-400 dark:text-slate-500'
+                                }`}>
+                                  {step.label}
+                                </span>
+                              </div>
+                              {i < fullWorkflowSteps.length - 1 && (
+                                <div className={`flex-1 h-0.5 mx-0.5 ${
+                                  i < progress
+                                    ? 'bg-emerald-400 dark:bg-emerald-600'
+                                    : 'bg-slate-200 dark:bg-slate-700'
+                                }`} />
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick action buttons */}
+                  <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[10px] px-2 text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400"
+                      onClick={(e) => { e.stopPropagation(); setSelectedPlanilla(isExpanded ? null : p.id); }}
+                    >
+                      <Eye className="h-3 w-3 mr-1" /> Ver Detalle
+                    </Button>
+                    {p.estado === 'CALCULADA' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[10px] px-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ThumbsUp className="h-3 w-3 mr-1" /> Aprobar
+                      </Button>
+                    )}
+                    {p.estado === 'APROBADA' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[10px] px-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <SendHorizonal className="h-3 w-3 mr-1" /> Dispersar
+                      </Button>
+                    )}
                   </div>
 
                   {/* Expanded detail */}
