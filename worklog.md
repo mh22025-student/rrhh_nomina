@@ -2398,6 +2398,21 @@ Significantly enhanced the IncidenceManager component with 7 major feature addit
 - ✅ agent-browser QA passed across all key views
 - ✅ 0 runtime errors, 0 console errors
 
+### Task 3: OrgChart Enhancement (Visual Tree + Interactive Features)
+- **Date**: 2024-01 Round 5+
+- **File**: `/src/components/modules/OrgChart.tsx`
+- **Features Added**:
+  1. **Visual Organization Tree** — Top-to-bottom CSS flexbox tree with connecting lines, gradient node cards
+  2. **Employee Popup on Node Click** — shadcn Popover with employee list, name, position, status badge
+  3. **Area Detail Dialog** — Double-click opens dialog with budget summary, employee table, linked job profiles, hierarchy path
+  4. **Zoom/Pan Controls** — Zoom in/out (30%-200%), fit-to-screen, scrollable container with CSS transform:scale()
+  5. **Statistics Dashboard** — 4 stat cards, horizontal bar chart, CSS conic-gradient donut chart, vacancy list
+  6. **Search & Highlight** — Ring/glow effect on matching nodes, auto-expand ancestors, clickable match chips
+  7. **Visual Polish** — Gradient headers, pulse animation on vacancies, view mode toggle (Diagrama/Lista), dark mode
+- **Preserved**: All original list tree, stats sidebar, employee panel, create/edit dialogs
+- **Lint**: ✅ 0 errors
+- **Agent-ctx**: `3-orgchart-enhancement.md`
+
 ### Unresolved Issues / Next Steps
 1. **Radix UI tab clicks** — agent-browser can't trigger Radix tab switches (works fine in real browser)
 2. **Full approval workflow test** — Need to test CALCULADA → APROBADA → PAGADA with multiple role switches
@@ -2405,3 +2420,214 @@ Significantly enhanced the IncidenceManager component with 7 major feature addit
 4. **More seed data** — Could add more historical planillas for richer trend data
 5. **Integration test** — Test "Probar Conexión" on Integrations page
 6. **Performance optimization** — Some components are large (PayrollDashboard ~2000+ lines), could split into sub-components
+
+---
+
+## Task 6: BankDispersion.tsx Enhancement (2026-03-05)
+
+**Agent**: Code Agent
+**File**: `/home/z/my-project/src/components/modules/BankDispersion.tsx`
+
+### Enhancements Implemented
+
+1. **Planilla Selection Enhancement** — Replaced simple Select dropdown with selectable card grid. Each card shows: planilla code, type badge (color-coded: ORDINARIA/EXTRAORDINARIA/AGUINALDO/LIQUIDACION/BONO), employee count with icon, total net amount, approval date. Supports multiple selection for batch dispersion with "Select All" / "Clear" buttons. Custom selection indicator (green circle with checkmark) replaces checkbox.
+
+2. **Employee Bank Detail Preview** — Added collapsible section showing employees grouped by bank. Each bank group has: colored initial circle, bank name/code, employee count, total net amount. Expandable table with columns: name (with avatar initials), bank badge, masked account number, account type, net amount. Footer row shows totals per bank. Grand total summary at bottom. Toggle via "Ver Empleados" button.
+
+3. **CSV File Generation** — Implemented BAC ACH format CSV generation. Semicolon-delimited, UTF-8 with BOM (`\uFEFF`). Columns: Número de Cuenta; Nombre del Beneficiario; Monto; Concepto. Download button per bank in employee preview section. Additional "BAC ACH CSV" button in dispersion results per bank.
+
+4. **Dispersión Status Tracker** — 4-step animated pipeline: Generado → Enviado → Confirmado → Completado. Each step shows status icon (completed=checkmark, current=pulsing amber, pending=grey), label, and timestamp. Mock timestamps generated on dispersion creation and confirmation. Connected with background line.
+
+5. **Bank Return Processing** — Enhanced "Retornos Bancarios" section with: bank logo (colored initial circle), file name, status badge with icon, total records, amount, send date, return date, error count column. Success/error banners at bottom. Empty state with contextual message.
+
+6. **Summary Dashboard** — 4 KPI cards with hover effects: Dispersed This Month (accumulated), Pending Dispersions, Banks Involved, Success Rate (percentage with conditional message). Mini bar chart showing dispersion by bank with proportional width bars, bank initials, amounts, and employee counts. Chart appears both before and after dispersion generation.
+
+7. **Visual Polish** — Gradient header (emerald→teal→cyan) with badges. Step indicator upgraded to 4 steps with pulse animation on active step and arrow indicators on completed connectors. Bank logos as colored circles with initials (using getInitials helper). Hover effects on cards (shadow transitions). Loading skeletons for planilla cards. Bank file preview cards with scale-up hover effect on logo.
+
+### Technical Details
+- Kept 'use client' directive and all existing props interface
+- No new npm packages installed
+- All existing API integration preserved (`/api/nomina/planillas?estado=APROBADA`, `/api/nomina/planillas/{id}/dispersion`)
+- Mock employee bank detail data used for preview (14 employees across 5 banks)
+- TypeScript strict typing maintained throughout
+- Lint: passes with zero errors
+
+---
+
+## Task 4-5: Enhanced AguinaldoView & LiquidationView (Round 5)
+
+**Date**: 2024-01-XX  
+**Agent**: Code Agent  
+**Task ID**: 4-5
+
+### AguinaldoView.tsx Enhancements (5/5 Complete)
+
+1. **Employee Calculation Table** — Full detailed table with columns: Código, Nombre, Años Servicio (with progress bar to next bracket), Salario Base, Salario Diario, Días Aguinaldo (with bracket badges), Bruto, Exención ISR, ISR, Neto. Includes totals row with aggregated values. Sortable by all columns.
+
+2. **Tenure Distribution Chart** — Horizontal bar chart in "Distribución" tab showing employees grouped by tenure bracket (1-3yr=15d, 3-10yr=19d, 10+yr=21d). Each bracket card shows count, total bruto, and employee name badges. Color-coded: emerald/teal/amber.
+
+3. **ISR Calculation Detail** — Expandable "ISR" tab with:
+   - ISR explanation card (2× $365 = $730 exemption)
+   - Summary cards (Exención Total, ISR Total, Neto Total)
+   - ISR Tramos reference table (4 tramos with percentages)
+   - Collapsible per-employee ISR breakdown showing step-by-step: Bruto → Exención → Gravado → Tramo → ISR → Neto
+   - Count of employees exempt from ISR
+
+4. **Legal Reference Panel** — "Legal" tab with all 7 articles (Art. 196-202 CT) as individual cards with numbered indicators and color coding. Plus additional ISR application reference with exemption details and important notes.
+
+5. **Visual Polish** — 
+   - KPI cards with full gradient backgrounds (emerald, teal, amber, green)
+   - Decorative circles on gradient cards
+   - Animated number counters for totals
+   - Progress bars showing years toward next bracket under each employee
+   - Star icon for employees at maximum bracket (10+)
+   - Color-coded bracket badges (emerald/teal/amber)
+   - Tab-based navigation (Overview, Table, Distribution, ISR, Legal)
+
+### LiquidationView.tsx Enhancements (5/5 Complete)
+
+1. **Step-by-Step Calculation Wizard** — 4-step dialog wizard:
+   - Step 1: Searchable employee selector with info card
+   - Step 2: Visual type selection (card buttons with icons and checkmarks)
+   - Step 3: Review all selections + date input
+   - Step 4: Confirmation summary
+   - Step progress indicator with numbered circles and connecting lines
+   - Navigation buttons (Previous/Next/Calculate)
+
+2. **Calculation Breakdown Card** — "Desglose" tab with:
+   - Salary base info card
+   - Dynamic BreakdownCard components for each non-zero item
+   - Each card shows: icon, label, legal reference badge, formula, amount
+   - Color-coded: rose (indemnización), violet (prestación), teal (vacación), amber (aguinaldo), sky (salario pendiente)
+   - Total card with gradient background
+
+3. **Comparison View** — "Comparación" tab showing:
+   - Side-by-side cards: Despido Injustificado (rose) vs Renuncia Voluntaria (amber)
+   - Each card shows all breakdown items with amounts
+   - Difference highlight card showing exact amount and percentage difference
+   - Visual bar comparison (full-width for despido, proportional for renuncia)
+   - Auto-loads comparison when tab is selected
+
+4. **Liquidation History Table** — Enhanced table with:
+   - Columns: Employee, Type (colored badges), Date, Indemnización, Vacación, Aguinaldo, Salario Pendiente, Total, Estado, Actions
+   - Color-coded type badges (rose for despido, amber for renuncia, etc.)
+   - View and PDF action buttons
+   - Totals row in footer
+
+5. **Visual Polish** —
+   - Gradient KPI summary cards (emerald, teal, rose, amber)
+   - Animated total counter
+   - Tab-based navigation (Detail, Comparison, Legal)
+   - Legal reference tab with articles (Art. 58 CT, Ley 523, Art. 177 CT, Arts. 196-202 CT, Art. 44 CT)
+   - Colored type badges throughout
+   - Gradient headers on comparison cards
+   - Step wizard with visual progress indicator
+
+### Technical Notes
+- All existing functionality preserved
+- Used only Tailwind CSS + shadcn/ui (Collapsible, Tabs, Progress, etc.)
+- No new npm packages installed
+- Both components compile without errors (lint passed)
+- 'use client' directive maintained
+- Props interface unchanged: { accessToken: string; userRole: string; }
+
+---
+
+## Task 7: Integrations.tsx Enhancement (2026-03-04)
+
+### Enhancements Delivered
+1. **Connection Testing Simulation** — 1-3s delay with animated progress bar, 80/20 success/failure, realistic error messages, auto-clear after 8s
+2. **Sync Logs Timeline** — Vertical timeline with colored dots, operation type icons, status badges (emerald/red/amber), records affected, duration, error messages
+3. **Integration Health Dashboard** — Traffic light (green/yellow/red), total ops count, last successful sync, error rate %, active/total ratio
+4. **Config Preview** — Collapsible JSON code block with syntax highlighting, auto-masking of sensitive fields (passwords, API keys, tokens), monospace font
+5. **Integration Type Summary** — Horizontal bar showing BANCO/ISSS/AFP/SMTP/MH with colored icons and counts
+6. **Quick Actions Bar** — Compact icon-only buttons: Probar, Sincronizar, Editar, Desactivar/Activar with tooltips
+7. **Visual Polish** — Card hover scale, pulse on never-tested, smooth expand/collapse animations, gradient status bars, better empty state
+
+### Technical Notes
+- All existing functionality preserved
+- Used only Tailwind CSS + shadcn/ui (Progress, Tooltip, etc.)
+- No new npm packages installed
+- Lint passed with zero errors
+- 'use client' directive maintained
+- Props interface unchanged: { accessToken: string; userRole: string; }
+
+---
+
+## Round 5: Major Enhancement of Admin Module Components (2026-06-13)
+
+### QA Testing Results
+- ✅ All 23 navigation views tested via agent-browser — zero runtime errors
+- ✅ All 17+ API endpoints returning 200
+- ✅ Admin and EMPLEADO roles both tested
+- ✅ RBAC verified: EMPLEADO blocked from usuarios (403), allowed on selfservice (200)
+- ✅ Lint passes with 0 errors
+- ✅ No console errors or compilation errors
+- ✅ Dev server running clean
+
+### Enhancements Implemented
+
+#### 1. OrgChart.tsx — Visual Tree + Interactive Features (7 enhancements)
+- **Visual Organization Tree**: Top-to-bottom CSS flexbox tree with gradient-bordered node cards, area name/code/employee count, connecting lines with ::before/::after
+- **Employee Popup on Node Click**: shadcn Popover with employee list, avatars, position, status badges
+- **Area Detail Dialog**: Double-click opens dialog with budget summary, employee table, linked profiles, hierarchy breadcrumb
+- **Zoom/Pan Controls**: Zoom in/out (+/-) with percentage display (30%-200%), Fit to Screen button, CSS transform:scale()
+- **Statistics Dashboard**: Areas per level bar chart, CSS conic-gradient donut for headcount distribution, vacancy count, average salary
+- **Search & Highlight**: Search input with ring-4 glow effect on matching nodes, auto-expand ancestors, clickable match chips
+- **Visual Polish**: View mode toggle (Diagrama/Lista), gradient header bars, pulse animation on vacancy areas, dark mode support
+
+#### 2. AguinaldoView.tsx — Calculation Engine + Legal Compliance (5 enhancements)
+- **Employee Calculation Table**: Full table with Code, Name, Years of Service (progress bar), Daily Rate, Days, Bruto, Exención ISR, ISR, Neto. Sortable with totals row
+- **Tenure Distribution Chart**: Horizontal bar chart by bracket (1-3yr=15d emerald, 3-10yr=19d teal, 10+yr=21d amber) with count and total bruto
+- **ISR Calculation Detail**: Explanation card, summary KPIs, ISR Tramos reference table, collapsible per-employee ISR breakdown
+- **Legal Reference Panel**: 7 articles (Art. 196-202 CT) as numbered cards with ISR application notes
+- **Visual Polish**: Gradient KPI cards, animated counters, progress bars toward next bracket, tab navigation, color-coded badges
+
+#### 3. LiquidationView.tsx — Step Wizard + Comparison View (5 enhancements)
+- **Step-by-Step Calculation Wizard**: 4-step dialog with visual progress: Select Employee → Select Type → Review → Confirm
+- **Calculation Breakdown Card**: Dynamic BreakdownCard per component (Indemnización/Prestación, Vacación, Aguinaldo, Salario Pendiente) with icon, legal reference, formula, color-coded amount
+- **Comparison View**: Side-by-side Despido Injustificado (rose) vs Renuncia Voluntaria (amber) with difference highlight
+- **Liquidation History Table**: Full table with Employee, Type, Date, Indemnización, Vacación, Aguinaldo, Salario Pendiente, Total, Estado, Actions
+- **Visual Polish**: Gradient KPIs, animated counter, step progress bar, colored type badges, legal reference tab
+
+#### 4. BankDispersion.tsx — CSV Generation + Status Tracker (7 enhancements)
+- **Planilla Selection Enhancement**: Selectable card grid with code, type badge, employee count, net amount, approval date, batch selection
+- **Employee Bank Detail Preview**: Expandable table grouped by bank with colored logo circles, masked account numbers, totals per bank
+- **CSV File Generation**: BAC ACH format (semicolon-delimited, UTF-8 with BOM), download button per bank
+- **Dispersión Status Tracker**: 4-step animated pipeline (Generado→Enviado→Confirmado→Completado) with icons and timestamps
+- **Bank Return Processing**: Enhanced retornos table with bank logos, status badges, error count column
+- **Summary Dashboard**: 4 KPI cards (Dispersed This Month, Pending, Banks, Success Rate) + mini bar chart by bank
+- **Visual Polish**: Gradient header, pulse animation, bank logo circles, hover effects, loading skeletons
+
+#### 5. Integrations.tsx — Connection Testing + Health Dashboard (7 enhancements)
+- **Connection Testing Simulation**: Realistic 1-3 second delay with progress bar, 80/20 success/failure simulation, contextual error messages, auto-clear after 8s
+- **Sync Logs Timeline**: Vertical timeline with connecting line, colored status dots, operation icons, status badges, records affected, duration, timestamps
+- **Integration Health Dashboard**: Traffic light indicator (green/yellow/red), total sync operations, last successful sync, error rate, active/total ratio
+- **Config Preview**: Collapsible JSON code block with purple keys, emerald values, auto-masked sensitive fields (password, api_key, token, secret)
+- **Integration Type Summary**: Horizontal bar with count by type (BANCO, ISSS, AFP, SMTP, MH) with colored icons
+- **Quick Actions Bar**: Compact icon-only buttons: Probar, Sincronizar, Editar (admin only), Desactivar/Activar (admin only) with tooltips
+- **Visual Polish**: Card hover with shadow+translate, pulse on never-tested integrations, gradient status bars, smooth transitions, better empty state
+
+### Files Modified
+- `/src/components/modules/OrgChart.tsx` — Visual tree, zoom/pan, search, statistics dashboard
+- `/src/components/modules/AguinaldoView.tsx` — Calculation table, tenure chart, ISR detail, legal references
+- `/src/components/modules/LiquidationView.tsx` — Step wizard, comparison view, breakdown cards, history table
+- `/src/components/modules/BankDispersion.tsx` — CSV generation, status tracker, bank preview, summary dashboard
+- `/src/components/modules/Integrations.tsx` — Connection simulation, health dashboard, sync timeline, config preview
+
+### Verification
+- ✅ `bun run lint` passes with 0 errors
+- ✅ Dev server compiles and runs without errors
+- ✅ All 23 navigation views rendering with content
+- ✅ Connection testing simulation working (verified with agent-browser)
+- ✅ Health dashboard updating correctly after test
+- ✅ 0 runtime errors, 0 compilation errors
+
+### Unresolved Issues / Next Steps
+1. **Approval workflow end-to-end test** — Test CALCULADA → APROBADA → PAGADA flow with multiple role switches
+2. **PDF boleta download** — End-to-end testing of PDF generation and download
+3. **Aguinaldo calculation** — Test the "Calcular Aguinaldo 2026" button with real data
+4. **Liquidation calculation** — Test the step wizard with a real employee
+5. **Component size optimization** — Some components are very large (2000+ lines), consider splitting
+6. **Performance** — Consider lazy loading for less-used modules
+7. **More seed data** — Additional historical planillas would improve chart data

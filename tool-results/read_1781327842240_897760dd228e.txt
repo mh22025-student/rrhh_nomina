@@ -1,0 +1,926 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+     4→     4→import {
+     5→     5→  ClipboardList, Plus, Loader2, Scale,
+     6→     6→  Download, X, Calculator, FileText,
+     7→     7→  Search, DollarSign, CalendarDays,
+     8→     8→  Briefcase, Clock, CheckCircle2,
+     9→     9→  AlertCircle, User, Hash,
+    10→    10→  Receipt, Banknote, Umbrella, Award, CreditCard,
+    11→    11→  Users, Gift
+    12→    12→} from 'lucide-react';
+    13→    13→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    14→    14→import { Badge } from '@/components/ui/badge';
+    15→    15→import { Button } from '@/components/ui/button';
+    16→    16→import { Input } from '@/components/ui/input';
+    17→    17→import { Label } from '@/components/ui/label';
+    18→    18→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    19→    19→import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+    20→    20→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    21→    21→import { Separator } from '@/components/ui/separator';
+    22→    22→import { useToast } from '@/hooks/use-toast';
+    23→    23→
+    24→    24→interface LiquidationViewProps {
+    25→    25→  accessToken: string;
+    26→    26→  userRole: string;
+    27→    27→}
+    28→    28→
+    29→    29→const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    30→    30→
+    31→    31→interface LiquidacionItem {
+    32→    32→  id: string;
+    33→    33→  empleado_id: string;
+    34→    34→  empleado_codigo: string;
+    35→    35→  empleado_nombre: string;
+    36→    36→  tipo: string;
+    37→    37→  fecha_liquidacion: string;
+    38→    38→  salario_base_liquidacion: number;
+    39→    39→  anios_servicio: number;
+    40→    40→  indemnizacion: number;
+    41→    41→  prestacion_economica: number;
+    42→    42→  vacacion_proporcional: number;
+    43→    43→  aguinaldo_proporcional: number;
+    44→    44→  salario_pendiente: number;
+    45→    45→  total_liquidacion: number;
+    46→    46→  estado: string;
+    47→    47→  aprobada_por: string | null;
+    48→    48→  observaciones: string | null;
+    49→    49→}
+    50→    50→
+    51→    51→interface LiquidacionResult {
+    52→    52→  liquidacion: {
+    53→    53→    id: string;
+    54→    54→    tipo: string;
+    55→    55→    fecha_liquidacion: string;
+    56→    56→    salario_base: number;
+    57→    57→    anios_servicio: number;
+    58→    58→    indemnizacion: number;
+    59→    59→    prestacion_economica: number;
+    60→    60→    vacacion_proporcional: number;
+    61→    61→    aguinaldo_proporcional: number;
+    62→    62→    salario_pendiente: number;
+    63→    63→    total_liquidacion: number;
+    64→    64→    estado: string;
+    65→    65→  };
+    66→    66→  desglose: {
+    67→    67→    indemnizacion: { monto: number; base_legal: string; formula: string };
+    68→    68→    prestacion_economica: { monto: number; base_legal: string; formula: string };
+    69→    69→    vacacion_proporcional: { monto: number; base_legal: string; formula: string };
+    70→    70→    aguinaldo_proporcional: { monto: number; base_legal: string; formula: string };
+    71→    71→    salario_pendiente: { monto: number; base_legal: string; formula: string };
+    72→    72→  };
+    73→    73→}
+    74→    74→
+    75→    75→interface EmployeeOption {
+    76→    76→  id: string;
+    77→    77→  codigo_empleado: string;
+    78→    78→  primer_nombre: string;
+    79→    79→  segundo_nombre: string;
+    80→    80→  primer_apellido: string;
+    81→    81→  segundo_apellido: string;
+    82→    82→  fecha_ingreso: string;
+    83→    83→  estado: string;
+    84→    84→  area: { id: string; nombre: string; codigo: string } | null;
+    85→    85→  perfil_puesto: { id: string; nombre_puesto: string; codigo: string } | null;
+    86→    86→  contratos: Array<{ salario_base_contrato: number; fecha_inicio: string; cargo: string }>;
+    87→    87→}
+    88→    88→
+    89→    89→const tipoLabels: Record<string, string> = {
+    90→    90→  DESPEDO_INJUSTIFICADO: 'Despido Injustificado',
+    91→    91→  RENUNCIA_VOLUNTARIA: 'Renuncia Voluntaria',
+    92→    92→  DESPEDO_JUSTIFICADO: 'Despido Justificado',
+    93→    93→  FIN_CONTRATO: 'Fin de Contrato',
+    94→    94→};
+    95→    95→
+    96→    96→const tipoDescriptions: Record<string, string> = {
+    97→    97→  DESPEDO_INJUSTIFICADO: 'Indemnización Art. 58 CT — 30 días/año, máx. 4 años',
+    98→    98→  RENUNCIA_VOLUNTARIA: 'Prestación económica Ley 523 — 15 días/año',
+    99→    99→  DESPEDO_JUSTIFICADO: 'Solo vacación y aguinaldo proporcionales',
+   100→   100→  FIN_CONTRATO: 'Solo vacación y aguinaldo proporcionales',
+   101→   101→};
+   102→   102→
+   103→   103→const estadoColors: Record<string, string> = {
+   104→   104→  CALCULADA: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+   105→   105→  APROBADA: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+   106→   106→  PAGADA: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+   107→   107→};
+   108→   108→
+   109→   109→// Animated number counter hook
+   110→   110→function useAnimatedNumber(target: number, duration = 800) {
+   111→   111→  const [value, setValue] = useState(0);
+   112→   112→  const prevTarget = useRef(0);
+   113→   113→
+   114→   114→  useEffect(() => {
+   115→   115→    if (target === prevTarget.current) return;
+   116→   116→    const start = prevTarget.current;
+   117→   117→    const diff = target - start;
+   118→   118→    const startTime = performance.now();
+   119→   119→
+   120→   120→    const animate = (now: number) => {
+   121→   121→      const elapsed = now - startTime;
+   122→   122→      const progress = Math.min(elapsed / duration, 1);
+   123→   123→      const eased = 1 - Math.pow(1 - progress, 3);
+   124→   124→      setValue(start + diff * eased);
+   125→   125→      if (progress < 1) requestAnimationFrame(animate);
+   126→   126→      else {
+   127→   127→        setValue(target);
+   128→   128→        prevTarget.current = target;
+   129→   129→      }
+   130→   130→    };
+   131→   131→
+   132→   132→    requestAnimationFrame(animate);
+   133→   133→  }, [target, duration]);
+   134→   134→
+   135→   135→  return value;
+   136→   136→}
+   137→   137→
+   138→   138→// Step card for the calculator
+   139→   139→function CalculatorStep({
+   140→   140→  stepNumber,
+   141→   141→  icon: Icon,
+   142→   142→  label,
+   143→   143→  legalRef,
+   144→   144→  formula,
+   145→   145→  amount,
+   146→   146→  totalSoFar,
+   147→   147→  color = 'emerald',
+   148→   148→}: {
+   149→   149→  stepNumber: number;
+   150→   150→  icon: React.ElementType;
+   151→   151→  label: string;
+   152→   152→  legalRef: string;
+   153→   153→  formula: string;
+   154→   154→  amount: number;
+   155→   155→  totalSoFar: number;
+   156→   156→  color?: string;
+   157→   157→}) {
+   158→   158→  const colorClasses: Record<string, { bg: string; border: string; icon: string; text: string }> = {
+   159→   159→    emerald: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-800', icon: 'text-emerald-600 dark:text-emerald-400', text: 'text-emerald-700 dark:text-emerald-300' },
+   160→   160→    teal: { bg: 'bg-teal-50 dark:bg-teal-950/30', border: 'border-teal-200 dark:border-teal-800', icon: 'text-teal-600 dark:text-teal-400', text: 'text-teal-700 dark:text-teal-300' },
+   161→   161→    amber: { bg: 'bg-amber-50 dark:bg-amber-950/30', border: 'border-amber-200 dark:border-amber-800', icon: 'text-amber-600 dark:text-amber-400', text: 'text-amber-700 dark:text-amber-300' },
+   162→   162→    sky: { bg: 'bg-sky-50 dark:bg-sky-950/30', border: 'border-sky-200 dark:border-sky-800', icon: 'text-sky-600 dark:text-sky-400', text: 'text-sky-700 dark:text-sky-300' },
+   163→   163→    violet: { bg: 'bg-violet-50 dark:bg-violet-950/30', border: 'border-violet-200 dark:border-violet-800', icon: 'text-violet-600 dark:text-violet-400', text: 'text-violet-700 dark:text-violet-300' },
+   164→   164→    rose: { bg: 'bg-rose-50 dark:bg-rose-950/30', border: 'border-rose-200 dark:border-rose-800', icon: 'text-rose-600 dark:text-rose-400', text: 'text-rose-700 dark:text-rose-300' },
+   165→   165→  };
+   166→   166→  const c = colorClasses[color] || colorClasses.emerald;
+   167→   167→
+   168→   168→  return (
+   169→   169→    <div className={`relative p-4 rounded-xl border ${c.border} ${c.bg} transition-all duration-300`}>
+   170→   170→      <div className="flex items-start gap-3">
+   171→   171→        <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${c.bg} border ${c.border}`}>
+   172→   172→          <Icon className={`h-5 w-5 ${c.icon}`} />
+   173→   173→        </div>
+   174→   174→        <div className="flex-1 min-w-0">
+   175→   175→          <div className="flex items-center gap-2 mb-1">
+   176→   176→            <span className={`text-[10px] font-bold ${c.text} bg-white/60 dark:bg-black/20 px-1.5 py-0.5 rounded`}>
+   177→   177→              PASO {stepNumber}
+   178→   178→            </span>
+   179→   179→            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{label}</h4>
+   180→   180→          </div>
+   181→   181→          {legalRef !== 'N/A' && (
+   182→   182→            <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1">
+   183→   183→              <Scale className="h-3 w-3" /> {legalRef}
+   184→   184→            </p>
+   185→   185→          )}
+   186→   186→          {formula !== 'No aplica' && (
+   187→   187→            <p className="text-[11px] font-mono text-slate-400 dark:text-slate-500 mb-2">{formula}</p>
+   188→   188→          )}
+   189→   189→          <div className="flex items-center justify-between">
+   190→   190→            <p className={`text-lg font-bold ${c.text}`}>{fmt(amount)}</p>
+   191→   191→            {amount > 0 && (
+   192→   192→              <div className="text-right">
+   193→   193→                <p className="text-[10px] text-slate-400 dark:text-slate-500">Subtotal</p>
+   194→   194→                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">{fmt(totalSoFar)}</p>
+   195→   195→              </div>
+   196→   196→            )}
+   197→   197→          </div>
+   198→   198→        </div>
+   199→   199→      </div>
+   200→   200→    </div>
+   201→   201→  );
+   202→   202→}
+   203→   203→
+   204→   204→export default function LiquidationView({ accessToken }: LiquidationViewProps) {
+   205→   205→  const { toast } = useToast();
+   206→   206→  const [liquidaciones, setLiquidaciones] = useState<LiquidacionItem[]>([]);
+   207→   207→  const [loading, setLoading] = useState(true);
+   208→   208→  const [showNew, setShowNew] = useState(false);
+   209→   209→  const [creating, setCreating] = useState(false);
+   210→   210→  const [selectedEmpId, setSelectedEmpId] = useState('');
+   211→   211→  const [selectedTipo, setSelectedTipo] = useState('DESPEDO_INJUSTIFICADO');
+   212→   212→  const [selectedFecha, setSelectedFecha] = useState('');
+   213→   213→  const [detailResult, setDetailResult] = useState<LiquidacionResult | null>(null);
+   214→   214→  const [showDetail, setShowDetail] = useState(false);
+   215→   215→  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
+   216→   216→
+   217→   217→  // Employee search
+   218→   218→  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+   219→   219→  const [empSearch, setEmpSearch] = useState('');
+   220→   220→  const [showEmpDropdown, setShowEmpDropdown] = useState(false);
+   221→   221→  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeOption | null>(null);
+   222→   222→  const dropdownRef = useRef<HTMLDivElement>(null);
+   223→   223→
+   224→   224→  const fetchLiquidaciones = useCallback(async () => {
+   225→   225→    setLoading(true);
+   226→   226→    try {
+   227→   227→      const res = await fetch('/api/nomina/liquidaciones', {
+   228→   228→        headers: { Authorization: `Bearer ${accessToken}` },
+   229→   229→      });
+   230→   230→      if (!res.ok) throw new Error('Error');
+   231→   231→      const data = await res.json();
+   232→   232→      setLiquidaciones(data.liquidaciones || []);
+   233→   233→    } catch {
+   234→   234→      toast({ title: 'Error', description: 'No se pudieron cargar liquidaciones', variant: 'destructive' });
+   235→   235→    } finally {
+   236→   236→      setLoading(false);
+   237→   237→    }
+   238→   238→  }, [accessToken, toast]);
+   239→   239→
+   240→   240→  useEffect(() => { fetchLiquidaciones(); }, [fetchLiquidaciones]);
+   241→   241→
+   242→   242→  // Fetch employees for searchable dropdown
+   243→   243→  useEffect(() => {
+   244→   244→    const fetchEmployees = async () => {
+   245→   245→      try {
+   246→   246→        const res = await fetch('/api/empleados?pageSize=200&estado=ACTIVO', {
+   247→   247→          headers: { Authorization: `Bearer ${accessToken}` },
+   248→   248→        });
+   249→   249→        if (res.ok) {
+   250→   250→          const data = await res.json();
+   251→   251→          setEmployees(data.data || []);
+   252→   252→        }
+   253→   253→      } catch { /* ignore */ }
+   254→   254→    };
+   255→   255→    fetchEmployees();
+   256→   256→  }, [accessToken]);
+   257→   257→
+   258→   258→  // Close dropdown on outside click
+   259→   259→  useEffect(() => {
+   260→   260→    const handleClick = (e: MouseEvent) => {
+   261→   261→      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+   262→   262→        setShowEmpDropdown(false);
+   263→   263→      }
+   264→   264→    };
+   265→   265→    document.addEventListener('mousedown', handleClick);
+   266→   266→    return () => document.removeEventListener('mousedown', handleClick);
+   267→   267→  }, []);
+   268→   268→
+   269→   269→  const filteredEmployees = useMemo(() => {
+   270→   270→    if (!empSearch) return employees.slice(0, 20);
+   271→   271→    const s = empSearch.toLowerCase();
+   272→   272→    return employees.filter(e =>
+   273→   273→      `${e.primer_nombre} ${e.segundo_nombre} ${e.primer_apellido} ${e.segundo_apellido}`.toLowerCase().includes(s) ||
+   274→   274→      e.codigo_empleado.toLowerCase().includes(s)
+   275→   275→    ).slice(0, 20);
+   276→   276→  }, [employees, empSearch]);
+   277→   277→
+   278→   278→  const handleSelectEmployee = (emp: EmployeeOption) => {
+   279→   279→    setSelectedEmpId(emp.id);
+   280→   280→    setSelectedEmployee(emp);
+   281→   281→    setEmpSearch(`${emp.primer_nombre} ${emp.primer_apellido}`);
+   282→   282→    setShowEmpDropdown(false);
+   283→   283→  };
+   284→   284→
+   285→   285→  const animatedTotal = useAnimatedNumber(detailResult?.liquidacion.total_liquidacion || 0);
+   286→   286→
+   287→   287→  const handleCreate = async () => {
+   288→   288→    if (!selectedEmpId || !selectedTipo || !selectedFecha) {
+   289→   289→      toast({ title: 'Error', description: 'Complete todos los campos', variant: 'destructive' });
+   290→   290→      return;
+   291→   291→    }
+   292→   292→    setCreating(true);
+   293→   293→    try {
+   294→   294→      const res = await fetch('/api/nomina/liquidaciones', {
+   295→   295→        method: 'POST',
+   296→   296→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   297→   297→        body: JSON.stringify({
+   298→   298→          empleado_id: selectedEmpId,
+   299→   299→          tipo: selectedTipo,
+   300→   300→          fecha_liquidacion: selectedFecha,
+   301→   301→        }),
+   302→   302→      });
+   303→   303→      const data = await res.json();
+   304→   304→      if (!res.ok) throw new Error(data.error || 'Error al calcular liquidación');
+   305→   305→      setDetailResult(data);
+   306→   306→      setShowDetail(true);
+   307→   307→      setShowNew(false);
+   308→   308→      fetchLiquidaciones();
+   309→   309→      toast({ title: 'Liquidación Calculada', description: `Total: ${fmt(data.liquidacion.total_liquidacion)}` });
+   310→   310→    } catch (err) {
+   311→   311→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al calcular liquidación', variant: 'destructive' });
+   312→   312→    } finally {
+   313→   313→      setCreating(false);
+   314→   314→    }
+   315→   315→  };
+   316→   316→
+   317→   317→  const handleGeneratePdf = async (empleadoId: string, codigoEmpleado: string) => {
+   318→   318→    setGeneratingPdf(empleadoId);
+   319→   319→    try {
+   320→   320→      const res = await fetch(`/api/nomina/liquidaciones/pdf?empleado_id=${empleadoId}`, {
+   321→   321→        headers: { Authorization: `Bearer ${accessToken}` },
+   322→   322→      });
+   323→   323→      if (!res.ok) {
+   324→   324→        const data = await res.json();
+   325→   325→        throw new Error(data.error || 'Error al generar PDF');
+   326→   326→      }
+   327→   327→      const blob = await res.blob();
+   328→   328→      const url = URL.createObjectURL(blob);
+   329→   329→      const a = document.createElement('a');
+   330→   330→      a.href = url;
+   331→   331→      a.download = `liquidacion-${codigoEmpleado}.pdf`;
+   332→   332→      a.click();
+   333→   333→      URL.revokeObjectURL(url);
+   334→   334→      toast({ title: 'PDF Generado', description: `Constancia de liquidación para ${codigoEmpleado}` });
+   335→   335→    } catch (err) {
+   336→   336→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al generar PDF', variant: 'destructive' });
+   337→   337→    } finally {
+   338→   338→      setGeneratingPdf(null);
+   339→   339→    }
+   340→   340→  };
+   341→   341→
+   342→   342→  // Computed stats for history
+   343→   343→  const historyStats = useMemo(() => {
+   344→   344→    const total = liquidaciones.reduce((s, l) => s + l.total_liquidacion, 0);
+   345→   345→    const pagadas = liquidaciones.filter(l => l.estado === 'PAGADA').length;
+   346→   346→    const pendientes = liquidaciones.filter(l => l.estado === 'CALCULADA').length;
+   347→   347→    return { total, pagadas, pendientes, count: liquidaciones.length };
+   348→   348→  }, [liquidaciones]);
+   349→   349→
+   350→   350→  // Build calculator steps from detail result
+   351→   351→  const calculatorSteps = useMemo(() => {
+   352→   352→    if (!detailResult) return [];
+   353→   353→    const { desglose, liquidacion } = detailResult;
+   354→   354→    let running = 0;
+   355→   355→    const steps: Array<{
+   356→   356→      step: number;
+   357→   357→      icon: React.ElementType;
+   358→   358→      label: string;
+   359→   359→      legalRef: string;
+   360→   360→      formula: string;
+   361→   361→      amount: number;
+   362→   362→      totalSoFar: number;
+   363→   363→      color: string;
+   364→   364→    }> = [];
+   365→   365→
+   366→   366→    // Step 1: Salario Base (info)
+   367→   367→    steps.push({
+   368→   368→      step: 1,
+   369→   369→      icon: DollarSign,
+   370→   370→      label: 'Salario Base (Diario)',
+   371→   371→      legalRef: 'Base de cálculo',
+   372→   372→      formula: `Salario mensual ${fmt(liquidacion.salario_base)} ÷ 30 = ${fmt(liquidacion.salario_base / 30)}/día`,
+   373→   373→      amount: liquidacion.salario_base / 30,
+   374→   374→      totalSoFar: 0,
+   375→   375→      color: 'emerald',
+   376→   376→    });
+   377→   377→
+   378→   378→    // Step 2: Indemnización or Prestación Económica
+   379→   379→    if (desglose.indemnizacion.monto > 0) {
+   380→   380→      running += desglose.indemnizacion.monto;
+   381→   381→      steps.push({
+   382→   382→        step: 2,
+   383→   383→        icon: Award,
+   384→   384→        label: 'Indemnización',
+   385→   385→        legalRef: desglose.indemnizacion.base_legal,
+   386→   386→        formula: desglose.indemnizacion.formula,
+   387→   387→        amount: desglose.indemnizacion.monto,
+   388→   388→        totalSoFar: running,
+   389→   389→        color: 'rose',
+   390→   390→      });
+   391→   391→    } else if (desglose.prestacion_economica.monto > 0) {
+   392→   392→      running += desglose.prestacion_economica.monto;
+   393→   393→      steps.push({
+   394→   394→        step: 2,
+   395→   395→        icon: CreditCard,
+   396→   396→        label: 'Prestación Económica',
+   397→   397→        legalRef: desglose.prestacion_economica.base_legal,
+   398→   398→        formula: desglose.prestacion_economica.formula,
+   399→   399→        amount: desglose.prestacion_economica.monto,
+   400→   400→        totalSoFar: running,
+   401→   401→        color: 'violet',
+   402→   402→      });
+   403→   403→    }
+   404→   404→
+   405→   405→    // Step 3: Aguinaldo Proporcional
+   406→   406→    if (desglose.aguinaldo_proporcional.monto > 0) {
+   407→   407→      running += desglose.aguinaldo_proporcional.monto;
+   408→   408→      steps.push({
+   409→   409→        step: steps.length + 1,
+   410→   410→        icon: Gift,
+   411→   411→        label: 'Aguinaldo Proporcional',
+   412→   412→        legalRef: desglose.aguinaldo_proporcional.base_legal,
+   413→   413→        formula: desglose.aguinaldo_proporcional.formula,
+   414→   414→        amount: desglose.aguinaldo_proporcional.monto,
+   415→   415→        totalSoFar: running,
+   416→   416→        color: 'amber',
+   417→   417→      });
+   418→   418→    }
+   419→   419→
+   420→   420→    // Step 4: Vacación Proporcional
+   421→   421→    if (desglose.vacacion_proporcional.monto > 0) {
+   422→   422→      running += desglose.vacacion_proporcional.monto;
+   423→   423→      steps.push({
+   424→   424→        step: steps.length + 1,
+   425→   425→        icon: Umbrella,
+   426→   426→        label: 'Vacación No Gozada',
+   427→   427→        legalRef: desglose.vacacion_proporcional.base_legal,
+   428→   428→        formula: desglose.vacacion_proporcional.formula,
+   429→   429→        amount: desglose.vacacion_proporcional.monto,
+   430→   430→        totalSoFar: running,
+   431→   431→        color: 'teal',
+   432→   432→      });
+   433→   433→    }
+   434→   434→
+   435→   435→    // Step 5: Salario Pendiente
+   436→   436→    if (desglose.salario_pendiente.monto > 0) {
+   437→   437→      running += desglose.salario_pendiente.monto;
+   438→   438→      steps.push({
+   439→   439→        step: steps.length + 1,
+   440→   440→        icon: Banknote,
+   441→   441→        label: 'Salario Pendiente',
+   442→   442→        legalRef: desglose.salario_pendiente.base_legal,
+   443→   443→        formula: desglose.salario_pendiente.formula,
+   444→   444→        amount: desglose.salario_pendiente.monto,
+   445→   445→        totalSoFar: running,
+   446→   446→        color: 'sky',
+   447→   447→      });
+   448→   448→    }
+   449→   449→
+   450→   450→    return steps;
+   451→   451→  }, [detailResult]);
+   452→   452→
+   453→   453→  const getInitials = (emp: EmployeeOption) =>
+   454→   454→    `${emp.primer_nombre?.[0] || ''}${emp.primer_apellido?.[0] || ''}`.toUpperCase();
+   455→   455→
+   456→   456→  return (
+   457→   457→    <div className="space-y-6">
+   458→   458→      {/* ── Enhanced Header with Legal Reference ──────────────────────────── */}
+   459→   459→      <div className="flex items-center justify-between">
+   460→   460→        <div>
+   461→   461→          <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+   462→   462→            <Receipt className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   463→   463→            Liquidaciones
+   464→   464→          </h3>
+   465→   465→          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+   466→   466→            Cálculo de liquidación laboral según legislación salvadoreña
+   467→   467→          </p>
+   468→   468→        </div>
+   469→   469→        <Button onClick={() => setShowNew(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+   470→   470→          <Plus className="h-4 w-4 mr-1" /> Nueva Liquidación
+   471→   471→        </Button>
+   472→   472→      </div>
+   473→   473→
+   474→   474→      {/* Legal Banner */}
+   475→   475→      <Card className="shadow-sm border-emerald-200 dark:border-emerald-800 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30">
+   476→   476→        <CardContent className="p-5">
+   477→   477→          <div className="flex items-start gap-3">
+   478→   478→            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 shrink-0">
+   479→   479→              <Scale className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   480→   480→            </div>
+   481→   481→            <div className="space-y-2">
+   482→   482→              <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+   483→   483→                Art. 58 Código de Trabajo — Liquidación
+   484→   484→              </h4>
+   485→   485→              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+   486→   486→                Todo empleado tiene derecho a recibir una liquidación al finalizar la relación laboral.
+   487→   487→                En caso de <strong>despido injustificado</strong>, corresponde indemnización de 30 días por año de servicio
+   488→   488→                (máximo 4 años de salario). En <strong>renuncia voluntaria</strong>, prestación económica de 15 días por año.
+   489→   489→                Ambos incluyen vacación proporcional (Art. 177 CT) y aguinaldo proporcional (Arts. 196-202 CT).
+   490→   490→              </p>
+   491→   491→              <div className="flex flex-wrap gap-2 pt-1">
+   492→   492→                <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300">
+   493→   493→                  Art. 58 CT — Despido Injustificado
+   494→   494→                </Badge>
+   495→   495→                <Badge variant="outline" className="text-[10px] border-teal-300 text-teal-700 dark:border-teal-700 dark:text-teal-300">
+   496→   496→                  Ley 523 — Renuncia Voluntaria
+   497→   497→                </Badge>
+   498→   498→                <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">
+   499→   499→                  Art. 177 CT — Vacación
+   500→   500→                </Badge>
+   501→   501→              </div>
+   502→   502→            </div>
+   503→   503→          </div>
+   504→   504→        </CardContent>
+   505→   505→      </Card>
+   506→   506→
+   507→   507→      {/* ── Liquidation Detail with Step-by-Step Calculator ──────────────── */}
+   508→   508→      {showDetail && detailResult && (
+   509→   509→        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   510→   510→          {/* Left: Step-by-step calculator */}
+   511→   511→          <div className="lg:col-span-2 space-y-3">
+   512→   512→            <Card className="shadow-sm border-emerald-200 dark:border-emerald-800">
+   513→   513→              <CardHeader className="pb-3">
+   514→   514→                <div className="flex items-center justify-between">
+   515→   515→                  <div>
+   516→   516→                    <CardTitle className="text-base flex items-center gap-2">
+   517→   517→                      <Calculator className="h-4 w-4 text-emerald-600" />
+   518→   518→                      Calculadora de Liquidación — Paso a Paso
+   519→   519→                    </CardTitle>
+   520→   520→                    <CardDescription className="text-xs mt-1">
+   521→   521→                      {tipoLabels[detailResult.liquidacion.tipo]} • {detailResult.liquidacion.anios_servicio.toFixed(1)} años de servicio
+   522→   522→                    </CardDescription>
+   523→   523→                  </div>
+   524→   524→                  <Button variant="ghost" size="sm" onClick={() => setShowDetail(false)}>
+   525→   525→                    <X className="h-4 w-4" />
+   526→   526→                  </Button>
+   527→   527→                </div>
+   528→   528→              </CardHeader>
+   529→   529→              <CardContent className="space-y-3">
+   530→   530→                {calculatorSteps.map((s) => (
+   531→   531→                  <CalculatorStep
+   532→   532→                    key={s.step}
+   533→   533→                    stepNumber={s.step}
+   534→   534→                    icon={s.icon}
+   535→   535→                    label={s.label}
+   536→   536→                    legalRef={s.legalRef}
+   537→   537→                    formula={s.formula}
+   538→   538→                    amount={s.amount}
+   539→   539→                    totalSoFar={s.totalSoFar}
+   540→   540→                    color={s.color}
+   541→   541→                  />
+   542→   542→                ))}
+   543→   543→              </CardContent>
+   544→   544→            </Card>
+   545→   545→          </div>
+   546→   546→
+   547→   547→          {/* Right: Running total & Summary card */}
+   548→   548→          <div className="space-y-4">
+   549→   549→            {/* Running total */}
+   550→   550→            <Card className="shadow-sm border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40">
+   551→   551→              <CardContent className="p-5 text-center">
+   552→   552→                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mb-1">Total de Liquidación</p>
+   553→   553→                <p className="text-3xl font-bold text-emerald-800 dark:text-emerald-200">
+   554→   554→                  {fmt(animatedTotal)}
+   555→   555→                </p>
+   556→   556→                <div className="mt-3 flex items-center justify-center gap-2">
+   557→   557→                  <Badge className={`text-[10px] ${estadoColors[detailResult.liquidacion.estado] || 'bg-slate-100'}`} variant="secondary">
+   558→   558→                    {detailResult.liquidacion.estado}
+   559→   559→                  </Badge>
+   560→   560→                  <span className="text-[10px] text-slate-400">{tipoLabels[detailResult.liquidacion.tipo]}</span>
+   561→   561→                </div>
+   562→   562→              </CardContent>
+   563→   563→            </Card>
+   564→   564→
+   565→   565→            {/* Recibo de Liquidación card */}
+   566→   566→            <Card className="shadow-sm border-slate-200 dark:border-slate-700">
+   567→   567→              <CardHeader className="pb-2">
+   568→   568→                <CardTitle className="text-sm flex items-center gap-2">
+   569→   569→                  <FileText className="h-4 w-4 text-emerald-600" />
+   570→   570→                  Recibo de Liquidación
+   571→   571→                </CardTitle>
+   572→   572→              </CardHeader>
+   573→   573→              <CardContent className="space-y-3">
+   574→   574→                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg space-y-2 text-xs">
+   575→   575→                  <div className="flex items-center justify-between">
+   576→   576→                    <span className="text-slate-500 dark:text-slate-400">Empresa</span>
+   577→   577→                    <span className="font-medium text-slate-700 dark:text-slate-300">Sistema de Nómina SV</span>
+   578→   578→                  </div>
+   579→   579→                  <div className="flex items-center justify-between">
+   580→   580→                    <span className="text-slate-500 dark:text-slate-400">Empleado</span>
+   581→   581→                    <span className="font-medium text-slate-700 dark:text-slate-300">
+   582→   582→                      {selectedEmployee ? `${selectedEmployee.primer_nombre} ${selectedEmployee.primer_apellido}` : '—'}
+   583→   583→                    </span>
+   584→   584→                  </div>
+   585→   585→                  <div className="flex items-center justify-between">
+   586→   586→                    <span className="text-slate-500 dark:text-slate-400">Código</span>
+   587→   587→                    <span className="font-mono text-slate-700 dark:text-slate-300">
+   588→   588→                      {selectedEmployee?.codigo_empleado || '—'}
+   589→   589→                    </span>
+   590→   590→                  </div>
+   591→   591→                  <div className="flex items-center justify-between">
+   592→   592→                    <span className="text-slate-500 dark:text-slate-400">Fecha</span>
+   593→   593→                    <span className="text-slate-700 dark:text-slate-300">{detailResult.liquidacion.fecha_liquidacion}</span>
+   594→   594→                  </div>
+   595→   595→                </div>
+   596→   596→                <Separator />
+   597→   597→                <div className="space-y-2">
+   598→   598→                  {Object.entries(detailResult.desglose).map(([key, val]) => {
+   599→   599→                    if (val.monto === 0) return null;
+   600→   600→                    const labels: Record<string, string> = {
+   601→   601→                      indemnizacion: 'Indemnización',
+   602→   602→                      prestacion_economica: 'Prestación Económica',
+   603→   603→                      vacacion_proporcional: 'Vacación Proporcional',
+   604→   604→                      aguinaldo_proporcional: 'Aguinaldo Proporcional',
+   605→   605→                      salario_pendiente: 'Salario Pendiente',
+   606→   606→                    };
+   607→   607→                    return (
+   608→   608→                      <div key={key} className="flex items-center justify-between text-xs">
+   609→   609→                        <span className="text-slate-600 dark:text-slate-400">{labels[key] || key}</span>
+   610→   610→                        <span className="font-medium text-slate-800 dark:text-slate-200">{fmt(val.monto)}</span>
+   611→   611→                      </div>
+   612→   612→                    );
+   613→   613→                  })}
+   614→   614→                </div>
+   615→   615→                <Separator />
+   616→   616→                <div className="flex items-center justify-between text-sm">
+   617→   617→                  <span className="font-bold text-slate-900 dark:text-slate-100">TOTAL</span>
+   618→   618→                  <span className="font-bold text-emerald-700 dark:text-emerald-400 text-lg">
+   619→   619→                    {fmt(detailResult.liquidacion.total_liquidacion)}
+   620→   620→                  </span>
+   621→   621→                </div>
+   622→   622→                <Button
+   623→   623→                  onClick={() => selectedEmployee && handleGeneratePdf(selectedEmployee.id, selectedEmployee.codigo_empleado)}
+   624→   624→                  disabled={!selectedEmployee || generatingPdf === selectedEmployee?.id}
+   625→   625→                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white mt-2"
+   626→   626→                >
+   627→   627→                  {generatingPdf === selectedEmployee?.id ? (
+   628→   628→                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   629→   629→                  ) : (
+   630→   630→                    <Download className="h-4 w-4 mr-2" />
+   631→   631→                  )}
+   632→   632→                  Generar PDF
+   633→   633→                </Button>
+   634→   634→              </CardContent>
+   635→   635→            </Card>
+   636→   636→          </div>
+   637→   637→        </div>
+   638→   638→      )}
+   639→   639→
+   640→   640→      {/* ── New liquidation dialog with searchable employee ──────────────── */}
+   641→   641→      <Dialog open={showNew} onOpenChange={setShowNew}>
+   642→   642→        <DialogContent className="sm:max-w-lg">
+   643→   643→          <DialogHeader>
+   644→   644→            <DialogTitle className="flex items-center gap-2">
+   645→   645→              <Calculator className="h-5 w-5 text-emerald-600" />
+   646→   646→              Nueva Liquidación
+   647→   647→            </DialogTitle>
+   648→   648→            <DialogDescription>Calcule la liquidación para un empleado según la legislación de El Salvador</DialogDescription>
+   649→   649→          </DialogHeader>
+   650→   650→          <div className="space-y-5 pt-2">
+   651→   651→            {/* Searchable Employee Selector */}
+   652→   652→            <div className="space-y-2" ref={dropdownRef}>
+   653→   653→              <Label className="text-sm font-medium">Empleado</Label>
+   654→   654→              <div className="relative">
+   655→   655→                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   656→   656→                <Input
+   657→   657→                  value={empSearch}
+   658→   658→                  onChange={e => {
+   659→   659→                    setEmpSearch(e.target.value);
+   660→   660→                    setShowEmpDropdown(true);
+   661→   661→                    if (selectedEmployee) {
+   662→   662→                      setSelectedEmployee(null);
+   663→   663→                      setSelectedEmpId('');
+   664→   664→                    }
+   665→   665→                  }}
+   666→   666→                  onFocus={() => setShowEmpDropdown(true)}
+   667→   667→                  placeholder="Buscar por nombre o código..."
+   668→   668→                  className="pl-9"
+   669→   669→                />
+   670→   670→                {showEmpDropdown && (
+   671→   671→                  <div className="absolute z-50 top-full mt-1 w-full max-h-64 overflow-y-auto rounded-lg border bg-white dark:bg-slate-900 shadow-lg">
+   672→   672→                    {filteredEmployees.length === 0 ? (
+   673→   673→                      <div className="p-4 text-center text-sm text-slate-400">
+   674→   674→                        <Users className="h-6 w-6 mx-auto mb-1 opacity-40" />
+   675→   675→                        No se encontraron empleados
+   676→   676→                      </div>
+   677→   677→                    ) : (
+   678→   678→                      filteredEmployees.map(emp => (
+   679→   679→                        <button
+   680→   680→                          key={emp.id}
+   681→   681→                          onClick={() => handleSelectEmployee(emp)}
+   682→   682→                          className="w-full flex items-center gap-3 p-3 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors text-left"
+   683→   683→                        >
+   684→   684→                          <Avatar className="h-8 w-8">
+   685→   685→                            <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 text-xs font-semibold">
+   686→   686→                              {getInitials(emp)}
+   687→   687→                            </AvatarFallback>
+   688→   688→                          </Avatar>
+   689→   689→                          <div className="flex-1 min-w-0">
+   690→   690→                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
+   691→   691→                              {emp.primer_nombre} {emp.segundo_nombre} {emp.primer_apellido} {emp.segundo_apellido}
+   692→   692→                            </p>
+   693→   693→                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+   694→   694→                              {emp.codigo_empleado} • {emp.perfil_puesto?.nombre_puesto || 'Sin puesto'}
+   695→   695→                            </p>
+   696→   696→                          </div>
+   697→   697→                        </button>
+   698→   698→                      ))
+   699→   699→                    )}
+   700→   700→                  </div>
+   701→   701→                )}
+   702→   702→              </div>
+   703→   703→              {/* Selected employee info */}
+   704→   704→              {selectedEmployee && (
+   705→   705→                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-800">
+   706→   706→                  <div className="flex items-center gap-3">
+   707→   707→                    <Avatar className="h-10 w-10">
+   708→   708→                      <AvatarFallback className="bg-emerald-200 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-200 text-sm font-bold">
+   709→   709→                        {getInitials(selectedEmployee)}
+   710→   710→                      </AvatarFallback>
+   711→   711→                    </Avatar>
+   712→   712→                    <div className="flex-1 grid grid-cols-3 gap-3 text-xs">
+   713→   713→                      <div>
+   714→   714→                        <p className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+   715→   715→                          <DollarSign className="h-3 w-3" /> Salario
+   716→   716→                        </p>
+   717→   717→                        <p className="font-semibold text-slate-800 dark:text-slate-200">
+   718→   718→                          {selectedEmployee.contratos?.[0]
+   719→   719→                            ? fmt(selectedEmployee.contratos[0].salario_base_contrato)
+   720→   720→                            : '—'}
+   721→   721→                        </p>
+   722→   722→                      </div>
+   723→   723→                      <div>
+   724→   724→                        <p className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+   725→   725→                          <CalendarDays className="h-3 w-3" /> Ingreso
+   726→   726→                        </p>
+   727→   727→                        <p className="font-semibold text-slate-800 dark:text-slate-200">
+   728→   728→                          {selectedEmployee.fecha_ingreso
+   729→   729→                            ? new Date(selectedEmployee.fecha_ingreso).toLocaleDateString('es-SV')
+   730→   730→                            : '—'}
+   731→   731→                        </p>
+   732→   732→                      </div>
+   733→   733→                      <div>
+   734→   734→                        <p className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+   735→   735→                          <Briefcase className="h-3 w-3" /> Puesto
+   736→   736→                        </p>
+   737→   737→                        <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+   738→   738→                          {selectedEmployee.perfil_puesto?.nombre_puesto || '—'}
+   739→   739→                        </p>
+   740→   740→                      </div>
+   741→   741→                    </div>
+   742→   742→                  </div>
+   743→   743→                </div>
+   744→   744→              )}
+   745→   745→            </div>
+   746→   746→
+   747→   747→            {/* Tipo de Liquidación */}
+   748→   748→            <div className="space-y-2">
+   749→   749→              <Label className="text-sm font-medium">Tipo de Liquidación</Label>
+   750→   750→              <Select value={selectedTipo} onValueChange={setSelectedTipo}>
+   751→   751→                <SelectTrigger><SelectValue /></SelectTrigger>
+   752→   752→                <SelectContent>
+   753→   753→                  <SelectItem value="DESPEDO_INJUSTIFICADO">
+   754→   754→                    <span className="flex items-center gap-2">
+   755→   755→                      <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
+   756→   756→                      Despido Injustificado (Art. 58 CT)
+   757→   757→                    </span>
+   758→   758→                  </SelectItem>
+   759→   759→                  <SelectItem value="RENUNCIA_VOLUNTARIA">
+   760→   760→                    <span className="flex items-center gap-2">
+   761→   761→                      <User className="h-3.5 w-3.5 text-violet-500" />
+   762→   762→                      Renuncia Voluntaria (Ley 523)
+   763→   763→                    </span>
+   764→   764→                  </SelectItem>
+   765→   765→                  <SelectItem value="DESPEDO_JUSTIFICADO">
+   766→   766→                    <span className="flex items-center gap-2">
+   767→   767→                      <CheckCircle2 className="h-3.5 w-3.5 text-amber-500" />
+   768→   768→                      Despido Justificado
+   769→   769→                    </span>
+   770→   770→                  </SelectItem>
+   771→   771→                  <SelectItem value="FIN_CONTRATO">
+   772→   772→                    <span className="flex items-center gap-2">
+   773→   773→                      <Clock className="h-3.5 w-3.5 text-sky-500" />
+   774→   774→                      Fin de Contrato
+   775→   775→                    </span>
+   776→   776→                  </SelectItem>
+   777→   777→                </SelectContent>
+   778→   778→              </Select>
+   779→   779→              {tipoDescriptions[selectedTipo] && (
+   780→   780→                <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-2 rounded">
+   781→   781→                  {tipoDescriptions[selectedTipo]}
+   782→   782→                </p>
+   783→   783→              )}
+   784→   784→            </div>
+   785→   785→
+   786→   786→            {/* Fecha */}
+   787→   787→            <div className="space-y-2">
+   788→   788→              <Label className="text-sm font-medium">Fecha de Liquidación</Label>
+   789→   789→              <Input type="date" value={selectedFecha} onChange={e => setSelectedFecha(e.target.value)} />
+   790→   790→            </div>
+   791→   791→
+   792→   792→            <Button onClick={handleCreate} disabled={creating || !selectedEmpId} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+   793→   793→              {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Calculator className="h-4 w-4 mr-1" />}
+   794→   794→              Calcular Liquidación
+   795→   795→            </Button>
+   796→   796→          </div>
+   797→   797→        </DialogContent>
+   798→   798→      </Dialog>
+   799→   799→
+   800→   800→      {/* ── Liquidation History ─────────────────────────────────────────── */}
+   801→   801→      <Card className="shadow-sm border-slate-200 dark:border-slate-700">
+   802→   802→        <CardHeader className="pb-3">
+   803→   803→          <div className="flex items-center justify-between">
+   804→   804→            <div>
+   805→   805→              <CardTitle className="text-base flex items-center gap-2">
+   806→   806→                <ClipboardList className="h-4 w-4 text-emerald-600" />
+   807→   807→                Historial de Liquidaciones
+   808→   808→              </CardTitle>
+   809→   809→              <CardDescription className="text-xs mt-1">
+   810→   810→                Registro de todas las liquidaciones calculadas
+   811→   811→              </CardDescription>
+   812→   812→            </div>
+   813→   813→            {historyStats.count > 0 && (
+   814→   814→              <div className="flex gap-3 text-xs">
+   815→   815→                <span className="flex items-center gap-1 text-slate-500">
+   816→   816→                  <Hash className="h-3 w-3" /> {historyStats.count} total
+   817→   817→                </span>
+   818→   818→                <span className="flex items-center gap-1 text-emerald-600">
+   819→   819→                  <CheckCircle2 className="h-3 w-3" /> {historyStats.pagadas} pagadas
+   820→   820→                </span>
+   821→   821→                <span className="flex items-center gap-1 text-amber-600">
+   822→   822→                  <Clock className="h-3 w-3" /> {historyStats.pendientes} pendientes
+   823→   823→                </span>
+   824→   824→              </div>
+   825→   825→            )}
+   826→   826→          </div>
+   827→   827→        </CardHeader>
+   828→   828→        <CardContent className="p-0">
+   829→   829→          {loading ? (
+   830→   830→            <div className="p-6 space-y-3">{[1, 2, 3].map(i => (
+   831→   831→              <div key={i} className="h-12 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+   832→   832→            ))}</div>
+   833→   833→          ) : liquidaciones.length === 0 ? (
+   834→   834→            <div className="p-12 text-center text-slate-400 dark:text-slate-500">
+   835→   835→              <ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-40" />
+   836→   836→              <p className="text-sm font-medium">No hay liquidaciones registradas</p>
+   837→   837→              <p className="text-xs mt-1">Cree una nueva liquidación para comenzar</p>
+   838→   838→            </div>
+   839→   839→          ) : (
+   840→   840→            <div className="overflow-x-auto max-h-96 overflow-y-auto">
+   841→   841→              <table className="w-full text-sm">
+   842→   842→                <thead className="sticky top-0 z-10">
+   843→   843→                  <tr className="border-t border-b bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-sm">
+   844→   844→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Empleado</th>
+   845→   845→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Tipo</th>
+   846→   846→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Indemnización</th>
+   847→   847→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Vacación</th>
+   848→   848→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Aguinaldo</th>
+   849→   849→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Total</th>
+   850→   850→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Estado</th>
+   851→   851→                    <th className="text-center font-medium text-slate-500 dark:text-slate-400 p-3">PDF</th>
+   852→   852→                  </tr>
+   853→   853→                </thead>
+   854→   854→                <tbody>
+   855→   855→                  {liquidaciones.map(l => (
+   856→   856→                    <tr key={l.id} className="border-b hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors">
+   857→   857→                      <td className="p-3">
+   858→   858→                        <div className="flex items-center gap-2">
+   859→   859→                          <Avatar className="h-7 w-7">
+   860→   860→                            <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 text-[10px] font-bold">
+   861→   861→                              {l.empleado_nombre.split(' ').map(n => n[0]).join('').slice(0, 2)}
+   862→   862→                            </AvatarFallback>
+   863→   863→                          </Avatar>
+   864→   864→                          <div>
+   865→   865→                            <p className="font-medium text-slate-900 dark:text-slate-100">{l.empleado_nombre}</p>
+   866→   866→                            <p className="text-[11px] text-slate-400">{l.empleado_codigo} · {l.anios_servicio.toFixed(1)} años</p>
+   867→   867→                          </div>
+   868→   868→                        </div>
+   869→   869→                      </td>
+   870→   870→                      <td className="p-3 text-xs">{tipoLabels[l.tipo] || l.tipo}</td>
+   871→   871→                      <td className="p-3 text-right text-slate-700 dark:text-slate-300">
+   872→   872→                        {l.indemnizacion > 0 || l.prestacion_economica > 0 ? fmt(l.indemnizacion || l.prestacion_economica) : '-'}
+   873→   873→                      </td>
+   874→   874→                      <td className="p-3 text-right text-slate-700 dark:text-slate-300">
+   875→   875→                        {l.vacacion_proporcional > 0 ? fmt(l.vacacion_proporcional) : '-'}
+   876→   876→                      </td>
+   877→   877→                      <td className="p-3 text-right text-slate-700 dark:text-slate-300">
+   878→   878→                        {l.aguinaldo_proporcional > 0 ? fmt(l.aguinaldo_proporcional) : '-'}
+   879→   879→                      </td>
+   880→   880→                      <td className="p-3 text-right font-bold text-emerald-700 dark:text-emerald-400">{fmt(l.total_liquidacion)}</td>
+   881→   881→                      <td className="p-3">
+   882→   882→                        <Badge className={`text-[10px] ${estadoColors[l.estado] || 'bg-slate-100'}`} variant="secondary">
+   883→   883→                          {l.estado}
+   884→   884→                        </Badge>
+   885→   885→                      </td>
+   886→   886→                      <td className="p-3 text-center">
+   887→   887→                        <Button
+   888→   888→                          variant="ghost"
+   889→   889→                          size="sm"
+   890→   890→                          className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+   891→   891→                          onClick={() => handleGeneratePdf(l.empleado_id, l.empleado_codigo)}
+   892→   892→                          disabled={generatingPdf === l.empleado_id}
+   893→   893→                          title="Generar Constancia de Liquidación PDF"
+   894→   894→                        >
+   895→   895→                          {generatingPdf === l.empleado_id ? (
+   896→   896→                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   897→   897→                          ) : (
+   898→   898→                            <FileText className="h-3.5 w-3.5" />
+   899→   899→                          )}
+   900→   900→                        </Button>
+   901→   901→                      </td>
+   902→   902→                    </tr>
+   903→   903→                  ))}
+   904→   904→                </tbody>
+   905→   905→                {historyStats.count > 0 && (
+   906→   906→                  <tfoot>
+   907→   907→                    <tr className="bg-emerald-50/50 dark:bg-emerald-950/20 border-t-2 border-emerald-200 dark:border-emerald-800">
+   908→   908→                      <td colSpan={5} className="p-3 text-sm font-bold text-slate-700 dark:text-slate-300 text-right">
+   909→   909→                        Total General
+   910→   910→                      </td>
+   911→   911→                      <td className="p-3 text-right font-bold text-emerald-700 dark:text-emerald-400">
+   912→   912→                        {fmt(historyStats.total)}
+   913→   913→                      </td>
+   914→   914→                      <td colSpan={2}></td>
+   915→   915→                    </tr>
+   916→   916→                  </tfoot>
+   917→   917→                )}
+   918→   918→              </table>
+   919→   919→            </div>
+   920→   920→          )}
+   921→   921→        </CardContent>
+   922→   922→      </Card>
+   923→   923→    </div>
+   924→   924→  );
+   925→   925→}
+   926→   926→

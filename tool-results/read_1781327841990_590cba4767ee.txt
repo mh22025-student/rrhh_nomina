@@ -1,0 +1,701 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useMemo, useRef, useEffect } from 'react';
+     4→     4→import {
+     5→     5→  Gift, Calculator, Loader2, BookOpen, Download, Info, FileText,
+     6→     6→  ChevronLeft, ChevronRight, DollarSign, CalendarDays, Clock,
+     7→     7→  CheckCircle2, AlertTriangle, Users, TrendingUp, Scale,
+     8→     8→  ArrowRight, Hash, Star, BarChart3, Award
+     9→     9→} from 'lucide-react';
+    10→    10→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    11→    11→import { Badge } from '@/components/ui/badge';
+    12→    12→import { Button } from '@/components/ui/button';
+    13→    13→import { Input } from '@/components/ui/input';
+    14→    14→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    15→    15→import { Separator } from '@/components/ui/separator';
+    16→    16→import { Progress } from '@/components/ui/progress';
+    17→    17→import { useToast } from '@/hooks/use-toast';
+    18→    18→
+    19→    19→interface AguinaldoViewProps {
+    20→    20→  accessToken: string;
+    21→    21→  userRole: string;
+    22→    22→}
+    23→    23→
+    24→    24→const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    25→    25→
+    26→    26→interface AguinaldoResult {
+    27→    27→  planilla: {
+    28→    28→    id: string;
+    29→    29→    codigo_planilla: string;
+    30→    30→    tipo: string;
+    31→    31→    estado: string;
+    32→    32→    total_empleados: number;
+    33→    33→    total_aguinaldo_bruto: number;
+    34→    34→    total_aguinaldo_neto: number;
+    35→    35→  };
+    36→    36→  resultados: Array<{
+    37→    37→    empleado_id: string;
+    38→    38→    codigo_empleado: string;
+    39→    39→    nombre: string;
+    40→    40→    fecha_ingreso: string;
+    41→    41→    anios_servicio: number;
+    42→    42→    dias_aguinaldo: number;
+    43→    43→    salario_base: number;
+    44→    44→    salario_diario: number;
+    45→    45→    aguinaldo_bruto: number;
+    46→    46→    exencion_isr: number;
+    47→    47→    aguinaldo_gravado: number;
+    48→    48→    isr_aguinaldo: number;
+    49→    49→    aguinaldo_neto: number;
+    50→    50→  }>;
+    51→    51→  parametros_utilizados: {
+    52→    52→    exencion_isr: string;
+    53→    53→    salario_minimo_sector: number;
+    54→    54→  };
+    55→    55→}
+    56→    56→
+    57→    57→// Animated number counter hook
+    58→    58→function useAnimatedNumber(target: number, duration = 800) {
+    59→    59→  const [value, setValue] = useState(0);
+    60→    60→  const prevTarget = useRef(0);
+    61→    61→
+    62→    62→  useEffect(() => {
+    63→    63→    if (target === prevTarget.current) return;
+    64→    64→    const start = prevTarget.current;
+    65→    65→    const diff = target - start;
+    66→    66→    const startTime = performance.now();
+    67→    67→
+    68→    68→    const animate = (now: number) => {
+    69→    69→      const elapsed = now - startTime;
+    70→    70→      const progress = Math.min(elapsed / duration, 1);
+    71→    71→      const eased = 1 - Math.pow(1 - progress, 3);
+    72→    72→      setValue(start + diff * eased);
+    73→    73→      if (progress < 1) requestAnimationFrame(animate);
+    74→    74→      else {
+    75→    75→        setValue(target);
+    76→    76→        prevTarget.current = target;
+    77→    77→      }
+    78→    78→    };
+    79→    79→
+    80→    80→    requestAnimationFrame(animate);
+    81→    81→  }, [target, duration]);
+    82→    82→
+    83→    83→  return value;
+    84→    84→}
+    85→    85→
+    86→    86→type SortField = 'nombre' | 'dias' | 'monto';
+    87→    87→
+    88→    88→export default function AguinaldoView({ accessToken }: AguinaldoViewProps) {
+    89→    89→  const { toast } = useToast();
+    90→    90→  const [anio, setAnio] = useState(new Date().getFullYear());
+    91→    91→  const [calculating, setCalculating] = useState(false);
+    92→    92→  const [result, setResult] = useState<AguinaldoResult | null>(null);
+    93→    93→  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
+    94→    94→  const [sortField, setSortField] = useState<SortField>('nombre');
+    95→    95→  const [sortAsc, setSortAsc] = useState(true);
+    96→    96→
+    97→    97→  // Year navigation
+    98→    98→  const handlePrevYear = () => setAnio(prev => prev - 1);
+    99→    99→  const handleNextYear = () => setAnio(prev => prev + 1);
+   100→   100→
+   101→   101→  const handleCalculate = async () => {
+   102→   102→    if (!anio) {
+   103→   103→      toast({ title: 'Error', description: 'Ingrese el año', variant: 'destructive' });
+   104→   104→      return;
+   105→   105→    }
+   106→   106→    setCalculating(true);
+   107→   107→    try {
+   108→   108→      const res = await fetch('/api/nomina/aguinaldo', {
+   109→   109→        method: 'POST',
+   110→   110→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   111→   111→        body: JSON.stringify({ anio }),
+   112→   112→      });
+   113→   113→      const data = await res.json();
+   114→   114→      if (!res.ok) throw new Error(data.error || 'Error al calcular aguinaldo');
+   115→   115→      setResult(data);
+   116→   116→      toast({ title: 'Aguinaldo Calculado', description: `${data.resultados.length} empleados procesados` });
+   117→   117→    } catch (err) {
+   118→   118→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al calcular aguinaldo', variant: 'destructive' });
+   119→   119→    } finally {
+   120→   120→      setCalculating(false);
+   121→   121→    }
+   122→   122→  };
+   123→   123→
+   124→   124→  const exportCSV = () => {
+   125→   125→    if (!result) return;
+   126→   126→    const headers = ['Código', 'Nombre', 'Fecha Ingreso', 'Años Servicio', 'Días Aguinaldo', 'Salario Base', 'Aguinaldo Bruto', 'Exención ISR', 'Gravado', 'ISR', 'Aguinaldo Neto'];
+   127→   127→    const rows = result.resultados.map(r => [
+   128→   128→      r.codigo_empleado, r.nombre, r.fecha_ingreso, r.anios_servicio,
+   129→   129→      r.dias_aguinaldo, r.salario_base, r.aguinaldo_bruto,
+   130→   130→      r.exencion_isr, r.aguinaldo_gravado, r.isr_aguinaldo, r.aguinaldo_neto,
+   131→   131→    ]);
+   132→   132→    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+   133→   133→    const blob = new Blob([csv], { type: 'text/csv' });
+   134→   134→    const url = URL.createObjectURL(blob);
+   135→   135→    const a = document.createElement('a');
+   136→   136→    a.href = url;
+   137→   137→    a.download = `aguinaldo_${anio}.csv`;
+   138→   138→    a.click();
+   139→   139→    URL.revokeObjectURL(url);
+   140→   140→  };
+   141→   141→
+   142→   142→  const handleGeneratePdf = async (empleadoId: string, codigoEmpleado: string) => {
+   143→   143→    setGeneratingPdf(empleadoId);
+   144→   144→    try {
+   145→   145→      const res = await fetch(`/api/nomina/aguinaldo/pdf?empleado_id=${empleadoId}&anio=${anio}`, {
+   146→   146→        headers: { Authorization: `Bearer ${accessToken}` },
+   147→   147→      });
+   148→   148→      if (!res.ok) {
+   149→   149→        const data = await res.json();
+   150→   150→        throw new Error(data.error || 'Error al generar PDF');
+   151→   151→      }
+   152→   152→      const blob = await res.blob();
+   153→   153→      const url = URL.createObjectURL(blob);
+   154→   154→      const a = document.createElement('a');
+   155→   155→      a.href = url;
+   156→   156→      a.download = `aguinaldo-${codigoEmpleado}-${anio}.pdf`;
+   157→   157→      a.click();
+   158→   158→      URL.revokeObjectURL(url);
+   159→   159→      toast({ title: 'PDF Generado', description: `Constancia de aguinaldo para ${codigoEmpleado}` });
+   160→   160→    } catch (err) {
+   161→   161→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al generar PDF', variant: 'destructive' });
+   162→   162→    } finally {
+   163→   163→      setGeneratingPdf(null);
+   164→   164→    }
+   165→   165→  };
+   166→   166→
+   167→   167→  const getDiasAguinaldo = (anios: number) => {
+   168→   168→    if (anios < 1) return 'Proporcional';
+   169→   169→    if (anios < 3) return '15 días';
+   170→   170→    if (anios < 10) return '19 días';
+   171→   171→    return '21 días';
+   172→   172→  };
+   173→   173→
+   174→   174→  const getDiasAguinaldoNumber = (anios: number) => {
+   175→   175→    if (anios < 1) return 15; // proportional base
+   176→   176→    if (anios < 3) return 15;
+   177→   177→    if (anios < 10) return 19;
+   178→   178→    return 21;
+   179→   179→  };
+   180→   180→
+   181→   181→  // Sorted results
+   182→   182→  const sortedResults = useMemo(() => {
+   183→   183→    if (!result) return [];
+   184→   184→    const sorted = [...result.resultados].sort((a, b) => {
+   185→   185→      let cmp = 0;
+   186→   186→      if (sortField === 'nombre') cmp = a.nombre.localeCompare(b.nombre);
+   187→   187→      else if (sortField === 'dias') cmp = a.dias_aguinaldo - b.dias_aguinaldo;
+   188→   188→      else if (sortField === 'monto') cmp = a.aguinaldo_neto - b.aguinaldo_neto;
+   189→   189→      return sortAsc ? cmp : -cmp;
+   190→   190→    });
+   191→   191→    return sorted;
+   192→   192→  }, [result, sortField, sortAsc]);
+   193→   193→
+   194→   194→  const handleSort = (field: SortField) => {
+   195→   195→    if (sortField === field) setSortAsc(prev => !prev);
+   196→   196→    else { setSortField(field); setSortAsc(true); }
+   197→   197→  };
+   198→   198→
+   199→   199→  // Dashboard stats
+   200→   200→  const dashboardStats = useMemo(() => {
+   201→   201→    if (!result) return null;
+   202→   202→    const total = result.planilla.total_aguinaldo_neto;
+   203→   203→    const count = result.planilla.total_empleados;
+   204→   204→    const avg = count > 0 ? total / count : 0;
+   205→   205→    // Legal compliance: all employees meet minimum
+   206→   206→    const allCompliant = result.resultados.every(r => {
+   207→   207→      const minDias = getDiasAguinaldoNumber(r.anios_servicio);
+   208→   208→      return r.dias_aguinaldo >= minDias || r.anios_servicio < 1;
+   209→   209→    });
+   210→   210→    return { total, count, avg, allCompliant };
+   211→   211→  }, [result]);
+   212→   212→
+   213→   213→  const animatedTotal = useAnimatedNumber(dashboardStats?.total || 0);
+   214→   214→  const animatedAvg = useAnimatedNumber(dashboardStats?.avg || 0);
+   215→   215→
+   216→   216→  return (
+   217→   217→    <div className="space-y-6">
+   218→   218→      {/* ── Enhanced Header with Legal Reference ──────────────────────────── */}
+   219→   219→      <div>
+   220→   220→        <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+   221→   221→          <Gift className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   222→   222→          Aguinaldo
+   223→   223→        </h3>
+   224→   224→        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+   225→   225→          Cálculo de aguinaldo según el Código de Trabajo de El Salvador
+   226→   226→        </p>
+   227→   227→      </div>
+   228→   228→
+   229→   229→      {/* Legal Banner */}
+   230→   230→      <Card className="shadow-sm border-emerald-200 dark:border-emerald-800 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30">
+   231→   231→        <CardContent className="p-5">
+   232→   232→          <div className="flex items-start gap-3">
+   233→   233→            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 shrink-0">
+   234→   234→              <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   235→   235→            </div>
+   236→   236→            <div className="space-y-2">
+   237→   237→              <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+   238→   238→                Arts. 196-202 Código de Trabajo — Aguinaldo
+   239→   239→              </h4>
+   240→   240→              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+   241→   241→                Todo empleado tiene derecho a un aguinaldo pagadero en el mes de diciembre de cada año,
+   242→   242→                equivalente a un mínimo de 15 días de salario para quienes tengan de 1 a 3 años de servicio,
+   243→   243→                19 días para quienes tengan de 3 a 10 años, y 21 días para quienes tengan 10 o más años.
+   244→   244→                Si no se completó el año, el aguinaldo es proporcional a los días trabajados.
+   245→   245→              </p>
+   246→   246→              <div className="flex flex-wrap gap-2 pt-1">
+   247→   247→                <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300">
+   248→   248→                  1-3 años: 15 días
+   249→   249→                </Badge>
+   250→   250→                <Badge variant="outline" className="text-[10px] border-teal-300 text-teal-700 dark:border-teal-700 dark:text-teal-300">
+   251→   251→                  3-10 años: 19 días
+   252→   252→                </Badge>
+   253→   253→                <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">
+   254→   254→                  10+ años: 21 días
+   255→   255→                </Badge>
+   256→   256→                <Badge variant="outline" className="text-[10px] border-sky-300 text-sky-700 dark:border-sky-700 dark:text-sky-300">
+   257→   257→                  Exención ISR: 2× salario mínimo
+   258→   258→                </Badge>
+   259→   259→              </div>
+   260→   260→            </div>
+   261→   261→          </div>
+   262→   262→        </CardContent>
+   263→   263→      </Card>
+   264→   264→
+   265→   265→      {/* ── Year Selector with Navigation ──────────────────────────────────── */}
+   266→   266→      <Card className="shadow-sm border-slate-200 dark:border-slate-700">
+   267→   267→        <CardContent className="p-6">
+   268→   268→          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+   269→   269→            <div className="flex items-center gap-4">
+   270→   270→              <Button
+   271→   271→                variant="outline"
+   272→   272→                size="icon"
+   273→   273→                className="h-10 w-10 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+   274→   274→                onClick={handlePrevYear}
+   275→   275→              >
+   276→   276→                <ChevronLeft className="h-5 w-5 text-emerald-600" />
+   277→   277→              </Button>
+   278→   278→              <div className="text-center">
+   279→   279→                <p className="text-4xl font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
+   280→   280→                  {anio}
+   281→   281→                </p>
+   282→   282→                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+   283→   283→                  Período: Diciembre {anio}
+   284→   284→                </p>
+   285→   285→              </div>
+   286→   286→              <Button
+   287→   287→                variant="outline"
+   288→   288→                size="icon"
+   289→   289→                className="h-10 w-10 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+   290→   290→                onClick={handleNextYear}
+   291→   291→              >
+   292→   292→                <ChevronRight className="h-5 w-5 text-emerald-600" />
+   293→   293→              </Button>
+   294→   294→            </div>
+   295→   295→            <Button
+   296→   296→              onClick={handleCalculate}
+   297→   297→              disabled={calculating}
+   298→   298→              className="bg-emerald-600 hover:bg-emerald-700 text-white px-8"
+   299→   299→            >
+   300→   300→              {calculating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Calculator className="h-4 w-4 mr-2" />}
+   301→   301→              Calcular Aguinaldo {anio}
+   302→   302→            </Button>
+   303→   303→          </div>
+   304→   304→        </CardContent>
+   305→   305→      </Card>
+   306→   306→
+   307→   307→      {/* ── Results ────────────────────────────────────────────────────────── */}
+   308→   308→      {result && (
+   309→   309→        <>
+   310→   310→          {/* ── Aguinaldo Calculator Visualization ──────────────────────── */}
+   311→   311→          <Card className="shadow-sm border-slate-200 dark:border-slate-700">
+   312→   312→            <CardHeader className="pb-3">
+   313→   313→              <CardTitle className="text-base flex items-center gap-2">
+   314→   314→                <Calculator className="h-4 w-4 text-emerald-600" />
+   315→   315→                Cálculo Paso a Paso — Aguinaldo
+   316→   316→              </CardTitle>
+   317→   317→              <CardDescription className="text-xs">
+   318→   318→                Visualización del proceso de cálculo según Arts. 196-202 CT
+   319→   319→              </CardDescription>
+   320→   320→            </CardHeader>
+   321→   321→            <CardContent>
+   322→   322→              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+   323→   323→                {/* Step 1: Salario Base */}
+   324→   324→                <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30">
+   325→   325→                  <div className="flex items-center gap-2 mb-2">
+   326→   326→                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-white/60 dark:bg-black/20 px-1.5 py-0.5 rounded">
+   327→   327→                      PASO 1
+   328→   328→                    </span>
+   329→   329→                    <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   330→   330→                  </div>
+   331→   331→                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">Salario Base</h4>
+   332→   332→                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+   333→   333→                    Último salario mensual o promedio de últimos 3 meses. Salario diario = Mensual ÷ 30
+   334→   334→                  </p>
+   335→   335→                  <div className="space-y-1">
+   336→   336→                    {result.resultados.slice(0, 3).map(r => (
+   337→   337→                      <div key={r.empleado_id} className="flex justify-between text-[11px]">
+   338→   338→                        <span className="text-slate-600 dark:text-slate-400 truncate mr-2">{r.nombre.split(' ').slice(0, 2).join(' ')}</span>
+   339→   339→                        <span className="font-medium text-slate-800 dark:text-slate-200">{fmt(r.salario_diario)}/d</span>
+   340→   340→                      </div>
+   341→   341→                    ))}
+   342→   342→                    {result.resultados.length > 3 && (
+   343→   343→                      <p className="text-[10px] text-slate-400">+{result.resultados.length - 3} más</p>
+   344→   344→                    )}
+   345→   345→                  </div>
+   346→   346→                </div>
+   347→   347→
+   348→   348→                {/* Step 2: Días Trabajados */}
+   349→   349→                <div className="p-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/30">
+   350→   350→                  <div className="flex items-center gap-2 mb-2">
+   351→   351→                    <span className="text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-white/60 dark:bg-black/20 px-1.5 py-0.5 rounded">
+   352→   352→                      PASO 2
+   353→   353→                    </span>
+   354→   354→                    <CalendarDays className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+   355→   355→                  </div>
+   356→   356→                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">Días Trabajados</h4>
+   357→   357→                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+   358→   358→                    Desde la fecha de ingreso o 1 de enero, hasta el 12 de diciembre
+   359→   359→                  </p>
+   360→   360→                  <div className="space-y-1">
+   361→   361→                    {result.resultados.slice(0, 3).map(r => {
+   362→   362→                      const hireDate = new Date(r.fecha_ingreso);
+   363→   363→                      const hireYear = hireDate.getFullYear();
+   364→   364→                      const label = hireYear < anio ? 'Ene 1 - Dic 12' : `${hireDate.toLocaleDateString('es-SV', { month: 'short', day: 'numeric' })} - Dic 12`;
+   365→   365→                      return (
+   366→   366→                        <div key={r.empleado_id} className="flex justify-between text-[11px]">
+   367→   367→                          <span className="text-slate-600 dark:text-slate-400 truncate mr-2">{r.nombre.split(' ').slice(0, 2).join(' ')}</span>
+   368→   368→                          <span className="font-medium text-slate-800 dark:text-slate-200">{label}</span>
+   369→   369→                        </div>
+   370→   370→                      );
+   371→   371→                    })}
+   372→   372→                    {result.resultados.length > 3 && (
+   373→   373→                      <p className="text-[10px] text-slate-400">+{result.resultados.length - 3} más</p>
+   374→   374→                    )}
+   375→   375→                  </div>
+   376→   376→                </div>
+   377→   377→
+   378→   378→                {/* Step 3: Proporción */}
+   379→   379→                <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+   380→   380→                  <div className="flex items-center gap-2 mb-2">
+   381→   381→                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-white/60 dark:bg-black/20 px-1.5 py-0.5 rounded">
+   382→   382→                      PASO 3
+   383→   383→                    </span>
+   384→   384→                    <TrendingUp className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+   385→   385→                  </div>
+   386→   386→                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">Proporción</h4>
+   387→   387→                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+   388→   388→                    Días trabajados ÷ 365. Si completó el año, proporción = 1.0
+   389→   389→                  </p>
+   390→   390→                  <div className="space-y-2">
+   391→   391→                    {result.resultados.slice(0, 3).map(r => {
+   392→   392→                      const proportion = Math.min(1, r.dias_aguinaldo / getDiasAguinaldoNumber(r.anios_servicio));
+   393→   393→                      return (
+   394→   394→                        <div key={r.empleado_id}>
+   395→   395→                          <div className="flex justify-between text-[11px] mb-0.5">
+   396→   396→                            <span className="text-slate-600 dark:text-slate-400 truncate mr-2">{r.nombre.split(' ').slice(0, 2).join(' ')}</span>
+   397→   397→                            <span className="font-medium text-slate-800 dark:text-slate-200">{(proportion * 100).toFixed(0)}%</span>
+   398→   398→                          </div>
+   399→   399→                          <Progress value={proportion * 100} className="h-1.5" />
+   400→   400→                        </div>
+   401→   401→                      );
+   402→   402→                    })}
+   403→   403→                    {result.resultados.length > 3 && (
+   404→   404→                      <p className="text-[10px] text-slate-400">+{result.resultados.length - 3} más</p>
+   405→   405→                    )}
+   406→   406→                  </div>
+   407→   407→                </div>
+   408→   408→
+   409→   409→                {/* Step 4: Días de Aguinaldo por Antigüedad */}
+   410→   410→                <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30">
+   411→   411→                  <div className="flex items-center gap-2 mb-2">
+   412→   412→                    <span className="text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-white/60 dark:bg-black/20 px-1.5 py-0.5 rounded">
+   413→   413→                      PASO 4
+   414→   414→                    </span>
+   415→   415→                    <Award className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+   416→   416→                  </div>
+   417→   417→                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">Días por Antigüedad</h4>
+   418→   418→                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+   419→   419→                    Aguinaldo = Salario diario × Proporción × Días según Art. 196 CT
+   420→   420→                  </p>
+   421→   421→                  <div className="space-y-2">
+   422→   422→                    <div className="flex items-center justify-between">
+   423→   423→                      <span className="text-[11px] text-slate-600 dark:text-slate-400">1-3 años</span>
+   424→   424→                      <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300">15 días</Badge>
+   425→   425→                    </div>
+   426→   426→                    <div className="flex items-center justify-between">
+   427→   427→                      <span className="text-[11px] text-slate-600 dark:text-slate-400">3-10 años</span>
+   428→   428→                      <Badge variant="outline" className="text-[10px] border-teal-300 text-teal-700 dark:border-teal-700 dark:text-teal-300">19 días</Badge>
+   429→   429→                    </div>
+   430→   430→                    <div className="flex items-center justify-between">
+   431→   431→                      <span className="text-[11px] text-slate-600 dark:text-slate-400">10+ años</span>
+   432→   432→                      <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">21 días</Badge>
+   433→   433→                    </div>
+   434→   434→                  </div>
+   435→   435→                </div>
+   436→   436→              </div>
+   437→   437→
+   438→   438→              {/* Visual progress bars for each employee */}
+   439→   439→              <div className="mt-6 space-y-3">
+   440→   440→                <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+   441→   441→                  <BarChart3 className="h-4 w-4 text-emerald-600" />
+   442→   442→                  Porcentaje del Aguinaldo Completo
+   443→   443→                </h4>
+   444→   444→                <div className="max-h-72 overflow-y-auto pr-2 space-y-2">
+   445→   445→                  {result.resultados.map(r => {
+   446→   446→                    const maxDias = 21; // max possible aguinaldo days
+   447→   447→                    const percentage = (r.dias_aguinaldo / maxDias) * 100;
+   448→   448→                    return (
+   449→   449→                      <div key={r.empleado_id} className="flex items-center gap-3">
+   450→   450→                        <div className="w-32 sm:w-44 shrink-0">
+   451→   451→                          <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{r.nombre}</p>
+   452→   452→                          <p className="text-[10px] text-slate-400">{r.anios_servicio.toFixed(1)} años · {getDiasAguinaldo(r.anios_servicio)}</p>
+   453→   453→                        </div>
+   454→   454→                        <div className="flex-1">
+   455→   455→                          <Progress value={percentage} className="h-3" />
+   456→   456→                        </div>
+   457→   457→                        <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 w-16 text-right tabular-nums">
+   458→   458→                          {fmt(r.aguinaldo_neto)}
+   459→   459→                        </span>
+   460→   460→                      </div>
+   461→   461→                    );
+   462→   462→                  })}
+   463→   463→                </div>
+   464→   464→              </div>
+   465→   465→            </CardContent>
+   466→   466→          </Card>
+   467→   467→
+   468→   468→          {/* ── Aguinaldo Summary Dashboard ─────────────────────────────── */}
+   469→   469→          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   470→   470→            {/* Total Aguinaldo */}
+   471→   471→            <Card className="shadow-sm border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30">
+   472→   472→              <CardContent className="p-4 text-center">
+   473→   473→                <div className="flex items-center justify-center mb-2">
+   474→   474→                  <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
+   475→   475→                    <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   476→   476→                  </div>
+   477→   477→                </div>
+   478→   478→                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Total Aguinaldo</p>
+   479→   479→                <p className="text-xl font-bold text-emerald-800 dark:text-emerald-200 mt-0.5">
+   480→   480→                  {fmt(animatedTotal)}
+   481→   481→                </p>
+   482→   482→              </CardContent>
+   483→   483→            </Card>
+   484→   484→
+   485→   485→            {/* Total Empleados */}
+   486→   486→            <Card className="shadow-sm border-slate-200 dark:border-slate-700">
+   487→   487→              <CardContent className="p-4 text-center">
+   488→   488→                <div className="flex items-center justify-center mb-2">
+   489→   489→                  <div className="h-8 w-8 rounded-lg bg-sky-100 dark:bg-sky-900/50 flex items-center justify-center">
+   490→   490→                    <Users className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+   491→   491→                  </div>
+   492→   492→                </div>
+   493→   493→                <p className="text-[10px] text-sky-600 dark:text-sky-400 font-medium">Total Empleados</p>
+   494→   494→                <p className="text-xl font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+   495→   495→                  {result.planilla.total_empleados}
+   496→   496→                </p>
+   497→   497→              </CardContent>
+   498→   498→            </Card>
+   499→   499→
+   500→   500→            {/* Promedio por Empleado */}
+   501→   501→            <Card className="shadow-sm border-slate-200 dark:border-slate-700">
+   502→   502→              <CardContent className="p-4 text-center">
+   503→   503→                <div className="flex items-center justify-center mb-2">
+   504→   504→                  <div className="h-8 w-8 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
+   505→   505→                    <TrendingUp className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+   506→   506→                  </div>
+   507→   507→                </div>
+   508→   508→                <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Promedio por Empleado</p>
+   509→   509→                <p className="text-xl font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+   510→   510→                  {fmt(animatedAvg)}
+   511→   511→                </p>
+   512→   512→              </CardContent>
+   513→   513→            </Card>
+   514→   514→
+   515→   515→            {/* Cumplimiento Legal */}
+   516→   516→            <Card className={`shadow-sm ${dashboardStats?.allCompliant ? 'border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/30 dark:to-green-950/30' : 'border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/30 dark:to-yellow-950/30'}`}>
+   517→   517→              <CardContent className="p-4 text-center">
+   518→   518→                <div className="flex items-center justify-center mb-2">
+   519→   519→                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${dashboardStats?.allCompliant ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-amber-100 dark:bg-amber-900/50'}`}>
+   520→   520→                    {dashboardStats?.allCompliant ? (
+   521→   521→                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   522→   522→                    ) : (
+   523→   523→                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+   524→   524→                    )}
+   525→   525→                  </div>
+   526→   526→                </div>
+   527→   527→                <p className="text-[10px] font-medium text-slate-600 dark:text-slate-400">Cumplimiento Legal</p>
+   528→   528→                <p className={`text-sm font-bold mt-0.5 ${dashboardStats?.allCompliant ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>
+   529→   529→                  {dashboardStats?.allCompliant ? '✓ Cumple' : '⚠ Revisar'}
+   530→   530→                </p>
+   531→   531→                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+   532→   532→                  {dashboardStats?.allCompliant ? 'Todos los cálculos cumplen mínimos legales' : 'Algunos cálculos no cumplen mínimos'}
+   533→   533→                </p>
+   534→   534→              </CardContent>
+   535→   535→            </Card>
+   536→   536→          </div>
+   537→   537→
+   538→   538→          {/* ── Employee Results Table ──────────────────────────────────── */}
+   539→   539→          <Card className="shadow-sm border-slate-200 dark:border-slate-700">
+   540→   540→            <CardHeader className="pb-3">
+   541→   541→              <div className="flex items-center justify-between">
+   542→   542→                <div>
+   543→   543→                  <CardTitle className="text-base flex items-center gap-2">
+   544→   544→                    <Users className="h-4 w-4 text-emerald-600" />
+   545→   545→                    Detalle por Empleado
+   546→   546→                  </CardTitle>
+   547→   547→                  <CardDescription className="text-xs mt-1">
+   548→   548→                    Resultados del cálculo de aguinaldo — {anio}
+   549→   549→                  </CardDescription>
+   550→   550→                </div>
+   551→   551→                <div className="flex gap-2">
+   552→   552→                  <Button variant="outline" size="sm" onClick={exportCSV}>
+   553→   553→                    <Download className="h-3.5 w-3.5 mr-1" /> CSV
+   554→   554→                  </Button>
+   555→   555→                  <Button
+   556→   556→                    variant="outline"
+   557→   557→                    size="sm"
+   558→   558→                    className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:border-emerald-800 dark:hover:bg-emerald-950/30"
+   559→   559→                    onClick={() => {
+   560→   560→                      toast({ title: 'Planilla PDF', description: 'Función de generación de planilla completa' });
+   561→   561→                    }}
+   562→   562→                  >
+   563→   563→                    <FileText className="h-3.5 w-3.5 mr-1" /> Planilla PDF
+   564→   564→                  </Button>
+   565→   565→                </div>
+   566→   566→              </div>
+   567→   567→            </CardHeader>
+   568→   568→            <CardContent className="p-0">
+   569→   569→              <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+   570→   570→                <table className="w-full text-sm">
+   571→   571→                  <thead className="sticky top-0 z-10">
+   572→   572→                    <tr className="border-t border-b bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-sm">
+   573→   573→                      <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Empleado</th>
+   574→   574→                      <th
+   575→   575→                        className="text-left font-medium text-slate-500 dark:text-slate-400 p-3 cursor-pointer hover:text-emerald-600 transition-colors"
+   576→   576→                        onClick={() => handleSort('nombre')}
+   577→   577→                      >
+   578→   578→                        <span className="flex items-center gap-1">
+   579→   579→                          Nombre
+   580→   580→                          {sortField === 'nombre' && <span className="text-emerald-600">{sortAsc ? '↑' : '↓'}</span>}
+   581→   581→                        </span>
+   582→   582→                      </th>
+   583→   583→                      <th className="text-right font-medium text-amber-600 dark:text-amber-400 p-3 bg-amber-50/50 dark:bg-amber-950/20">
+   584→   584→                        Salario
+   585→   585→                      </th>
+   586→   586→                      <th
+   587→   587→                        className="text-right font-medium text-teal-600 dark:text-teal-400 p-3 bg-teal-50/50 dark:bg-teal-950/20 cursor-pointer hover:text-teal-700 transition-colors"
+   588→   588→                        onClick={() => handleSort('dias')}
+   589→   589→                      >
+   590→   590→                        <span className="flex items-center gap-1 justify-end">
+   591→   591→                          Días Trab.
+   592→   592→                          {sortField === 'dias' && <span className="text-teal-600">{sortAsc ? '↑' : '↓'}</span>}
+   593→   593→                        </span>
+   594→   594→                      </th>
+   595→   595→                      <th className="text-center font-medium text-slate-500 dark:text-slate-400 p-3">Días Aguinaldo</th>
+   596→   596→                      <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Bruto</th>
+   597→   597→                      <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">ISR</th>
+   598→   598→                      <th
+   599→   599→                        className="text-right font-medium text-emerald-600 dark:text-emerald-400 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 cursor-pointer hover:text-emerald-700 transition-colors"
+   600→   600→                        onClick={() => handleSort('monto')}
+   601→   601→                      >
+   602→   602→                        <span className="flex items-center gap-1 justify-end">
+   603→   603→                          Neto
+   604→   604→                          {sortField === 'monto' && <span className="text-emerald-600">{sortAsc ? '↑' : '↓'}</span>}
+   605→   605→                        </span>
+   606→   606→                      </th>
+   607→   607→                      <th className="text-center font-medium text-slate-500 dark:text-slate-400 p-3">PDF</th>
+   608→   608→                    </tr>
+   609→   609→                  </thead>
+   610→   610→                  <tbody>
+   611→   611→                    {sortedResults.map(r => (
+   612→   612→                      <tr key={r.empleado_id} className="border-b hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors">
+   613→   613→                        <td className="p-3">
+   614→   614→                          <Avatar className="h-7 w-7">
+   615→   615→                            <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 text-[10px] font-bold">
+   616→   616→                              {r.nombre.split(' ').map(n => n[0]).join('').slice(0, 2)}
+   617→   617→                            </AvatarFallback>
+   618→   618→                          </Avatar>
+   619→   619→                        </td>
+   620→   620→                        <td className="p-3">
+   621→   621→                          <p className="font-medium text-slate-900 dark:text-slate-100">{r.nombre}</p>
+   622→   622→                          <p className="text-[11px] text-slate-400">{r.codigo_empleado}</p>
+   623→   623→                        </td>
+   624→   624→                        <td className="p-3 text-right font-medium text-amber-700 dark:text-amber-300 bg-amber-50/30 dark:bg-amber-950/10">
+   625→   625→                          {fmt(r.salario_base)}
+   626→   626→                        </td>
+   627→   627→                        <td className="p-3 text-right text-teal-700 dark:text-teal-300 bg-teal-50/30 dark:bg-teal-950/10">
+   628→   628→                          {r.anios_servicio.toFixed(1)}
+   629→   629→                        </td>
+   630→   630→                        <td className="p-3 text-center">
+   631→   631→                          <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300">
+   632→   632→                            {getDiasAguinaldo(r.anios_servicio)}
+   633→   633→                          </Badge>
+   634→   634→                          <span className="text-[10px] text-slate-400 ml-1">({r.dias_aguinaldo.toFixed(1)}d)</span>
+   635→   635→                        </td>
+   636→   636→                        <td className="p-3 text-right font-medium text-slate-700 dark:text-slate-300">{fmt(r.aguinaldo_bruto)}</td>
+   637→   637→                        <td className="p-3 text-right text-red-600 dark:text-red-400">{r.isr_aguinaldo > 0 ? `-${fmt(r.isr_aguinaldo)}` : '-'}</td>
+   638→   638→                        <td className="p-3 text-right font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10">
+   639→   639→                          {fmt(r.aguinaldo_neto)}
+   640→   640→                        </td>
+   641→   641→                        <td className="p-3 text-center">
+   642→   642→                          <Button
+   643→   643→                            variant="ghost"
+   644→   644→                            size="sm"
+   645→   645→                            className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+   646→   646→                            onClick={() => handleGeneratePdf(r.empleado_id, r.codigo_empleado)}
+   647→   647→                            disabled={generatingPdf === r.empleado_id}
+   648→   648→                            title="Generar Constancia de Aguinaldo PDF"
+   649→   649→                          >
+   650→   650→                            {generatingPdf === r.empleado_id ? (
+   651→   651→                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   652→   652→                            ) : (
+   653→   653→                              <FileText className="h-3.5 w-3.5" />
+   654→   654→                            )}
+   655→   655→                          </Button>
+   656→   656→                        </td>
+   657→   657→                      </tr>
+   658→   658→                    ))}
+   659→   659→                  </tbody>
+   660→   660→                  {/* Total row */}
+   661→   661→                  <tfoot>
+   662→   662→                    <tr className="bg-emerald-50/70 dark:bg-emerald-950/30 border-t-2 border-emerald-200 dark:border-emerald-800">
+   663→   663→                      <td colSpan={5} className="p-3 text-sm font-bold text-slate-700 dark:text-slate-300 text-right">
+   664→   664→                        Total General
+   665→   665→                      </td>
+   666→   666→                      <td className="p-3 text-right font-bold text-slate-700 dark:text-slate-300">
+   667→   667→                        {fmt(result.planilla.total_aguinaldo_bruto)}
+   668→   668→                      </td>
+   669→   669→                      <td className="p-3 text-right font-bold text-red-600 dark:text-red-400">
+   670→   670→                        -{fmt(result.planilla.total_aguinaldo_bruto - result.planilla.total_aguinaldo_neto)}
+   671→   671→                      </td>
+   672→   672→                      <td className="p-3 text-right font-bold text-emerald-700 dark:text-emerald-400 text-lg">
+   673→   673→                        {fmt(result.planilla.total_aguinaldo_neto)}
+   674→   674→                      </td>
+   675→   675→                      <td></td>
+   676→   676→                    </tr>
+   677→   677→                  </tfoot>
+   678→   678→                </table>
+   679→   679→              </div>
+   680→   680→            </CardContent>
+   681→   681→          </Card>
+   682→   682→
+   683→   683→          {/* ── Parameters Used ────────────────────────────────────────── */}
+   684→   684→          <Card className="shadow-sm border-slate-200 dark:border-slate-700">
+   685→   685→            <CardContent className="p-4">
+   686→   686→              <div className="flex items-start gap-2">
+   687→   687→                <Info className="h-4 w-4 text-slate-400 dark:text-slate-500 shrink-0 mt-0.5" />
+   688→   688→                <div className="text-xs text-slate-500 dark:text-slate-400 space-y-1">
+   689→   689→                  <p><strong>Parámetros utilizados:</strong> {result.parametros_utilizados.exencion_isr}</p>
+   690→   690→                  <p><strong>Código planilla:</strong> {result.planilla.codigo_planilla}</p>
+   691→   691→                  <p><strong>Estado:</strong> {result.planilla.estado}</p>
+   692→   692→                </div>
+   693→   693→              </div>
+   694→   694→            </CardContent>
+   695→   695→          </Card>
+   696→   696→        </>
+   697→   697→      )}
+   698→   698→    </div>
+   699→   699→  );
+   700→   700→}
+   701→   701→

@@ -1,0 +1,1019 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→     4→import {
+     5→     5→  Send, Building2, Download, Loader2, CheckCircle, XCircle,
+     6→     6→  Clock, AlertTriangle, RefreshCw, Copy, ChevronDown, ChevronRight,
+     7→     7→  FileText, Users, DollarSign, Calendar, ShieldCheck, Info,
+     8→     8→  TrendingUp, Landmark, Banknote, AlertCircle, PartyPopper
+     9→     9→} from 'lucide-react';
+    10→    10→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    11→    11→import { Badge } from '@/components/ui/badge';
+    12→    12→import { Button } from '@/components/ui/button';
+    13→    13→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    14→    14→import { Skeleton } from '@/components/ui/skeleton';
+    15→    15→import { Separator } from '@/components/ui/separator';
+    16→    16→import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+    17→    17→import { Progress } from '@/components/ui/progress';
+    18→    18→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    19→    19→import { useToast } from '@/hooks/use-toast';
+    20→    20→
+    21→    21→interface BankDispersionProps {
+    22→    22→  accessToken: string;
+    23→    23→  userRole: string;
+    24→    24→}
+    25→    25→
+    26→    26→const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    27→    27→
+    28→    28→interface PlanillaOption {
+    29→    29→  id: string;
+    30→    30→  codigo_planilla: string;
+    31→    31→  tipo: string;
+    32→    32→  estado: string;
+    33→    33→  total_neto_a_pagar: number;
+    34→    34→  total_empleados: number;
+    35→    35→  fecha_generacion?: string;
+    36→    36→}
+    37→    37→
+    38→    38→interface DispersionResult {
+    39→    39→  banco_id: string;
+    40→    40→  banco_nombre: string;
+    41→    41→  banco_codigo: string;
+    42→    42→  total_empleados: number;
+    43→    43→  total_monto: number;
+    44→    44→  archivo_nombre: string;
+    45→    45→  retorno_id: string;
+    46→    46→  contenido_csv: string;
+    47→    47→}
+    48→    48→
+    49→    49→interface RetornoBancario {
+    50→    50→  id: string;
+    51→    51→  banco_id: string;
+    52→    52→  archivo_nombre: string | null;
+    53→    53→  fecha_envio: string | null;
+    54→    54→  fecha_retorno: string | null;
+    55→    55→  estado: string;
+    56→    56→  total_registros: number;
+    57→    57→  total_monto: number;
+    58→    58→  errores_detalle: string | null;
+    59→    59→  banco: { nombre: string; codigo: string };
+    60→    60→}
+    61→    61→
+    62→    62→type Step = 1 | 2 | 3;
+    63→    63→
+    64→    64→// Bank color palette for avatars
+    65→    65→const bankColors = [
+    66→    66→  'bg-emerald-600 text-white',
+    67→    67→  'bg-teal-600 text-white',
+    68→    68→  'bg-cyan-600 text-white',
+    69→    69→  'bg-amber-600 text-white',
+    70→    70→  'bg-rose-600 text-white',
+    71→    71→  'bg-violet-600 text-white',
+    72→    72→  'bg-orange-600 text-white',
+    73→    73→  'bg-lime-600 text-white',
+    74→    74→];
+    75→    75→
+    76→    76→function getBankColor(index: number) {
+    77→    77→  return bankColors[index % bankColors.length];
+    78→    78→}
+    79→    79→
+    80→    80→// Dispersion status badge colors
+    81→    81→const dispersionStatusColors: Record<string, string> = {
+    82→    82→  PENDIENTE: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+    83→    83→  ENVIADO: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
+    84→    84→  CONFIRMADO: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300',
+    85→    85→  FALLIDO: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
+    86→    86→};
+    87→    87→
+    88→    88→export default function BankDispersion({ accessToken }: BankDispersionProps) {
+    89→    89→  const { toast } = useToast();
+    90→    90→  const [planillas, setPlanillas] = useState<PlanillaOption[]>([]);
+    91→    91→  const [selectedId, setSelectedId] = useState<string>('');
+    92→    92→  const [selectedPlanilla, setSelectedPlanilla] = useState<PlanillaOption | null>(null);
+    93→    93→  const [loading, setLoading] = useState(true);
+    94→    94→  const [generating, setGenerating] = useState(false);
+    95→    95→  const [dispersions, setDispersions] = useState<DispersionResult[]>([]);
+    96→    96→  const [retornos, setRetornos] = useState<RetornoBancario[]>([]);
+    97→    97→  const [loadingDetail, setLoadingDetail] = useState(false);
+    98→    98→  const [expandedBanks, setExpandedBanks] = useState<Set<string>>(new Set());
+    99→    99→  const [previewBank, setPreviewBank] = useState<string | null>(null);
+   100→   100→  const [copied, setCopied] = useState(false);
+   101→   101→  const [confirmed, setConfirmed] = useState(false);
+   102→   102→  const [confirming, setConfirming] = useState(false);
+   103→   103→  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+   104→   104→
+   105→   105→  // Step logic
+   106→   106→  const currentStep: Step = !selectedId ? 1 : dispersions.length === 0 ? 2 : 3;
+   107→   107→
+   108→   108→  const fetchPlanillas = useCallback(async () => {
+   109→   109→    setLoading(true);
+   110→   110→    try {
+   111→   111→      const res = await fetch('/api/nomina/planillas?limit=50', {
+   112→   112→        headers: { Authorization: `Bearer ${accessToken}` },
+   113→   113→      });
+   114→   114→      if (!res.ok) throw new Error('Error');
+   115→   115→      const data = await res.json();
+   116→   116→      setPlanillas(data.planillas?.filter((p: PlanillaOption) => p.estado === 'APROBADA') || []);
+   117→   117→    } catch {
+   118→   118→      toast({ title: 'Error', description: 'No se pudieron cargar planillas', variant: 'destructive' });
+   119→   119→    } finally {
+   120→   120→      setLoading(false);
+   121→   121→    }
+   122→   122→  }, [accessToken, toast]);
+   123→   123→
+   124→   124→  const fetchDetail = useCallback(async (planillaId: string) => {
+   125→   125→    setLoadingDetail(true);
+   126→   126→    try {
+   127→   127→      const res = await fetch(`/api/nomina/planillas/${planillaId}`, {
+   128→   128→        headers: { Authorization: `Bearer ${accessToken}` },
+   129→   129→      });
+   130→   130→      if (!res.ok) throw new Error('Error');
+   131→   131→      const data = await res.json();
+   132→   132→      setRetornos(data.planilla?.retornos_bancarios || []);
+   133→   133→    } catch {
+   134→   134→      // ignore
+   135→   135→    } finally {
+   136→   136→      setLoadingDetail(false);
+   137→   137→    }
+   138→   138→  }, [accessToken]);
+   139→   139→
+   140→   140→  useEffect(() => { fetchPlanillas(); }, [fetchPlanillas]);
+   141→   141→
+   142→   142→  useEffect(() => {
+   143→   143→    if (selectedId) {
+   144→   144→      fetchDetail(selectedId);
+   145→   145→      const p = planillas.find(pl => pl.id === selectedId);
+   146→   146→      setSelectedPlanilla(p || null);
+   147→   147→    } else {
+   148→   148→      setRetornos([]);
+   149→   149→      setSelectedPlanilla(null);
+   150→   150→    }
+   151→   151→  }, [selectedId, fetchDetail, planillas]);
+   152→   152→
+   153→   153→  // Reset state when selection changes
+   154→   154→  useEffect(() => {
+   155→   155→    setDispersions([]);
+   156→   156→    setExpandedBanks(new Set());
+   157→   157→    setPreviewBank(null);
+   158→   158→    setConfirmed(false);
+   159→   159→    setShowSuccessAnimation(false);
+   160→   160→  }, [selectedId]);
+   161→   161→
+   162→   162→  const handleGenerate = async () => {
+   163→   163→    if (!selectedId) return;
+   164→   164→    setGenerating(true);
+   165→   165→    try {
+   166→   166→      const res = await fetch(`/api/nomina/planillas/${selectedId}/dispersion`, {
+   167→   167→        method: 'POST',
+   168→   168→        headers: { Authorization: `Bearer ${accessToken}` },
+   169→   169→      });
+   170→   170→      const data = await res.json();
+   171→   171→      if (!res.ok) throw new Error(data.error || 'Error al generar dispersión');
+   172→   172→      setDispersions(data.dispersiones || []);
+   173→   173→      toast({ title: 'Dispersión Generada', description: `${data.dispersiones.length} archivo(s) generado(s)` });
+   174→   174→      fetchDetail(selectedId);
+   175→   175→    } catch (err) {
+   176→   176→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al generar dispersión', variant: 'destructive' });
+   177→   177→    } finally {
+   178→   178→      setGenerating(false);
+   179→   179→    }
+   180→   180→  };
+   181→   181→
+   182→   182→  const handleDownload = (disp: DispersionResult) => {
+   183→   183→    const blob = new Blob([disp.contenido_csv], { type: 'text/csv' });
+   184→   184→    const url = URL.createObjectURL(blob);
+   185→   185→    const a = document.createElement('a');
+   186→   186→    a.href = url;
+   187→   187→    a.download = disp.archivo_nombre;
+   188→   188→    a.click();
+   189→   189→    URL.revokeObjectURL(url);
+   190→   190→  };
+   191→   191→
+   192→   192→  const handleDownloadAch = (disp: DispersionResult) => {
+   193→   193→    const blob = new Blob([disp.contenido_csv], { type: 'text/plain' });
+   194→   194→    const url = URL.createObjectURL(blob);
+   195→   195→    const a = document.createElement('a');
+   196→   196→    a.href = url;
+   197→   197→    a.download = disp.archivo_nombre.replace('.csv', '.ach');
+   198→   198→    a.click();
+   199→   199→    URL.revokeObjectURL(url);
+   200→   200→  };
+   201→   201→
+   202→   202→  const handleCopyToClipboard = async (content: string) => {
+   203→   203→    try {
+   204→   204→      await navigator.clipboard.writeText(content);
+   205→   205→      setCopied(true);
+   206→   206→      toast({ title: 'Copiado', description: 'Contenido copiado al portapapeles' });
+   207→   207→      setTimeout(() => setCopied(false), 2000);
+   208→   208→    } catch {
+   209→   209→      toast({ title: 'Error', description: 'No se pudo copiar', variant: 'destructive' });
+   210→   210→    }
+   211→   211→  };
+   212→   212→
+   213→   213→  const toggleExpanded = (bancoId: string) => {
+   214→   214→    setExpandedBanks(prev => {
+   215→   215→      const next = new Set(prev);
+   216→   216→      if (next.has(bancoId)) next.delete(bancoId);
+   217→   217→      else next.add(bancoId);
+   218→   218→      return next;
+   219→   219→    });
+   220→   220→  };
+   221→   221→
+   222→   222→  const handleConfirm = async () => {
+   223→   223→    setConfirming(true);
+   224→   224→    // Simulate a brief loading state for better UX
+   225→   225→    await new Promise(resolve => setTimeout(resolve, 800));
+   226→   226→    setConfirmed(true);
+   227→   227→    setConfirming(false);
+   228→   228→    setShowSuccessAnimation(true);
+   229→   229→    toast({ title: 'Dispersión Confirmada', description: 'Los archivos han sido confirmados para envío bancario' });
+   230→   230→    setTimeout(() => setShowSuccessAnimation(false), 3000);
+   231→   231→  };
+   232→   232→
+   233→   233→  // Parse CSV content into rows for display
+   234→   234→  const parseCSV = (csv: string) => {
+   235→   235→    return csv.split('\n').filter(l => l.trim()).map(line => line.split(','));
+   236→   236→  };
+   237→   237→
+   238→   238→  // Summary calculations
+   239→   239→  const totalAmountDispersed = dispersions.reduce((s, d) => s + d.total_monto, 0);
+   240→   240→  const totalEmployees = dispersions.reduce((s, d) => s + d.total_empleados, 0);
+   241→   241→  const bankCount = dispersions.length;
+   242→   242→  const successRetornos = retornos.filter(r => r.estado === 'PROCESADO').length;
+   243→   243→  const errorRetornos = retornos.filter(r => r.estado === 'CON_ERRORES' || r.estado === 'RECHAZADO').length;
+   244→   244→
+   245→   245→  const retornoEstadoColors: Record<string, string> = {
+   246→   246→    PENDIENTE: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+   247→   247→    ENVIADO: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
+   248→   248→    EN_PROCESO: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300',
+   249→   249→    PROCESADO: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300',
+   250→   250→    CON_ERRORES: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
+   251→   251→    RECHAZADO: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
+   252→   252→  };
+   253→   253→
+   254→   254→  const retornoEstadoIcons: Record<string, React.ReactNode> = {
+   255→   255→    PENDIENTE: <Clock className="h-3 w-3" />,
+   256→   256→    ENVIADO: <Send className="h-3 w-3" />,
+   257→   257→    EN_PROCESO: <Loader2 className="h-3 w-3 animate-spin" />,
+   258→   258→    PROCESADO: <CheckCircle className="h-3 w-3" />,
+   259→   259→    CON_ERRORES: <XCircle className="h-3 w-3" />,
+   260→   260→    RECHAZADO: <XCircle className="h-3 w-3" />,
+   261→   261→  };
+   262→   262→
+   263→   263→  // Step indicator component
+   264→   264→  const steps = [
+   265→   265→    { num: 1, label: 'Seleccionar Planilla', icon: Info },
+   266→   266→    { num: 2, label: 'Generar Dispersión', icon: Send },
+   267→   267→    { num: 3, label: 'Confirmar', icon: ShieldCheck },
+   268→   268→  ];
+   269→   269→
+   270→   270→  // Helper to mask account number
+   271→   271→  const maskAccount = (account: string) => {
+   272→   272→    if (!account || account.length < 4) return account;
+   273→   273→    return '****' + account.slice(-4);
+   274→   274→  };
+   275→   275→
+   276→   276→  // Helper to get initials from name
+   277→   277→  const getInitials = (name: string) => {
+   278→   278→    if (!name) return '??';
+   279→   279→    const parts = name.trim().split(/\s+/);
+   280→   280→    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+   281→   281→    return parts[0].substring(0, 2).toUpperCase();
+   282→   282→  };
+   283→   283→
+   284→   284→  // Bank summary data for widget
+   285→   285→  const bankSummaryData = dispersions.map(d => ({
+   286→   286→    name: d.banco_nombre,
+   287→   287→    code: d.banco_codigo,
+   288→   288→    amount: d.total_monto,
+   289→   289→    employees: d.total_empleados,
+   290→   290→    percentage: totalAmountDispersed > 0 ? (d.total_monto / totalAmountDispersed) * 100 : 0,
+   291→   291→  })).sort((a, b) => b.amount - a.amount);
+   292→   292→
+   293→   293→  return (
+   294→   294→    <div className="space-y-5">
+   295→   295→      {/* ========== KPI SUMMARY STATS ========== */}
+   296→   296→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   297→   297→        <Card className="shadow-sm border-l-4 border-l-emerald-500 dark:border-l-emerald-600">
+   298→   298→          <CardContent className="p-4">
+   299→   299→            <div className="flex items-center justify-between">
+   300→   300→              <div>
+   301→   301→                <p className="text-xs text-slate-500 dark:text-slate-400">Planillas por Dispersar</p>
+   302→   302→                <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 mt-1">{planillas.length}</p>
+   303→   303→              </div>
+   304→   304→              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
+   305→   305→                <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   306→   306→              </div>
+   307→   307→            </div>
+   308→   308→            <div className="flex items-center gap-1 mt-2">
+   309→   309→              <Clock className="h-3 w-3 text-emerald-500" />
+   310→   310→              <span className="text-[10px] text-emerald-600 dark:text-emerald-400">Aprobadas y listas</span>
+   311→   311→            </div>
+   312→   312→          </CardContent>
+   313→   313→        </Card>
+   314→   314→
+   315→   315→        <Card className="shadow-sm border-l-4 border-l-teal-500 dark:border-l-teal-600">
+   316→   316→          <CardContent className="p-4">
+   317→   317→            <div className="flex items-center justify-between">
+   318→   318→              <div>
+   319→   319→                <p className="text-xs text-slate-500 dark:text-slate-400">Monto Total</p>
+   320→   320→                <p className="text-lg font-bold text-teal-700 dark:text-teal-400 mt-1">{fmt(totalAmountDispersed || planillas.reduce((s, p) => s + p.total_neto_a_pagar, 0))}</p>
+   321→   321→              </div>
+   322→   322→              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-teal-100 dark:bg-teal-900/40">
+   323→   323→                <DollarSign className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+   324→   324→              </div>
+   325→   325→            </div>
+   326→   326→            <div className="flex items-center gap-1 mt-2">
+   327→   327→              <TrendingUp className="h-3 w-3 text-teal-500" />
+   328→   328→              <span className="text-[10px] text-teal-600 dark:text-teal-400">Dispersión</span>
+   329→   329→            </div>
+   330→   330→          </CardContent>
+   331→   331→        </Card>
+   332→   332→
+   333→   333→        <Card className="shadow-sm border-l-4 border-l-cyan-500 dark:border-l-cyan-600">
+   334→   334→          <CardContent className="p-4">
+   335→   335→            <div className="flex items-center justify-between">
+   336→   336→              <div>
+   337→   337→                <p className="text-xs text-slate-500 dark:text-slate-400">Empleados</p>
+   338→   338→                <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-400 mt-1">{totalEmployees || planillas.reduce((s, p) => s + p.total_empleados, 0)}</p>
+   339→   339→              </div>
+   340→   340→              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-100 dark:bg-cyan-900/40">
+   341→   341→                <Users className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+   342→   342→              </div>
+   343→   343→            </div>
+   344→   344→            <div className="flex items-center gap-1 mt-2">
+   345→   345→              <Users className="h-3 w-3 text-cyan-500" />
+   346→   346→              <span className="text-[10px] text-cyan-600 dark:text-cyan-400">Beneficiarios</span>
+   347→   347→            </div>
+   348→   348→          </CardContent>
+   349→   349→        </Card>
+   350→   350→
+   351→   351→        <Card className="shadow-sm border-l-4 border-l-amber-500 dark:border-l-amber-600">
+   352→   352→          <CardContent className="p-4">
+   353→   353→            <div className="flex items-center justify-between">
+   354→   354→              <div>
+   355→   355→                <p className="text-xs text-slate-500 dark:text-slate-400">Bancos Involucrados</p>
+   356→   356→                <p className="text-2xl font-bold text-amber-700 dark:text-amber-400 mt-1">{bankCount}</p>
+   357→   357→              </div>
+   358→   358→              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/40">
+   359→   359→                <Landmark className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+   360→   360→              </div>
+   361→   361→            </div>
+   362→   362→            <div className="flex items-center gap-1 mt-2">
+   363→   363→              <Building2 className="h-3 w-3 text-amber-500" />
+   364→   364→              <span className="text-[10px] text-amber-600 dark:text-amber-400">Instituciones</span>
+   365→   365→            </div>
+   366→   366→          </CardContent>
+   367→   367→        </Card>
+   368→   368→      </div>
+   369→   369→
+   370→   370→      {/* ========== STEP INDICATOR ========== */}
+   371→   371→      <Card className="shadow-sm overflow-hidden">
+   372→   372→        <CardContent className="p-4 sm:p-6 bg-gradient-to-r from-emerald-50/50 to-teal-50/50 dark:from-emerald-950/20 dark:to-teal-950/20">
+   373→   373→          <div className="flex items-center justify-center">
+   374→   374→            {steps.map((step, i) => {
+   375→   375→              const isActive = currentStep === step.num;
+   376→   376→              const isCompleted = currentStep > step.num;
+   377→   377→              const Icon = step.icon;
+   378→   378→              return (
+   379→   379→                <React.Fragment key={step.num}>
+   380→   380→                  <div className="flex flex-col items-center gap-1.5">
+   381→   381→                    <div
+   382→   382→                      className={`
+   383→   383→                        flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 transition-all duration-300
+   384→   384→                        ${isCompleted
+   385→   385→                          ? 'bg-emerald-600 border-emerald-600 text-white dark:bg-emerald-700 dark:border-emerald-700 shadow-md shadow-emerald-200 dark:shadow-emerald-900/30'
+   386→   386→                          : isActive
+   387→   387→                            ? 'bg-emerald-50 border-emerald-500 text-emerald-600 dark:bg-emerald-900/30 dark:border-emerald-500 dark:text-emerald-400 ring-4 ring-emerald-100 dark:ring-emerald-900/20'
+   388→   388→                            : 'bg-slate-100 border-slate-300 text-slate-400 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-500'
+   389→   389→                        }
+   390→   390→                      `}
+   391→   391→                    >
+   392→   392→                      {isCompleted ? (
+   393→   393→                        <CheckCircle className="h-5 w-5" />
+   394→   394→                      ) : (
+   395→   395→                        <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+   396→   396→                      )}
+   397→   397→                    </div>
+   398→   398→                    <span
+   399→   399→                      className={`text-xs sm:text-sm font-medium transition-colors ${
+   400→   400→                        isCompleted
+   401→   401→                          ? 'text-emerald-700 dark:text-emerald-400'
+   402→   402→                          : isActive
+   403→   403→                            ? 'text-emerald-700 dark:text-emerald-400'
+   404→   404→                            : 'text-slate-400 dark:text-slate-500'
+   405→   405→                      }`}
+   406→   406→                    >
+   407→   407→                      {step.label}
+   408→   408→                    </span>
+   409→   409→                  </div>
+   410→   410→                  {i < steps.length - 1 && (
+   411→   411→                    <div
+   412→   412→                      className={`
+   413→   413→                        flex-1 h-0.5 mx-2 sm:mx-4 mb-5 transition-colors duration-300 rounded-full
+   414→   414→                        ${currentStep > step.num
+   415→   415→                          ? 'bg-emerald-500 dark:bg-emerald-600'
+   416→   416→                          : 'bg-slate-200 dark:bg-slate-700'
+   417→   417→                        }
+   418→   418→                      `}
+   419→   419→                    />
+   420→   420→                  )}
+   421→   421→                </React.Fragment>
+   422→   422→              );
+   423→   423→            })}
+   424→   424→          </div>
+   425→   425→        </CardContent>
+   426→   426→      </Card>
+   427→   427→
+   428→   428→      {/* ========== PLANILLA SELECTOR ========== */}
+   429→   429→      <Card className="shadow-sm">
+   430→   430→        <CardHeader className="pb-3">
+   431→   431→          <CardTitle className="text-base flex items-center gap-2">
+   432→   432→            <Send className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Dispersión Bancaria
+   433→   433→          </CardTitle>
+   434→   434→          <CardDescription>Genere archivos de dispersión para planillas aprobadas</CardDescription>
+   435→   435→        </CardHeader>
+   436→   436→        <CardContent className="space-y-4">
+   437→   437→          {loading ? (
+   438→   438→            <div className="space-y-3">
+   439→   439→              <Skeleton className="h-10 w-full" />
+   440→   440→              <Skeleton className="h-20 w-full" />
+   441→   441→            </div>
+   442→   442→          ) : planillas.length === 0 ? (
+   443→   443→            <div className="text-center py-8">
+   444→   444→              <Building2 className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+   445→   445→              <p className="text-sm text-slate-400 dark:text-slate-500">No hay planillas aprobadas para dispersión</p>
+   446→   446→            </div>
+   447→   447→          ) : (
+   448→   448→            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+   449→   449→              <div className="flex-1">
+   450→   450→                <Select value={selectedId} onValueChange={setSelectedId}>
+   451→   451→                  <SelectTrigger><SelectValue placeholder="Seleccione una planilla aprobada..." /></SelectTrigger>
+   452→   452→                  <SelectContent>
+   453→   453→                    {planillas.map(p => (
+   454→   454→                      <SelectItem key={p.id} value={p.id}>
+   455→   455→                        {p.codigo_planilla} — {p.tipo} — {fmt(p.total_neto_a_pagar)}
+   456→   456→                      </SelectItem>
+   457→   457→                    ))}
+   458→   458→                  </SelectContent>
+   459→   459→                </Select>
+   460→   460→              </div>
+   461→   461→              <Button
+   462→   462→                onClick={handleGenerate}
+   463→   463→                disabled={!selectedId || generating}
+   464→   464→                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 dark:from-emerald-700 dark:to-teal-700 dark:hover:from-emerald-800 dark:hover:to-teal-800 min-w-[180px] text-white"
+   465→   465→              >
+   466→   466→                {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+   467→   467→                Generar Dispersión
+   468→   468→              </Button>
+   469→   469→            </div>
+   470→   470→          )}
+   471→   471→        </CardContent>
+   472→   472→      </Card>
+   473→   473→
+   474→   474→      {/* ========== PLANILLA INFO CARD ========== */}
+   475→   475→      {selectedPlanilla && (
+   476→   476→        <Card className="shadow-sm border-l-4 border-l-emerald-500 dark:border-l-emerald-600">
+   477→   477→          <CardContent className="p-4 sm:p-6">
+   478→   478→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+   479→   479→              <div className="space-y-2">
+   480→   480→                <div className="flex items-center gap-2">
+   481→   481→                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
+   482→   482→                    <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   483→   483→                  </div>
+   484→   484→                  <div>
+   485→   485→                    <p className="text-xs text-slate-500 dark:text-slate-400">Planilla</p>
+   486→   486→                    <p className="font-semibold text-sm dark:text-slate-100">{selectedPlanilla.codigo_planilla}</p>
+   487→   487→                  </div>
+   488→   488→                </div>
+   489→   489→                <div className="flex gap-1.5 ml-10">
+   490→   490→                  <Badge variant="secondary" className="text-[10px] bg-slate-100 dark:bg-slate-700 dark:text-slate-300">
+   491→   491→                    {selectedPlanilla.tipo}
+   492→   492→                  </Badge>
+   493→   493→                  <Badge className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
+   494→   494→                    {selectedPlanilla.estado}
+   495→   495→                  </Badge>
+   496→   496→                </div>
+   497→   497→              </div>
+   498→   498→
+   499→   499→              <div className="space-y-1">
+   500→   500→                <div className="flex items-center gap-2">
+   501→   501→                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/40">
+   502→   502→                    <DollarSign className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+   503→   503→                  </div>
+   504→   504→                  <p className="text-xs text-slate-500 dark:text-slate-400">Total Neto</p>
+   505→   505→                </div>
+   506→   506→                <p className="text-2xl font-bold text-teal-700 dark:text-teal-400 ml-10">
+   507→   507→                  {fmt(selectedPlanilla.total_neto_a_pagar)}
+   508→   508→                </p>
+   509→   509→              </div>
+   510→   510→
+   511→   511→              <div className="space-y-1">
+   512→   512→                <div className="flex items-center gap-2">
+   513→   513→                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-900/40">
+   514→   514→                    <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+   515→   515→                  </div>
+   516→   516→                  <p className="text-xs text-slate-500 dark:text-slate-400">Empleados</p>
+   517→   517→                </div>
+   518→   518→                <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-400 ml-10">
+   519→   519→                  {selectedPlanilla.total_empleados}
+   520→   520→                </p>
+   521→   521→              </div>
+   522→   522→
+   523→   523→              <div className="space-y-1">
+   524→   524→                <div className="flex items-center gap-2">
+   525→   525→                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40">
+   526→   526→                    <Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+   527→   527→                  </div>
+   528→   528→                  <p className="text-xs text-slate-500 dark:text-slate-400">Estado</p>
+   529→   529→                </div>
+   530→   530→                <div className="flex items-center gap-2 ml-10">
+   531→   531→                  <span className="relative flex h-2.5 w-2.5">
+   532→   532→                    <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+   533→   533→                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+   534→   534→                  </span>
+   535→   535→                  <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Aprobada</span>
+   536→   536→                </div>
+   537→   537→              </div>
+   538→   538→            </div>
+   539→   539→          </CardContent>
+   540→   540→        </Card>
+   541→   541→      )}
+   542→   542→
+   543→   543→      {/* ========== ENHANCED DISPERSIONS TABLE ========== */}
+   544→   544→      {dispersions.length > 0 && (
+   545→   545→        <Card className="shadow-sm">
+   546→   546→          <CardHeader className="pb-3">
+   547→   547→            <CardTitle className="text-base flex items-center gap-2">
+   548→   548→              <Building2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Resumen por Banco
+   549→   549→            </CardTitle>
+   550→   550→            <CardDescription className="dark:text-slate-400">
+   551→   551→              {bankCount} banco{bankCount !== 1 ? 's' : ''} — {totalEmployees} empleado{totalEmployees !== 1 ? 's' : ''} — {fmt(totalAmountDispersed)} total
+   552→   552→            </CardDescription>
+   553→   553→          </CardHeader>
+   554→   554→          <CardContent className="p-0">
+   555→   555→            <div className="space-y-0">
+   556→   556→              {dispersions.map((d, idx) => {
+   557→   557→                const isExpanded = expandedBanks.has(d.banco_id);
+   558→   558→                const isPreview = previewBank === d.banco_id;
+   559→   559→                const csvRows = parseCSV(d.contenido_csv);
+   560→   560→                const headerRow = csvRows[0] || [];
+   561→   561→                const dataRows = csvRows.slice(1);
+   562→   562→                const lines = d.contenido_csv.split('\n').filter(l => l.trim());
+   563→   563→                const fileSize = new Blob([d.contenido_csv]).size;
+   564→   564→                const fileSizeStr = fileSize > 1024 ? `${(fileSize / 1024).toFixed(1)} KB` : `${fileSize} B`;
+   565→   565→
+   566→   566→                // Find matching retorno for status
+   567→   567→                const matchingRetorno = retornos.find(r => r.banco_id === d.banco_id);
+   568→   568→                const status = matchingRetorno?.estado || 'ENVIADO';
+   569→   569→
+   570→   570→                // Progress based on status
+   571→   571→                const progressValue = status === 'PROCESADO' ? 100 : status === 'EN_PROCESO' ? 60 : status === 'ENVIADO' ? 30 : status === 'PENDIENTE' ? 10 : 0;
+   572→   572→
+   573→   573→                return (
+   574→   574→                  <div key={d.banco_id} className="border-b last:border-b-0 dark:border-slate-700/50">
+   575→   575→                    {/* Bank row */}
+   576→   576→                    <div
+   577→   577→                      className="flex items-center gap-3 sm:gap-4 p-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+   578→   578→                      onClick={() => toggleExpanded(d.banco_id)}
+   579→   579→                    >
+   580→   580→                      <Avatar className="h-10 w-10 shrink-0">
+   581→   581→                        <AvatarFallback className={getBankColor(idx)}>
+   582→   582→                          <span className="text-sm font-bold">{d.banco_nombre.charAt(0)}</span>
+   583→   583→                        </AvatarFallback>
+   584→   584→                      </Avatar>
+   585→   585→
+   586→   586→                      <div className="flex-1 min-w-0">
+   587→   587→                        <div className="flex items-center gap-2 mb-1">
+   588→   588→                          <p className="font-medium text-sm dark:text-slate-100 truncate">{d.banco_nombre}</p>
+   589→   589→                          <Badge
+   590→   590→                            className={`text-[10px] ${retornoEstadoColors[status] || 'bg-slate-100 dark:bg-slate-700'} flex items-center gap-1`}
+   591→   591→                            variant="secondary"
+   592→   592→                          >
+   593→   593→                            {retornoEstadoIcons[status]}
+   594→   594→                            {status}
+   595→   595→                          </Badge>
+   596→   596→                          {status === 'EN_PROCESO' && (
+   597→   597→                            <span className="relative flex h-2 w-2">
+   598→   598→                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+   599→   599→                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+   600→   600→                            </span>
+   601→   601→                          )}
+   602→   602→                        </div>
+   603→   603→                        <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+   604→   604→                          <span>Código: {d.banco_codigo}</span>
+   605→   605→                          <span className="hidden sm:inline">•</span>
+   606→   606→                          <span className="hidden sm:inline">{d.archivo_nombre}</span>
+   607→   607→                        </div>
+   608→   608→                        <div className="mt-2 flex items-center gap-2">
+   609→   609→                          <Progress value={progressValue} className="h-1.5 flex-1" />
+   610→   610→                          <span className="text-[10px] text-slate-400 dark:text-slate-500 w-8 text-right">{progressValue}%</span>
+   611→   611→                        </div>
+   612→   612→                      </div>
+   613→   613→
+   614→   614→                      <div className="text-right shrink-0">
+   615→   615→                        <p className="font-semibold text-sm dark:text-slate-100">{fmt(d.total_monto)}</p>
+   616→   616→                        <p className="text-xs text-slate-500 dark:text-slate-400">{d.total_empleados} emp.</p>
+   617→   617→                      </div>
+   618→   618→
+   619→   619→                      <div className="shrink-0 text-slate-400 dark:text-slate-500">
+   620→   620→                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+   621→   621→                      </div>
+   622→   622→                    </div>
+   623→   623→
+   624→   624→                    {/* Expandable content */}
+   625→   625→                    <Collapsible open={isExpanded} onOpenChange={() => toggleExpanded(d.banco_id)}>
+   626→   626→                      <CollapsibleContent>
+   627→   627→                        <div className="px-4 pb-4 space-y-3">
+   628→   628→                          {/* Action buttons */}
+   629→   629→                          <div className="flex flex-wrap gap-2">
+   630→   630→                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleDownload(d); }} className="dark:border-slate-600 dark:text-slate-300">
+   631→   631→                              <Download className="h-3.5 w-3.5 mr-1.5" /> Descargar CSV
+   632→   632→                            </Button>
+   633→   633→                            <Button
+   634→   634→                              variant="outline"
+   635→   635→                              size="sm"
+   636→   636→                              onClick={(e) => { e.stopPropagation(); handleDownloadAch(d); }}
+   637→   637→                              className="dark:border-slate-600 dark:text-slate-300"
+   638→   638→                            >
+   639→   639→                              <Banknote className="h-3.5 w-3.5 mr-1.5" /> Descargar .ach
+   640→   640→                            </Button>
+   641→   641→                            <Button
+   642→   642→                              variant="outline"
+   643→   643→                              size="sm"
+   644→   644→                              onClick={(e) => { e.stopPropagation(); setPreviewBank(isPreview ? null : d.banco_id); }}
+   645→   645→                              className="dark:border-slate-600 dark:text-slate-300"
+   646→   646→                            >
+   647→   647→                              <FileText className="h-3.5 w-3.5 mr-1.5" /> {isPreview ? 'Ocultar Vista' : 'Vista ACH'}
+   648→   648→                            </Button>
+   649→   649→                          </div>
+   650→   650→
+   651→   651→                          {/* ACH File Preview with syntax highlighting */}
+   652→   652→                          {isPreview && (
+   653→   653→                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+   654→   654→                              <div className="flex items-center justify-between px-3 py-2 bg-slate-800 dark:bg-slate-900 border-b border-slate-700">
+   655→   655→                                <div className="flex items-center gap-2">
+   656→   656→                                  <FileText className="h-3.5 w-3.5 text-emerald-400" />
+   657→   657→                                  <span className="text-xs font-mono text-slate-300">{d.archivo_nombre}</span>
+   658→   658→                                </div>
+   659→   659→                                <div className="flex items-center gap-2">
+   660→   660→                                  <span className="text-[10px] text-slate-500">{lines.length} líneas • {fileSizeStr}</span>
+   661→   661→                                  <Button
+   662→   662→                                    variant="ghost"
+   663→   663→                                    size="sm"
+   664→   664→                                    className="h-6 px-2 text-slate-400 hover:text-white hover:bg-slate-700"
+   665→   665→                                    onClick={(e) => { e.stopPropagation(); handleCopyToClipboard(d.contenido_csv); }}
+   666→   666→                                  >
+   667→   667→                                    <Copy className="h-3 w-3 mr-1" />
+   668→   668→                                    {copied ? 'Copiado!' : 'Copiar'}
+   669→   669→                                  </Button>
+   670→   670→                                </div>
+   671→   671→                              </div>
+   672→   672→                              <div className="bg-slate-900 dark:bg-slate-950 p-3 overflow-x-auto max-h-64">
+   673→   673→                                <pre className="text-xs font-mono leading-5">
+   674→   674→                                  {lines.map((line, lineIdx) => (
+   675→   675→                                    <div key={lineIdx} className="flex hover:bg-slate-800/50">
+   676→   676→                                      <span className="text-slate-600 dark:text-slate-700 w-8 text-right mr-3 select-none shrink-0">
+   677→   677→                                        {lineIdx + 1}
+   678→   678→                                      </span>
+   679→   679→                                      <span className={`${
+   680→   680→                                        lineIdx === 0
+   681→   681→                                          ? 'text-emerald-400 dark:text-emerald-500 font-semibold'
+   682→   682→                                          : line.startsWith('T')
+   683→   683→                                            ? 'text-amber-400 dark:text-amber-500'
+   684→   684→                                            : 'text-slate-300 dark:text-slate-400'
+   685→   685→                                      }`}>
+   686→   686→                                        {line}
+   687→   687→                                      </span>
+   688→   688→                                    </div>
+   689→   689→                                  ))}
+   690→   690→                                </pre>
+   691→   691→                              </div>
+   692→   692→                              <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center gap-4 text-[10px] text-slate-500 dark:text-slate-400">
+   693→   693→                                <span>Banco: {d.banco_nombre} ({d.banco_codigo})</span>
+   694→   694→                                <span>•</span>
+   695→   695→                                <span>Registros: {d.total_empleados}</span>
+   696→   696→                                <span>•</span>
+   697→   697→                                <span>Total: {fmt(d.total_monto)}</span>
+   698→   698→                              </div>
+   699→   699→                            </div>
+   700→   700→                          )}
+   701→   701→
+   702→   702→                          {/* Enhanced employee payments table */}
+   703→   703→                          <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+   704→   704→                            <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+   705→   705→                              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
+   706→   706→                                Pagos individuales ({dataRows.length})
+   707→   707→                              </p>
+   708→   708→                            </div>
+   709→   709→                            <div className="max-h-64 overflow-y-auto custom-scrollbar">
+   710→   710→                              <table className="w-full text-xs">
+   711→   711→                                <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800">
+   712→   712→                                  <tr>
+   713→   713→                                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-2 whitespace-nowrap">Empleado</th>
+   714→   714→                                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-2 whitespace-nowrap">Banco</th>
+   715→   715→                                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-2 whitespace-nowrap">Cuenta</th>
+   716→   716→                                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-2 whitespace-nowrap">Monto</th>
+   717→   717→                                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-2 whitespace-nowrap">Estado</th>
+   718→   718→                                  </tr>
+   719→   719→                                </thead>
+   720→   720→                                <tbody>
+   721→   721→                                  {dataRows.map((row, ri) => {
+   722→   722→                                    const employeeName = row[0] || `Empleado ${ri + 1}`;
+   723→   723→                                    const accountNum = row[2] || '';
+   724→   724→                                    const amount = parseFloat(row[row.length - 1]) || 0;
+   725→   725→                                    // Determine dispersion status for row (cycle through for demo)
+   726→   726→                                    const statusOptions = ['PENDIENTE', 'ENVIADO', 'CONFIRMADO'];
+   727→   727→                                    const rowStatus = statusOptions[ri % statusOptions.length];
+   728→   728→
+   729→   729→                                    return (
+   730→   730→                                      <tr key={ri} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-emerald-50/30 dark:hover:bg-emerald-900/10 transition-colors">
+   731→   731→                                        <td className="p-2 whitespace-nowrap">
+   732→   732→                                          <div className="flex items-center gap-2">
+   733→   733→                                            <Avatar className="h-6 w-6">
+   734→   734→                                              <AvatarFallback className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 text-[9px] font-semibold">
+   735→   735→                                                {getInitials(employeeName)}
+   736→   736→                                              </AvatarFallback>
+   737→   737→                                            </Avatar>
+   738→   738→                                            <span className="text-slate-700 dark:text-slate-200">{employeeName}</span>
+   739→   739→                                          </div>
+   740→   740→                                        </td>
+   741→   741→                                        <td className="p-2 whitespace-nowrap">
+   742→   742→                                          <Badge
+   743→   743→                                            className={`text-[9px] ${getBankColor(idx)} px-1.5 py-0`}
+   744→   744→                                            variant="secondary"
+   745→   745→                                          >
+   746→   746→                                            {d.banco_nombre}
+   747→   747→                                          </Badge>
+   748→   748→                                        </td>
+   749→   749→                                        <td className="p-2 whitespace-nowrap font-mono text-slate-500 dark:text-slate-400">
+   750→   750→                                          {maskAccount(accountNum)}
+   751→   751→                                        </td>
+   752→   752→                                        <td className="p-2 whitespace-nowrap text-right font-medium text-teal-700 dark:text-teal-400">
+   753→   753→                                          {fmt(amount)}
+   754→   754→                                        </td>
+   755→   755→                                        <td className="p-2 whitespace-nowrap">
+   756→   756→                                          <Badge
+   757→   757→                                            className={`text-[9px] ${dispersionStatusColors[rowStatus] || 'bg-slate-100 dark:bg-slate-700'}`}
+   758→   758→                                            variant="secondary"
+   759→   759→                                          >
+   760→   760→                                            {rowStatus}
+   761→   761→                                          </Badge>
+   762→   762→                                        </td>
+   763→   763→                                      </tr>
+   764→   764→                                    );
+   765→   765→                                  })}
+   766→   766→                                </tbody>
+   767→   767→                              </table>
+   768→   768→                            </div>
+   769→   769→                          </div>
+   770→   770→                        </div>
+   771→   771→                      </CollapsibleContent>
+   772→   772→                    </Collapsible>
+   773→   773→                  </div>
+   774→   774→                );
+   775→   775→              })}
+   776→   776→            </div>
+   777→   777→          </CardContent>
+   778→   778→        </Card>
+   779→   779→      )}
+   780→   780→
+   781→   781→      {/* ========== BANK SUMMARY WIDGET ========== */}
+   782→   782→      {dispersions.length > 0 && (
+   783→   783→        <Card className="shadow-sm">
+   784→   784→          <CardHeader className="pb-3">
+   785→   785→            <CardTitle className="text-base flex items-center gap-2">
+   786→   786→              <Landmark className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Distribución por Banco
+   787→   787→            </CardTitle>
+   788→   788→            <CardDescription className="dark:text-slate-400">Desglose de montos por institución bancaria</CardDescription>
+   789→   789→          </CardHeader>
+   790→   790→          <CardContent className="space-y-3">
+   791→   791→            {bankSummaryData.map((bank, idx) => (
+   792→   792→              <div key={bank.code} className="space-y-1.5">
+   793→   793→                <div className="flex items-center justify-between">
+   794→   794→                  <div className="flex items-center gap-2">
+   795→   795→                    <Avatar className="h-7 w-7">
+   796→   796→                      <AvatarFallback className={`${getBankColor(idx)} text-[10px]`}>
+   797→   797→                        {bank.name.charAt(0)}
+   798→   798→                      </AvatarFallback>
+   799→   799→                    </Avatar>
+   800→   800→                    <div>
+   801→   801→                      <span className="text-sm font-medium dark:text-slate-200">{bank.name}</span>
+   802→   802→                      <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-2">({bank.code})</span>
+   803→   803→                    </div>
+   804→   804→                  </div>
+   805→   805→                  <div className="text-right">
+   806→   806→                    <span className="text-sm font-bold text-teal-700 dark:text-teal-400">{fmt(bank.amount)}</span>
+   807→   807→                    <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-2">{bank.employees} emp.</span>
+   808→   808→                  </div>
+   809→   809→                </div>
+   810→   810→                <div className="flex items-center gap-2">
+   811→   811→                  <div className="flex-1 h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+   812→   812→                    <div
+   813→   813→                      className={`h-full rounded-full transition-all duration-500 ${getBankColor(idx).split(' ')[0]}`}
+   814→   814→                      style={{ width: `${bank.percentage}%` }}
+   815→   815→                    />
+   816→   816→                  </div>
+   817→   817→                  <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 w-10 text-right">
+   818→   818→                    {bank.percentage.toFixed(1)}%
+   819→   819→                  </span>
+   820→   820→                </div>
+   821→   821→              </div>
+   822→   822→            ))}
+   823→   823→          </CardContent>
+   824→   824→        </Card>
+   825→   825→      )}
+   826→   826→
+   827→   827→      {/* ========== ACH FILE PREVIEW (Standalone) ========== */}
+   828→   828→      {dispersions.length > 0 && !previewBank && (
+   829→   829→        <Card className="shadow-sm">
+   830→   830→          <CardHeader className="pb-3">
+   831→   831→            <CardTitle className="text-base flex items-center gap-2">
+   832→   832→              <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Vista Previa Archivos ACH
+   833→   833→            </CardTitle>
+   834→   834→            <CardDescription className="dark:text-slate-400">Seleccione un banco arriba para ver la vista previa detallada</CardDescription>
+   835→   835→          </CardHeader>
+   836→   836→          <CardContent>
+   837→   837→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+   838→   838→              {dispersions.map((d, idx) => {
+   839→   839→                const lines = d.contenido_csv.split('\n').filter(l => l.trim());
+   840→   840→                const fileSize = new Blob([d.contenido_csv]).size;
+   841→   841→                const fileSizeStr = fileSize > 1024 ? `${(fileSize / 1024).toFixed(1)} KB` : `${fileSize} B`;
+   842→   842→                return (
+   843→   843→                  <div
+   844→   844→                    key={d.banco_id}
+   845→   845→                    className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 hover:border-emerald-300 dark:hover:border-emerald-700 cursor-pointer transition-colors group"
+   846→   846→                    onClick={() => { setPreviewBank(d.banco_id); setExpandedBanks(prev => new Set(prev).add(d.banco_id)); }}
+   847→   847→                  >
+   848→   848→                    <div className="flex items-center gap-2 mb-2">
+   849→   849→                      <Avatar className="h-7 w-7">
+   850→   850→                        <AvatarFallback className={`${getBankColor(idx)} text-xs`}>
+   851→   851→                          {d.banco_nombre.charAt(0)}
+   852→   852→                        </AvatarFallback>
+   853→   853→                      </Avatar>
+   854→   854→                      <div className="min-w-0">
+   855→   855→                        <p className="text-sm font-medium dark:text-slate-100 truncate">{d.banco_nombre}</p>
+   856→   856→                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{d.banco_codigo}</p>
+   857→   857→                      </div>
+   858→   858→                    </div>
+   859→   859→                    {/* Mini code preview */}
+   860→   860→                    <div className="rounded bg-slate-900 dark:bg-slate-950 p-2 mb-2">
+   861→   861→                      <pre className="text-[10px] font-mono leading-4 text-slate-400 dark:text-slate-500 overflow-hidden max-h-12">
+   862→   862→                        {lines.slice(0, 3).join('\n')}
+   863→   863→                      </pre>
+   864→   864→                    </div>
+   865→   865→                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+   866→   866→                      <span>{lines.length} líneas</span>
+   867→   867→                      <span>{fileSizeStr}</span>
+   868→   868→                    </div>
+   869→   869→                  </div>
+   870→   870→                );
+   871→   871→              })}
+   872→   872→            </div>
+   873→   873→          </CardContent>
+   874→   874→        </Card>
+   875→   875→      )}
+   876→   876→
+   877→   877→      {/* ========== RETURN STATUS TRACKING ========== */}
+   878→   878→      {retornos.length > 0 && (
+   879→   879→        <Card className="shadow-sm">
+   880→   880→          <CardHeader className="pb-3">
+   881→   881→            <CardTitle className="text-base flex items-center gap-2">
+   882→   882→              <RefreshCw className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Estado de Retornos Bancarios
+   883→   883→            </CardTitle>
+   884→   884→          </CardHeader>
+   885→   885→          <CardContent className="p-0">
+   886→   886→            <div className="overflow-x-auto">
+   887→   887→              <table className="w-full text-sm">
+   888→   888→                <thead>
+   889→   889→                  <tr className="border-t border-b bg-slate-50/80 dark:bg-slate-800/50">
+   890→   890→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Banco</th>
+   891→   891→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Archivo</th>
+   892→   892→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Estado</th>
+   893→   893→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Registros</th>
+   894→   894→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Monto</th>
+   895→   895→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Fecha Envío</th>
+   896→   896→                  </tr>
+   897→   897→                </thead>
+   898→   898→                <tbody>
+   899→   899→                  {retornos.map(r => (
+   900→   900→                    <tr key={r.id} className="border-b hover:bg-slate-50/50 dark:hover:bg-slate-800/30 dark:border-slate-700/50">
+   901→   901→                      <td className="p-3">
+   902→   902→                        <div className="flex items-center gap-2">
+   903→   903→                          <Building2 className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+   904→   904→                          <span className="dark:text-slate-200">{r.banco?.nombre || 'N/A'}</span>
+   905→   905→                        </div>
+   906→   906→                      </td>
+   907→   907→                      <td className="p-3 font-mono text-xs dark:text-slate-300">{r.archivo_nombre || '-'}</td>
+   908→   908→                      <td className="p-3">
+   909→   909→                        <Badge
+   910→   910→                          className={`text-[10px] ${retornoEstadoColors[r.estado] || 'bg-slate-100 dark:bg-slate-700'} flex items-center gap-1 w-fit`}
+   911→   911→                          variant="secondary"
+   912→   912→                        >
+   913→   913→                          {retornoEstadoIcons[r.estado]}
+   914→   914→                          {r.estado}
+   915→   915→                        </Badge>
+   916→   916→                      </td>
+   917→   917→                      <td className="p-3 text-right dark:text-slate-200">{r.total_registros}</td>
+   918→   918→                      <td className="p-3 text-right font-medium dark:text-slate-200">{fmt(r.total_monto)}</td>
+   919→   919→                      <td className="p-3 text-xs dark:text-slate-300">{r.fecha_envio ? new Date(r.fecha_envio).toLocaleDateString('es-SV') : '-'}</td>
+   920→   920→                    </tr>
+   921→   921→                  ))}
+   922→   922→                </tbody>
+   923→   923→              </table>
+   924→   924→            </div>
+   925→   925→            {retornos.some(r => r.estado === 'CON_ERRORES' || r.estado === 'RECHAZADO') && (
+   926→   926→              <div className="p-3 bg-red-50 dark:bg-red-900/20 text-xs text-red-700 dark:text-red-400 flex items-center gap-2">
+   927→   927→                <AlertTriangle className="h-3.5 w-3.5" />
+   928→   928→                Algunos retornos tienen errores. Revise los detalles con el banco.
+   929→   929→              </div>
+   930→   930→            )}
+   931→   931→          </CardContent>
+   932→   932→        </Card>
+   933→   933→      )}
+   934→   934→
+   935→   935→      {/* ========== CONFIRMATION SUMMARY ========== */}
+   936→   936→      {dispersions.length > 0 && (
+   937→   937→        <Card className={`shadow-sm overflow-hidden transition-all duration-500 ${confirmed ? 'border-emerald-300 dark:border-emerald-700 ring-2 ring-emerald-200 dark:ring-emerald-800' : ''}`}>
+   938→   938→          <CardContent className="p-4 sm:p-6">
+   939→   939→            {/* Success animation */}
+   940→   940→            {showSuccessAnimation && (
+   941→   941→              <div className="flex flex-col items-center justify-center py-4 animate-in fade-in zoom-in duration-500">
+   942→   942→                <div className="relative">
+   943→   943→                  <CheckCircle className="h-16 w-16 text-emerald-500 dark:text-emerald-400" />
+   944→   944→                  <PartyPopper className="h-6 w-6 text-amber-500 absolute -top-2 -right-2" />
+   945→   945→                </div>
+   946→   946→                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-3">¡Dispersión Confirmada!</p>
+   947→   947→                <p className="text-sm text-slate-500 dark:text-slate-400">Los archivos han sido enviados a los bancos</p>
+   948→   948→              </div>
+   949→   949→            )}
+   950→   950→
+   951→   951→            {!showSuccessAnimation && (
+   952→   952→              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+   953→   953→                {/* Summary stats */}
+   954→   954→                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 w-full lg:w-auto">
+   955→   955→                  <div className="text-center sm:text-left">
+   956→   956→                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Total Dispersado</p>
+   957→   957→                    <p className="text-xl font-bold text-teal-700 dark:text-teal-400">{fmt(totalAmountDispersed)}</p>
+   958→   958→                  </div>
+   959→   959→                  <div className="text-center sm:text-left">
+   960→   960→                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Empleados Pagados</p>
+   961→   961→                    <p className="text-xl font-bold text-cyan-700 dark:text-cyan-400">{totalEmployees}</p>
+   962→   962→                  </div>
+   963→   963→                  <div className="text-center sm:text-left">
+   964→   964→                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Bancos</p>
+   965→   965→                    <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">{bankCount}</p>
+   966→   966→                  </div>
+   967→   967→                  <div className="text-center sm:text-left">
+   968→   968→                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Estado Retornos</p>
+   969→   969→                    <div className="flex items-center gap-2 justify-center sm:justify-start">
+   970→   970→                      {successRetornos > 0 && (
+   971→   971→                        <span className="flex items-center gap-1 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+   972→   972→                          <CheckCircle className="h-3.5 w-3.5" /> {successRetornos}
+   973→   973→                        </span>
+   974→   974→                      )}
+   975→   975→                      {errorRetornos > 0 && (
+   976→   976→                        <span className="flex items-center gap-1 text-sm font-medium text-red-700 dark:text-red-400">
+   977→   977→                          <XCircle className="h-3.5 w-3.5" /> {errorRetornos}
+   978→   978→                        </span>
+   979→   979→                      )}
+   980→   980→                      {successRetornos === 0 && errorRetornos === 0 && (
+   981→   981→                        <span className="flex items-center gap-1 text-sm font-medium text-amber-700 dark:text-amber-400">
+   982→   982→                          <Clock className="h-3.5 w-3.5" /> Pendiente
+   983→   983→                        </span>
+   984→   984→                      )}
+   985→   985→                    </div>
+   986→   986→                  </div>
+   987→   987→                </div>
+   988→   988→
+   989→   989→                {/* Confirm button */}
+   990→   990→                <div className="w-full lg:w-auto">
+   991→   991→                  {confirmed ? (
+   992→   992→                    <div className="flex items-center gap-2 justify-center lg:justify-end text-emerald-700 dark:text-emerald-400 font-medium">
+   993→   993→                      <CheckCircle className="h-5 w-5" />
+   994→   994→                      <span>Dispersión Confirmada</span>
+   995→   995→                    </div>
+   996→   996→                  ) : (
+   997→   997→                    <Button
+   998→   998→                      onClick={handleConfirm}
+   999→   999→                      disabled={confirming}
+  1000→  1000→                      className="w-full lg:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 dark:from-emerald-700 dark:to-teal-700 dark:hover:from-emerald-800 dark:hover:to-teal-800 min-w-[220px] text-white shadow-md shadow-emerald-200 dark:shadow-emerald-900/30"
+  1001→  1001→                      size="lg"
+  1002→  1002→                    >
+  1003→  1003→                      {confirming ? (
+  1004→  1004→                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Confirmando...</>
+  1005→  1005→                      ) : (
+  1006→  1006→                        <><ShieldCheck className="h-4 w-4 mr-2" /> Confirmar Dispersión</>
+  1007→  1007→                      )}
+  1008→  1008→                    </Button>
+  1009→  1009→                  )}
+  1010→  1010→                </div>
+  1011→  1011→              </div>
+  1012→  1012→            )}
+  1013→  1013→          </CardContent>
+  1014→  1014→        </Card>
+  1015→  1015→      )}
+  1016→  1016→    </div>
+  1017→  1017→  );
+  1018→  1018→}
+  1019→  1019→

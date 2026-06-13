@@ -1,0 +1,791 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+     4→import {
+     5→  GitBranch, Plus, Edit2, Users, ChevronRight, ChevronDown, Loader2, Building2,
+     6→  Network, BarChart3, Link2, ChevronUp, Search, X, User, DollarSign,
+     7→  Briefcase, LayoutGrid, List, Eye,
+     8→} from 'lucide-react';
+     9→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    10→import { Button } from '@/components/ui/button';
+    11→import { Input } from '@/components/ui/input';
+    12→import { Label } from '@/components/ui/label';
+    13→import { Badge } from '@/components/ui/badge';
+    14→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+    15→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    16→import { Textarea } from '@/components/ui/textarea';
+    17→import { Skeleton } from '@/components/ui/skeleton';
+    18→import { Separator } from '@/components/ui/separator';
+    19→import { useToast } from '@/hooks/use-toast';
+    20→
+    21→interface OrgChartProps {
+    22→  accessToken: string;
+    23→  userRole: string;
+    24→}
+    25→
+    26→interface Employee {
+    27→  id: string;
+    28→  primer_nombre: string;
+    29→  segundo_nombre: string | null;
+    30→  primer_apellido: string;
+    31→  segundo_apellido: string | null;
+    32→  puesto: string | null;
+    33→  salario_base: number | null;
+    34→  estado: string;
+    35→  empleado_code: string;
+    36→}
+    37→
+    38→interface Area {
+    39→  id: string; nombre: string; codigo: string; descripcion: string | null;
+    40→  area_padre_id: string | null; nivel: number; activo: boolean;
+    41→  area_padre: { id: string; nombre: string; codigo: string } | null;
+    42→  areas_hijas: { id: string; nombre: string; codigo: string; nivel: number }[];
+    43→  _count: { empleados: number; perfiles_puesto: number };
+    44→  jefe?: { nombre: string; apellido: string } | null;
+    45→}
+    46→
+    47→const levelColors: Record<number, { bg: string; border: string; accent: string; text: string; icon: string; gradient: string }> = {
+    48→  1: { bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800', accent: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300', icon: 'text-emerald-600 dark:text-emerald-400', gradient: 'from-emerald-500 to-emerald-600' },
+    49→  2: { bg: 'bg-teal-50 dark:bg-teal-900/20', border: 'border-teal-200 dark:border-teal-800', accent: 'bg-teal-500', text: 'text-teal-700 dark:text-teal-300', icon: 'text-teal-600 dark:text-teal-400', gradient: 'from-teal-500 to-teal-600' },
+    50→  3: { bg: 'bg-cyan-50 dark:bg-cyan-900/20', border: 'border-cyan-200 dark:border-cyan-800', accent: 'bg-cyan-500', text: 'text-cyan-700 dark:text-cyan-300', icon: 'text-cyan-600 dark:text-cyan-400', gradient: 'from-cyan-500 to-cyan-600' },
+    51→  4: { bg: 'bg-amber-50 dark:bg-amber-900/20', border: 'border-amber-200 dark:border-amber-800', accent: 'bg-amber-500', text: 'text-amber-700 dark:text-amber-300', icon: 'text-amber-600 dark:text-amber-400', gradient: 'from-amber-500 to-amber-600' },
+    52→};
+    53→
+    54→function getLevelStyle(nivel: number) {
+    55→  return levelColors[nivel] || levelColors[4] || levelColors[3] || levelColors[2] || levelColors[1];
+    56→}
+    57→
+    58→function getInitials(nombre: string, apellido: string): string {
+    59→  return (nombre.charAt(0) + apellido.charAt(0)).toUpperCase();
+    60→}
+    61→
+    62→function formatSalary(amount: number | null): string {
+    63→  if (amount === null) return 'N/A';
+    64→  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    65→}
+    66→
+    67→function timeAgo(date: string): string {
+    68→  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+    69→  if (seconds < 60) return 'hace un momento';
+    70→  const minutes = Math.floor(seconds / 60);
+    71→  if (minutes < 60) return `hace ${minutes} min`;
+    72→  const hours = Math.floor(minutes / 60);
+    73→  if (hours < 24) return `hace ${hours}h`;
+    74→  const days = Math.floor(hours / 24);
+    75→  return `hace ${days}d`;
+    76→}
+    77→
+    78→export default function OrgChart({ accessToken, userRole }: OrgChartProps) {
+    79→  const { toast } = useToast();
+    80→  const [areas, setAreas] = useState<Area[]>([]);
+    81→  const [loading, setLoading] = useState(true);
+    82→  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+    83→  const [showCreateDialog, setShowCreateDialog] = useState(false);
+    84→  const [showEditDialog, setShowEditDialog] = useState(false);
+    85→  const [editArea, setEditArea] = useState<Area | null>(null);
+    86→  const [saving, setSaving] = useState(false);
+    87→  const [form, setForm] = useState({ nombre: '', codigo: '', descripcion: '', area_padre_id: '', nivel: 1 });
+    88→  const [highlightId, setHighlightId] = useState<string | null>(null);
+    89→  const [searchQuery, setSearchQuery] = useState('');
+    90→  const [selectedArea, setSelectedArea] = useState<Area | null>(null);
+    91→  const [areaEmployees, setAreaEmployees] = useState<Employee[]>([]);
+    92→  const [loadingEmployees, setLoadingEmployees] = useState(false);
+    93→  const treeRef = useRef<HTMLDivElement>(null);
+    94→
+    95→  const fetchAreas = useCallback(async () => {
+    96→    setLoading(true);
+    97→    try {
+    98→      const res = await fetch('/api/areas', {
+    99→        headers: { Authorization: `Bearer ${accessToken}` },
+   100→      });
+   101→      if (res.ok) {
+   102→        const rawData = await res.json();
+   103→        const areasList = Array.isArray(rawData) ? rawData : rawData.data || [];
+   104→        setAreas(areasList);
+   105→        const rootIds = new Set(areasList.filter((a: Area) => !a.area_padre_id).map((a: Area) => a.id));
+   106→        setExpandedIds(rootIds);
+   107→      }
+   108→    } catch (err) {
+   109→      console.error(err);
+   110→    } finally {
+   111→      setLoading(false);
+   112→    }
+   113→  }, [accessToken]);
+   114→
+   115→  useEffect(() => { fetchAreas(); }, [fetchAreas]);
+   116→
+   117→  const fetchAreaEmployees = useCallback(async (areaId: string) => {
+   118→    setLoadingEmployees(true);
+   119→    try {
+   120→      const res = await fetch(`/api/empleados?area_id=${areaId}`, {
+   121→        headers: { Authorization: `Bearer ${accessToken}` },
+   122→      });
+   123→      if (res.ok) {
+   124→        const data = await res.json();
+   125→        setAreaEmployees(Array.isArray(data) ? data : data.data || []);
+   126→      }
+   127→    } catch (err) {
+   128→      console.error(err);
+   129→      setAreaEmployees([]);
+   130→    } finally {
+   131→      setLoadingEmployees(false);
+   132→    }
+   133→  }, [accessToken]);
+   134→
+   135→  const toggleExpand = (id: string) => {
+   136→    setExpandedIds((prev) => {
+   137→      const next = new Set(prev);
+   138→      if (next.has(id)) next.delete(id); else next.add(id);
+   139→      return next;
+   140→    });
+   141→  };
+   142→
+   143→  const expandAll = () => {
+   144→    setExpandedIds(new Set(areas.map(a => a.id)));
+   145→  };
+   146→
+   147→  const collapseAll = () => {
+   148→    setExpandedIds(new Set(areas.filter(a => !a.area_padre_id).map(a => a.id)));
+   149→  };
+   150→
+   151→  const handleSelectArea = (area: Area) => {
+   152→    if (selectedArea?.id === area.id) {
+   153→      setSelectedArea(null);
+   154→      setAreaEmployees([]);
+   155→    } else {
+   156→      setSelectedArea(area);
+   157→      fetchAreaEmployees(area.id);
+   158→    }
+   159→  };
+   160→
+   161→  const handleCreate = async () => {
+   162→    if (!form.nombre || !form.codigo) {
+   163→      toast({ title: 'Error', description: 'Nombre y código son requeridos', variant: 'destructive' });
+   164→      return;
+   165→    }
+   166→    setSaving(true);
+   167→    try {
+   168→      const res = await fetch('/api/areas', {
+   169→        method: 'POST',
+   170→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   171→        body: JSON.stringify(form),
+   172→      });
+   173→      if (res.ok) {
+   174→        toast({ title: 'Área creada', description: 'El área ha sido creada exitosamente' });
+   175→        setShowCreateDialog(false);
+   176→        setForm({ nombre: '', codigo: '', descripcion: '', area_padre_id: '', nivel: 1 });
+   177→        fetchAreas();
+   178→      } else {
+   179→        const data = await res.json();
+   180→        toast({ title: 'Error', description: data.error, variant: 'destructive' });
+   181→      }
+   182→    } catch {
+   183→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   184→    } finally {
+   185→      setSaving(false);
+   186→    }
+   187→  };
+   188→
+   189→  const handleEdit = async () => {
+   190→    if (!editArea) return;
+   191→    setSaving(true);
+   192→    try {
+   193→      const res = await fetch('/api/areas', {
+   194→        method: 'PUT',
+   195→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   196→        body: JSON.stringify({ id: editArea.id, nombre: form.nombre, descripcion: form.descripcion, area_padre_id: form.area_padre_id || null, nivel: form.nivel }),
+   197→      });
+   198→      if (res.ok) {
+   199→        toast({ title: 'Área actualizada', description: 'El área ha sido actualizada' });
+   200→        setShowEditDialog(false);
+   201→        setEditArea(null);
+   202→        fetchAreas();
+   203→      } else {
+   204→        const data = await res.json();
+   205→        toast({ title: 'Error', description: data.error, variant: 'destructive' });
+   206→      }
+   207→    } catch {
+   208→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   209→    } finally {
+   210→      setSaving(false);
+   211→    }
+   212→  };
+   213→
+   214→  const openEdit = (area: Area) => {
+   215→    setEditArea(area);
+   216→    setForm({
+   217→      nombre: area.nombre,
+   218→      codigo: area.codigo,
+   219→      descripcion: area.descripcion || '',
+   220→      area_padre_id: area.area_padre_id || '',
+   221→      nivel: area.nivel,
+   222→    });
+   223→    setShowEditDialog(true);
+   224→  };
+   225→
+   226→  const openCreate = (parentId?: string, parentNivel?: number) => {
+   227→    setForm({ nombre: '', codigo: '', descripcion: '', area_padre_id: parentId || '', nivel: (parentNivel || 0) + 1 });
+   228→    setShowCreateDialog(true);
+   229→  };
+   230→
+   231→  const canManage = userRole === 'ADMIN';
+   232→
+   233→  const rootAreas = areas.filter((a) => !a.area_padre_id);
+   234→  const getChildAreas = (parentId: string) => areas.filter((a) => a.area_padre_id === parentId);
+   235→
+   236→  const sidebarStats = useMemo(() => {
+   237→    const totalAreas = areas.length;
+   238→    const maxDepth = areas.length > 0 ? Math.max(...areas.map(a => a.nivel)) : 0;
+   239→    const totalEmployees = areas.reduce((s, a) => s + a._count.empleados, 0);
+   240→    const levelDistribution: Record<number, { count: number; employees: number }> = {};
+   241→    areas.forEach(a => {
+   242→      if (!levelDistribution[a.nivel]) {
+   243→        levelDistribution[a.nivel] = { count: 0, employees: 0 };
+   244→      }
+   245→      levelDistribution[a.nivel].count++;
+   246→      levelDistribution[a.nivel].employees += a._count.empleados;
+   247→    });
+   248→    return { totalAreas, maxDepth, totalEmployees, levelDistribution };
+   249→  }, [areas]);
+   250→
+   251→  // Search filter
+   252→  const filteredAreas = useMemo(() => {
+   253→    if (!searchQuery.trim()) return areas;
+   254→    const q = searchQuery.toLowerCase();
+   255→    return areas.filter(a =>
+   256→      a.nombre.toLowerCase().includes(q) ||
+   257→      a.codigo.toLowerCase().includes(q) ||
+   258→      a.descripcion?.toLowerCase().includes(q)
+   259→    );
+   260→  }, [areas, searchQuery]);
+   261→
+   262→  const searchMatches = useMemo(() => {
+   263→    if (!searchQuery.trim()) return new Set<string>();
+   264→    const q = searchQuery.toLowerCase();
+   265→    return new Set(
+   266→      areas
+   267→        .filter(a => a.nombre.toLowerCase().includes(q) || a.codigo.toLowerCase().includes(q))
+   268→        .map(a => a.id)
+   269→    );
+   270→  }, [areas, searchQuery]);
+   271→
+   272→  const handleSearchSelect = (areaId: string) => {
+   273→    setHighlightId(areaId);
+   274→    const area = areas.find(a => a.id === areaId);
+   275→    if (area) {
+   276→      const ancestorIds: string[] = [];
+   277→      let current: Area | undefined = area;
+   278→      while (current?.area_padre_id) {
+   279→        ancestorIds.push(current.area_padre_id);
+   280→        current = areas.find(ar => ar.id === current!.area_padre_id);
+   281→      }
+   282→      setExpandedIds(prev => {
+   283→        const next = new Set(prev);
+   284→        ancestorIds.forEach(id => next.add(id));
+   285→        return next;
+   286→      });
+   287→    }
+   288→    setTimeout(() => setHighlightId(null), 3000);
+   289→  };
+   290→
+   291→  // Employee panel stats
+   292→  const employeePanelStats = useMemo(() => {
+   293→    if (areaEmployees.length === 0) return null;
+   294→    const activeCount = areaEmployees.filter(e => e.estado === 'ACTIVO').length;
+   295→    const totalSalary = areaEmployees.reduce((s, e) => s + (e.salario_base || 0), 0);
+   296→    const avgSalary = totalSalary / areaEmployees.length;
+   297→    return { activeCount, totalSalary, avgSalary, count: areaEmployees.length };
+   298→  }, [areaEmployees]);
+   299→
+   300→  const renderAreaNode = (area: Area, depth: number = 0) => {
+   301→    const children = getChildAreas(area.id);
+   302→    const isExpanded = expandedIds.has(area.id);
+   303→    const hasChildren = children.length > 0;
+   304→    const style = getLevelStyle(area.nivel);
+   305→    const isHighlighted = highlightId === area.id;
+   306→    const isSearchMatch = searchMatches.has(area.id);
+   307→    const isSelected = selectedArea?.id === area.id;
+   308→
+   309→    return (
+   310→      <div key={area.id} className="ml-0">
+   311→        <div
+   312→          className="flex items-start gap-2 py-1.5"
+   313→          style={{ paddingLeft: `${depth * 28 + 8}px` }}
+   314→        >
+   315→          {/* Expand/collapse toggle */}
+   316→          <div className="flex items-center h-full pt-2">
+   317→            {hasChildren ? (
+   318→              <button
+   319→                onClick={() => toggleExpand(area.id)}
+   320→                className={`p-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors ${style.icon}`}
+   321→              >
+   322→                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+   323→              </button>
+   324→            ) : (
+   325→              <div className="w-6 flex items-center justify-center">
+   326→                <span className={`w-1.5 h-1.5 rounded-full ${style.accent} opacity-50`} />
+   327→              </div>
+   328→            )}
+   329→          </div>
+   330→
+   331→          {/* Node Card */}
+   332→          <div
+   333→            className={`group flex-1 min-w-0 rounded-xl border ${style.border} ${style.bg} p-3 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer
+   334→              ${isHighlighted ? 'ring-2 ring-emerald-500 ring-offset-1 dark:ring-offset-slate-900' : ''}
+   335→              ${isSearchMatch ? 'ring-2 ring-teal-400 ring-offset-1 dark:ring-offset-slate-900' : ''}
+   336→              ${isSelected ? 'ring-2 ring-emerald-500 shadow-md' : ''}
+   337→            `}
+   338→            onClick={() => handleSelectArea(area)}
+   339→          >
+   340→            <div className="flex items-start justify-between gap-2">
+   341→              <div className="flex items-center gap-2.5 min-w-0">
+   342→                <div className={`p-1.5 rounded-lg bg-gradient-to-br ${style.gradient} shrink-0 shadow-sm`}>
+   343→                  <Building2 className="h-4 w-4 text-white" />
+   344→                </div>
+   345→                <div className="min-w-0">
+   346→                  <div className="flex items-center gap-2 flex-wrap">
+   347→                    <span className="text-sm font-semibold truncate dark:text-slate-100">{area.nombre}</span>
+   348→                    <Badge variant="outline" className="text-[10px] shrink-0 dark:border-slate-600 dark:text-slate-300">{area.codigo}</Badge>
+   349→                  </div>
+   350→                  <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
+   351→                    <span className="flex items-center gap-1">
+   352→                      <Users className="h-3 w-3" />
+   353→                      <Badge className={`text-[10px] px-1.5 py-0 ${style.bg} ${style.text} border ${style.border}`}>
+   354→                        {area._count.empleados}
+   355→                      </Badge>
+   356→                      empleados
+   357→                    </span>
+   358→                    <span>{area._count.perfiles_puesto} perfiles</span>
+   359→                    <Badge className={`text-[10px] px-1.5 py-0 bg-gradient-to-r ${style.gradient} text-white border-0`}>
+   360→                      Nivel {area.nivel}
+   361→                    </Badge>
+   362→                  </div>
+   363→                </div>
+   364→              </div>
+   365→              <div className="flex gap-1 shrink-0">
+   366→                {canManage && (
+   367→                  <>
+   368→                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity dark:hover:bg-slate-700" onClick={(e) => { e.stopPropagation(); openEdit(area); }}>
+   369→                      <Edit2 className="h-3 w-3" />
+   370→                    </Button>
+   371→                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity dark:hover:bg-slate-700" onClick={(e) => { e.stopPropagation(); openCreate(area.id, area.nivel); }}>
+   372→                      <Plus className="h-3 w-3" />
+   373→                    </Button>
+   374→                  </>
+   375→                )}
+   376→                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 dark:hover:bg-slate-700" onClick={(e) => { e.stopPropagation(); handleSelectArea(area); }}>
+   377→                  <Eye className="h-3 w-3 text-slate-400" />
+   378→                </Button>
+   379→              </div>
+   380→            </div>
+   381→          </div>
+   382→        </div>
+   383→
+   384→        {isExpanded && hasChildren && (
+   385→          <div className="relative">
+   386→            {/* Connection line */}
+   387→            <div
+   388→              className="absolute top-0 bottom-0 w-0.5 bg-slate-300 dark:bg-slate-600 rounded-full"
+   389→              style={{ left: `${depth * 28 + 22}px` }}
+   390→            />
+   391→            {children.map((child) => (
+   392→              <div key={child.id} className="relative">
+   393→                {/* Horizontal connector */}
+   394→                <div
+   395→                  className="absolute top-5 h-0.5 bg-slate-300 dark:bg-slate-600"
+   396→                  style={{ left: `${depth * 28 + 22}px`, width: '8px' }}
+   397→                />
+   398→                {renderAreaNode(child, depth + 1)}
+   399→              </div>
+   400→            ))}
+   401→          </div>
+   402→        )}
+   403→      </div>
+   404→    );
+   405→  };
+   406→
+   407→  return (
+   408→    <div className="space-y-4">
+   409→      {/* Gradient Banner */}
+   410→      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 p-6 text-white shadow-lg">
+   411→        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZ2LTZoNnptMC0zMHY2aC02VjRoNnptMCAxMHY2aC02di02aDZ6bTAgMTB2NmgtNnYtNmg2em0tMTAgMHY2aC02di02aDZ6bTAtMTB2NmgtNnYtNmg2em0tMTAgMHY2aC02di02aDZ6bTAtMTB2NmgtNnYtNmg2eiIvPjwvZz48L2c+PC9zdmc+')] opacity-30" />
+   412→        <div className="relative z-10">
+   413→          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+   414→            <div>
+   415→              <div className="flex items-center gap-3 mb-1">
+   416→                <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+   417→                  <Network className="h-6 w-6" />
+   418→                </div>
+   419→                <h2 className="text-2xl font-bold tracking-tight">Organigrama Institucional</h2>
+   420→              </div>
+   421→              <p className="text-emerald-100 text-sm mt-1">Estructura organizacional y jerarquía de áreas</p>
+   422→            </div>
+   423→            <div className="flex gap-2 flex-wrap">
+   424→              <Button
+   425→                variant="secondary"
+   426→                size="sm"
+   427→                onClick={expandAll}
+   428→                className="bg-white/20 hover:bg-white/30 text-white border-white/30 backdrop-blur-sm"
+   429→              >
+   430→                <ChevronDown className="h-4 w-4 mr-1" /> Expandir Todo
+   431→              </Button>
+   432→              <Button
+   433→                variant="secondary"
+   434→                size="sm"
+   435→                onClick={collapseAll}
+   436→                className="bg-white/20 hover:bg-white/30 text-white border-white/30 backdrop-blur-sm"
+   437→              >
+   438→                <ChevronUp className="h-4 w-4 mr-1" /> Colapsar Todo
+   439→              </Button>
+   440→              {canManage && (
+   441→                <Button
+   442→                  onClick={() => openCreate()}
+   443→                  className="bg-white text-emerald-700 hover:bg-emerald-50 font-semibold shadow-sm"
+   444→                >
+   445→                  <Plus className="h-4 w-4 mr-2" /> Nueva Área
+   446→                </Button>
+   447→              )}
+   448→            </div>
+   449→          </div>
+   450→        </div>
+   451→      </div>
+   452→
+   453→      {/* Stats Cards */}
+   454→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   455→        <Card className="shadow-sm border-emerald-200 dark:border-emerald-800 dark:bg-slate-900 overflow-hidden">
+   456→          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-600" />
+   457→          <CardContent className="p-4 flex items-center gap-4">
+   458→            <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shrink-0">
+   459→              <Building2 className="h-6 w-6 text-white" />
+   460→            </div>
+   461→            <div>
+   462→              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total Áreas</p>
+   463→              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{sidebarStats.totalAreas}</p>
+   464→            </div>
+   465→          </CardContent>
+   466→        </Card>
+   467→        <Card className="shadow-sm border-teal-200 dark:border-teal-800 dark:bg-slate-900 overflow-hidden">
+   468→          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-400 to-teal-600" />
+   469→          <CardContent className="p-4 flex items-center gap-4">
+   470→            <div className="p-3 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 shadow-md shrink-0">
+   471→              <GitBranch className="h-6 w-6 text-white" />
+   472→            </div>
+   473→            <div>
+   474→              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Niveles Jerárquicos</p>
+   475→              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{sidebarStats.maxDepth}</p>
+   476→            </div>
+   477→          </CardContent>
+   478→        </Card>
+   479→        <Card className="shadow-sm border-cyan-200 dark:border-cyan-800 dark:bg-slate-900 overflow-hidden">
+   480→          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-400 to-cyan-600" />
+   481→          <CardContent className="p-4 flex items-center gap-4">
+   482→            <div className="p-3 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 shadow-md shrink-0">
+   483→              <Users className="h-6 w-6 text-white" />
+   484→            </div>
+   485→            <div>
+   486→              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total Empleados</p>
+   487→              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{sidebarStats.totalEmployees}</p>
+   488→            </div>
+   489→          </CardContent>
+   490→        </Card>
+   491→      </div>
+   492→
+   493→      {/* Search Bar */}
+   494→      <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   495→        <CardContent className="p-3">
+   496→          <div className="relative">
+   497→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   498→            <Input
+   499→              placeholder="Buscar área o código..."
+   500→              value={searchQuery}
+   501→              onChange={(e) => setSearchQuery(e.target.value)}
+   502→              className="pl-10 pr-10 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+   503→            />
+   504→            {searchQuery && (
+   505→              <button
+   506→                onClick={() => { setSearchQuery(''); setHighlightId(null); }}
+   507→                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+   508→              >
+   509→                <X className="h-4 w-4" />
+   510→              </button>
+   511→            )}
+   512→          </div>
+   513→          {searchQuery && searchMatches.size > 0 && (
+   514→            <div className="mt-2 flex flex-wrap gap-1.5">
+   515→              {Array.from(searchMatches).map(id => {
+   516→                const area = areas.find(a => a.id === id);
+   517→                if (!area) return null;
+   518→                return (
+   519→                  <button
+   520→                    key={id}
+   521→                    onClick={() => handleSearchSelect(id)}
+   522→                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+   523→                  >
+   524→                    <Building2 className="h-3 w-3" />
+   525→                    {area.nombre} ({area.codigo})
+   526→                  </button>
+   527→                );
+   528→              })}
+   529→            </div>
+   530→          )}
+   531→          {searchQuery && searchMatches.size === 0 && areas.length > 0 && (
+   532→            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">No se encontraron áreas que coincidan con &ldquo;{searchQuery}&rdquo;</p>
+   533→          )}
+   534→        </CardContent>
+   535→      </Card>
+   536→
+   537→      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+   538→        {/* Area Stats Sidebar */}
+   539→        <div className="lg:col-span-1 space-y-3">
+   540→          <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   541→            <CardHeader className="pb-3">
+   542→              <CardTitle className="text-sm flex items-center gap-2 dark:text-slate-100">
+   543→                <BarChart3 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Estadísticas
+   544→              </CardTitle>
+   545→            </CardHeader>
+   546→            <CardContent className="space-y-3">
+   547→              {/* Level distribution */}
+   548→              {Object.keys(sidebarStats.levelDistribution).length > 0 && (
+   549→                <div>
+   550→                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">Distribución por Nivel</p>
+   551→                  <div className="space-y-2">
+   552→                    {Object.entries(sidebarStats.levelDistribution)
+   553→                      .sort(([a], [b]) => Number(a) - Number(b))
+   554→                      .map(([nivel, data]) => {
+   555→                        const pct = sidebarStats.totalEmployees > 0
+   556→                          ? (data.employees / sidebarStats.totalEmployees) * 100
+   557→                          : 0;
+   558→                        const s = getLevelStyle(Number(nivel));
+   559→                        return (
+   560→                          <div key={nivel}>
+   561→                            <div className="flex items-center justify-between text-xs mb-0.5">
+   562→                              <span className={`font-medium ${s.text}`}>Nivel {nivel}</span>
+   563→                              <span className="text-slate-500 dark:text-slate-400">{data.employees} emp · {data.count} áreas</span>
+   564→                            </div>
+   565→                            <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+   566→                              <div className={`h-full rounded-full bg-gradient-to-r ${s.gradient} transition-all duration-500`} style={{ width: `${pct}%` }} />
+   567→                            </div>
+   568→                          </div>
+   569→                        );
+   570→                      })}
+   571→                  </div>
+   572→                </div>
+   573→              )}
+   574→
+   575→              <Separator className="dark:bg-slate-800" />
+   576→
+   577→              {/* Quick navigation */}
+   578→              {areas.length > 0 && (
+   579→                <div>
+   580→                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2 flex items-center gap-1">
+   581→                    <Link2 className="h-3 w-3" /> Navegación Rápida
+   582→                  </p>
+   583→                  <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+   584→                    {areas.map(a => {
+   585→                      const s = getLevelStyle(a.nivel);
+   586→                      return (
+   587→                        <button
+   588→                          key={a.id}
+   589→                          className="w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
+   590→                          onClick={() => handleSearchSelect(a.id)}
+   591→                        >
+   592→                          <div className={`w-1.5 h-1.5 rounded-full ${s.accent} shrink-0`} />
+   593→                          <span className="truncate dark:text-slate-300">{a.nombre}</span>
+   594→                          <Badge variant="outline" className="text-[9px] ml-auto shrink-0 dark:border-slate-700 dark:text-slate-400">{a._count.empleados}</Badge>
+   595→                        </button>
+   596→                      );
+   597→                    })}
+   598→                  </div>
+   599→                </div>
+   600→              )}
+   601→            </CardContent>
+   602→          </Card>
+   603→        </div>
+   604→
+   605→        {/* Main Tree */}
+   606→        <div className={selectedArea ? 'lg:col-span-2' : 'lg:col-span-3'}>
+   607→          <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   608→            <CardHeader className="pb-3">
+   609→              <CardTitle className="text-base flex items-center gap-2 dark:text-slate-100">
+   610→                <GitBranch className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Árbol Organizacional
+   611→              </CardTitle>
+   612→            </CardHeader>
+   613→            <CardContent>
+   614→              {loading ? (
+   615→                <div className="space-y-3">{[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-12 w-full dark:bg-slate-700" />)}</div>
+   616→              ) : rootAreas.length === 0 ? (
+   617→                <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+   618→                  <Building2 className="h-10 w-10 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+   619→                  <p className="text-sm">No hay áreas configuradas</p>
+   620→                </div>
+   621→              ) : (
+   622→                <div className="space-y-1.5" ref={treeRef}>
+   623→                  {rootAreas.map((area) => renderAreaNode(area))}
+   624→                </div>
+   625→              )}
+   626→            </CardContent>
+   627→          </Card>
+   628→        </div>
+   629→
+   630→        {/* Employee List Panel */}
+   631→        {selectedArea && (
+   632→          <div className="lg:col-span-1">
+   633→            <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800 sticky top-4">
+   634→              <CardHeader className="pb-3">
+   635→                <div className="flex items-center justify-between">
+   636→                  <CardTitle className="text-sm flex items-center gap-2 dark:text-slate-100">
+   637→                    <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   638→                    {selectedArea.nombre}
+   639→                  </CardTitle>
+   640→                  <Button
+   641→                    variant="ghost"
+   642→                    size="sm"
+   643→                    className="h-7 w-7 p-0 dark:hover:bg-slate-800"
+   644→                    onClick={() => { setSelectedArea(null); setAreaEmployees([]); }}
+   645→                  >
+   646→                    <X className="h-4 w-4" />
+   647→                  </Button>
+   648→                </div>
+   649→                <div className="flex items-center gap-2 mt-1">
+   650→                  <Badge variant="outline" className="text-[10px] dark:border-slate-700 dark:text-slate-400">{selectedArea.codigo}</Badge>
+   651→                  <Badge className={`text-[10px] bg-gradient-to-r ${getLevelStyle(selectedArea.nivel).gradient} text-white border-0`}>
+   652→                    Nivel {selectedArea.nivel}
+   653→                  </Badge>
+   654→                </div>
+   655→              </CardHeader>
+   656→              <CardContent className="space-y-3">
+   657→                {selectedArea.descripcion && (
+   658→                  <p className="text-xs text-slate-500 dark:text-slate-400">{selectedArea.descripcion}</p>
+   659→                )}
+   660→
+   661→                {/* Area summary */}
+   662→                {employeePanelStats && (
+   663→                  <div className="grid grid-cols-2 gap-2">
+   664→                    <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-2 text-center">
+   665→                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Activos</p>
+   666→                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{employeePanelStats.activeCount}</p>
+   667→                    </div>
+   668→                    <div className="bg-teal-50 dark:bg-teal-900/20 rounded-lg p-2 text-center">
+   669→                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Total Sal.</p>
+   670→                      <p className="text-sm font-bold text-teal-700 dark:text-teal-300">{formatSalary(employeePanelStats.totalSalary)}</p>
+   671→                    </div>
+   672→                    <div className="bg-cyan-50 dark:bg-cyan-900/20 rounded-lg p-2 text-center">
+   673→                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Promedio</p>
+   674→                      <p className="text-sm font-bold text-cyan-700 dark:text-cyan-300">{formatSalary(employeePanelStats.avgSalary)}</p>
+   675→                    </div>
+   676→                    <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-2 text-center">
+   677→                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Total</p>
+   678→                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300">{employeePanelStats.count}</p>
+   679→                    </div>
+   680→                  </div>
+   681→                )}
+   682→
+   683→                <Separator className="dark:bg-slate-800" />
+   684→
+   685→                {/* Employee list */}
+   686→                {loadingEmployees ? (
+   687→                  <div className="space-y-2">
+   688→                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full dark:bg-slate-700" />)}
+   689→                  </div>
+   690→                ) : areaEmployees.length === 0 ? (
+   691→                  <div className="text-center py-4 text-slate-400 dark:text-slate-500">
+   692→                    <Users className="h-8 w-8 mx-auto mb-1" />
+   693→                    <p className="text-xs">No hay empleados en esta área</p>
+   694→                  </div>
+   695→                ) : (
+   696→                  <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
+   697→                    {areaEmployees.map(emp => {
+   698→                      const fullName = `${emp.primer_nombre} ${emp.segundo_nombre || ''} ${emp.primer_apellido} ${emp.segundo_apellido || ''}`.replace(/\s+/g, ' ').trim();
+   699→                      const isActive = emp.estado === 'ACTIVO';
+   700→                      return (
+   701→                        <div
+   702→                          key={emp.id}
+   703→                          className="flex items-center gap-3 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+   704→                        >
+   705→                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${isActive ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+   706→                            {getInitials(emp.primer_nombre, emp.primer_apellido)}
+   707→                          </div>
+   708→                          <div className="min-w-0 flex-1">
+   709→                            <p className="text-xs font-medium truncate dark:text-slate-200">{fullName}</p>
+   710→                            <div className="flex items-center gap-2 mt-0.5">
+   711→                              {emp.puesto && (
+   712→                                <span className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-0.5 truncate">
+   713→                                  <Briefcase className="h-2.5 w-2.5 shrink-0" /> {emp.puesto}
+   714→                                </span>
+   715→                              )}
+   716→                            </div>
+   717→                            <div className="flex items-center gap-2 mt-0.5">
+   718→                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+   719→                                <DollarSign className="h-2.5 w-2.5" /> {formatSalary(emp.salario_base)}
+   720→                              </span>
+   721→                              <Badge className={`text-[9px] px-1 py-0 ${isActive ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+   722→                                {emp.estado}
+   723→                              </Badge>
+   724→                            </div>
+   725→                          </div>
+   726→                        </div>
+   727→                      );
+   728→                    })}
+   729→                  </div>
+   730→                )}
+   731→              </CardContent>
+   732→            </Card>
+   733→          </div>
+   734→        )}
+   735→      </div>
+   736→
+   737→      {/* Create/Edit Dialog */}
+   738→      <Dialog open={showCreateDialog || showEditDialog} onOpenChange={(open) => {
+   739→        if (!open) { setShowCreateDialog(false); setShowEditDialog(false); setEditArea(null); }
+   740→      }}>
+   741→        <DialogContent className="sm:max-w-md dark:bg-slate-900 dark:border-slate-800">
+   742→          <DialogHeader>
+   743→            <DialogTitle className="flex items-center gap-2 dark:text-slate-100">
+   744→              <Building2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   745→              {editArea ? 'Editar Área' : 'Nueva Área'}
+   746→            </DialogTitle>
+   747→            <DialogDescription className="dark:text-slate-400">{editArea ? 'Modifique la información del área' : 'Complete la información para crear un área'}</DialogDescription>
+   748→          </DialogHeader>
+   749→          <div className="space-y-4 py-4">
+   750→            <div className="space-y-2">
+   751→              <Label className="dark:text-slate-300">Código *</Label>
+   752→              <Input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} disabled={!!editArea} placeholder="Ej: DIR" className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   753→            </div>
+   754→            <div className="space-y-2">
+   755→              <Label className="dark:text-slate-300">Nombre *</Label>
+   756→              <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre del área" className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   757→            </div>
+   758→            <div className="space-y-2">
+   759→              <Label className="dark:text-slate-300">Descripción</Label>
+   760→              <Textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Descripción opcional" rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   761→            </div>
+   762→            <div className="space-y-2">
+   763→              <Label className="dark:text-slate-300">Área Padre</Label>
+   764→              <Select value={form.area_padre_id || 'none'} onValueChange={(v) => setForm({ ...form, area_padre_id: v === 'none' ? '' : v })}>
+   765→                <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Sin padre (raíz)" /></SelectTrigger>
+   766→                <SelectContent>
+   767→                  <SelectItem value="none">Sin padre (raíz)</SelectItem>
+   768→                  {areas.filter((a) => a.id !== editArea?.id).map((a) => (
+   769→                    <SelectItem key={a.id} value={a.id}>{a.nombre} ({a.codigo})</SelectItem>
+   770→                  ))}
+   771→                </SelectContent>
+   772→              </Select>
+   773→            </div>
+   774→            <div className="space-y-2">
+   775→              <Label className="dark:text-slate-300">Nivel</Label>
+   776→              <Input type="number" value={form.nivel} onChange={(e) => setForm({ ...form, nivel: parseInt(e.target.value) || 1 })} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   777→            </div>
+   778→            <div className="flex justify-end gap-3">
+   779→              <Button variant="outline" onClick={() => { setShowCreateDialog(false); setShowEditDialog(false); setEditArea(null); }} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">Cancelar</Button>
+   780→              <Button onClick={editArea ? handleEdit : handleCreate} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800">
+   781→                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+   782→                {editArea ? 'Guardar' : 'Crear Área'}
+   783→              </Button>
+   784→            </div>
+   785→          </div>
+   786→        </DialogContent>
+   787→      </Dialog>
+   788→    </div>
+   789→  );
+   790→}
+   791→

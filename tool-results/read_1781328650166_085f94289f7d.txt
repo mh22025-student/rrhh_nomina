@@ -1,0 +1,670 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→     4→import {
+     5→     5→  Plug, TestTube2, Loader2, Activity, CheckCircle, XCircle, Clock, Settings,
+     6→     6→  RefreshCw, Zap, Server, Shield, ArrowRightLeft, Database, Mail,
+     7→     7→  Landmark, Building, Radio, Plus, ChevronRight,
+     8→     8→} from 'lucide-react';
+     9→     9→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    10→    10→import { Button } from '@/components/ui/button';
+    11→    11→import { Input } from '@/components/ui/input';
+    12→    12→import { Label } from '@/components/ui/label';
+    13→    13→import { Badge } from '@/components/ui/badge';
+    14→    14→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+    15→    15→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    16→    16→import { Textarea } from '@/components/ui/textarea';
+    17→    17→import { Skeleton } from '@/components/ui/skeleton';
+    18→    18→import { Separator } from '@/components/ui/separator';
+    19→    19→import { useToast } from '@/hooks/use-toast';
+    20→    20→
+    21→    21→interface IntegrationsProps {
+    22→    22→  accessToken: string;
+    23→    23→  userRole: string;
+    24→    24→}
+    25→    25→
+    26→    26→interface LogEntry { id: string; tipo_operacion: string; estado: string; mensaje_error: string | null; duracion_ms: number | null; fecha_creacion: string; registros_afectados: number | null; }
+    27→    27→
+    28→    28→interface Integracion {
+    29→    29→  id: string; tipo: string; nombre: string; configuracion: string | null;
+    30→    30→  credenciales_cifradas: string | null; activo: boolean;
+    31→    31→  ultimo_test: string | null; estado_test: string | null;
+    32→    32→  logs: LogEntry[];
+    33→    33→}
+    34→    34→
+    35→    35→const tipoConfig: Record<string, { icon: React.ReactNode; gradient: string; bgLight: string; bgDark: string; border: string; text: string; badgeBg: string; badgeText: string }> = {
+    36→    36→  BANCO: {
+    37→    37→    icon: <Landmark className="h-5 w-5" />,
+    38→    38→    gradient: 'from-blue-500 to-blue-600',
+    39→    39→    bgLight: 'bg-blue-50',
+    40→    40→    bgDark: 'dark:bg-blue-900/20',
+    41→    41→    border: 'border-blue-200 dark:border-blue-800',
+    42→    42→    text: 'text-blue-700 dark:text-blue-300',
+    43→    43→    badgeBg: 'bg-blue-100 dark:bg-blue-900/30',
+    44→    44→    badgeText: 'text-blue-800 dark:text-blue-300',
+    45→    45→  },
+    46→    46→  ISSS: {
+    47→    47→    icon: <Shield className="h-5 w-5" />,
+    48→    48→    gradient: 'from-emerald-500 to-emerald-600',
+    49→    49→    bgLight: 'bg-emerald-50',
+    50→    50→    bgDark: 'dark:bg-emerald-900/20',
+    51→    51→    border: 'border-emerald-200 dark:border-emerald-800',
+    52→    52→    text: 'text-emerald-700 dark:text-emerald-300',
+    53→    53→    badgeBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+    54→    54→    badgeText: 'text-emerald-800 dark:text-emerald-300',
+    55→    55→  },
+    56→    56→  AFP: {
+    57→    57→    icon: <Building className="h-5 w-5" />,
+    58→    58→    gradient: 'from-purple-500 to-purple-600',
+    59→    59→    bgLight: 'bg-purple-50',
+    60→    60→    bgDark: 'dark:bg-purple-900/20',
+    61→    61→    border: 'border-purple-200 dark:border-purple-800',
+    62→    62→    text: 'text-purple-700 dark:text-purple-300',
+    63→    63→    badgeBg: 'bg-purple-100 dark:bg-purple-900/30',
+    64→    64→    badgeText: 'text-purple-800 dark:text-purple-300',
+    65→    65→  },
+    66→    66→  SMTP: {
+    67→    67→    icon: <Mail className="h-5 w-5" />,
+    68→    68→    gradient: 'from-amber-500 to-amber-600',
+    69→    69→    bgLight: 'bg-amber-50',
+    70→    70→    bgDark: 'dark:bg-amber-900/20',
+    71→    71→    border: 'border-amber-200 dark:border-amber-800',
+    72→    72→    text: 'text-amber-700 dark:text-amber-300',
+    73→    73→    badgeBg: 'bg-amber-100 dark:bg-amber-900/30',
+    74→    74→    badgeText: 'text-amber-800 dark:text-amber-300',
+    75→    75→  },
+    76→    76→  MH: {
+    77→    77→    icon: <Landmark className="h-5 w-5" />,
+    78→    78→    gradient: 'from-red-500 to-red-600',
+    79→    79→    bgLight: 'bg-red-50',
+    80→    80→    bgDark: 'dark:bg-red-900/20',
+    81→    81→    border: 'border-red-200 dark:border-red-800',
+    82→    82→    text: 'text-red-700 dark:text-red-300',
+    83→    83→    badgeBg: 'bg-red-100 dark:bg-red-900/30',
+    84→    84→    badgeText: 'text-red-800 dark:text-red-300',
+    85→    85→  },
+    86→    86→};
+    87→    87→
+    88→    88→function getTipoConfig(tipo: string) {
+    89→    89→  return tipoConfig[tipo] || tipoConfig.BANCO;
+    90→    90→}
+    91→    91→
+    92→    92→function relativeTime(dateStr: string | null): string {
+    93→    93→  if (!dateStr) return 'Nunca';
+    94→    94→  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    95→    95→  if (seconds < 0) return 'Próximamente';
+    96→    96→  if (seconds < 60) return 'hace un momento';
+    97→    97→  const minutes = Math.floor(seconds / 60);
+    98→    98→  if (minutes < 60) return `hace ${minutes} min`;
+    99→    99→  const hours = Math.floor(minutes / 60);
+   100→   100→  if (hours < 24) return `hace ${hours}h`;
+   101→   101→  const days = Math.floor(hours / 24);
+   102→   102→  if (days < 30) return `hace ${days}d`;
+   103→   103→  const months = Math.floor(days / 30);
+   104→   104→  return `hace ${months} mes${months > 1 ? 'es' : ''}`;
+   105→   105→}
+   106→   106→
+   107→   107→export default function Integrations({ accessToken, userRole }: IntegrationsProps) {
+   108→   108→  const { toast } = useToast();
+   109→   109→  const [integraciones, setIntegraciones] = useState<Integracion[]>([]);
+   110→   110→  const [loading, setLoading] = useState(true);
+   111→   111→  const [editIntegracion, setEditIntegracion] = useState<Integracion | null>(null);
+   112→   112→  const [showCreateDialog, setShowCreateDialog] = useState(false);
+   113→   113→  const [saving, setSaving] = useState(false);
+   114→   114→  const [testing, setTesting] = useState<string | null>(null);
+   115→   115→  const [testResults, setTestResults] = useState<Record<string, { status: 'success' | 'failure'; message: string }>>({});
+   116→   116→  const [expandedSyncHistory, setExpandedSyncHistory] = useState<Set<string>>(new Set());
+   117→   117→  const [syncing, setSyncing] = useState<string | null>(null);
+   118→   118→  const [form, setForm] = useState({ tipo: 'BANCO', nombre: '', configuracion: '', credenciales_cifradas: '' });
+   119→   119→
+   120→   120→  const fetchData = useCallback(async () => {
+   121→   121→    setLoading(true);
+   122→   122→    try {
+   123→   123→      const res = await fetch('/api/admin/integraciones', {
+   124→   124→        headers: { Authorization: `Bearer ${accessToken}` },
+   125→   125→      });
+   126→   126→      if (res.ok) setIntegraciones(await res.json());
+   127→   127→    } catch (err) {
+   128→   128→      console.error(err);
+   129→   129→    } finally {
+   130→   130→      setLoading(false);
+   131→   131→    }
+   132→   132→  }, [accessToken]);
+   133→   133→
+   134→   134→  useEffect(() => { fetchData(); }, [fetchData]);
+   135→   135→
+   136→   136→  // Stats
+   137→   137→  const stats = useMemo(() => {
+   138→   138→    const activas = integraciones.filter(i => i.activo).length;
+   139→   139→    const inactivas = integraciones.filter(i => !i.activo).length;
+   140→   140→    const lastSync = integraciones
+   141→   141→      .flatMap(i => i.logs.map(l => l.fecha_creacion))
+   142→   142→      .sort()
+   143→   143→      .pop();
+   144→   144→    return { activas, inactivas, lastSync, total: integraciones.length };
+   145→   145→  }, [integraciones]);
+   146→   146→
+   147→   147→  const handleTest = async (id: string) => {
+   148→   148→    setTesting(id);
+   149→   149→    setTestResults(prev => { const next = { ...prev }; delete next[id]; return next; });
+   150→   150→    try {
+   151→   151→      const res = await fetch('/api/admin/integraciones', {
+   152→   152→        method: 'PUT',
+   153→   153→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   154→   154→        body: JSON.stringify({ id, test: true }),
+   155→   155→      });
+   156→   156→      if (res.ok) {
+   157→   157→        const data = await res.json();
+   158→   158→        const isSuccess = data.estado_test === 'EXITOSO';
+   159→   159→        setTestResults(prev => ({
+   160→   160→          ...prev,
+   161→   161→          [id]: {
+   162→   162→            status: isSuccess ? 'success' : 'failure',
+   163→   163→            message: isSuccess ? 'Conexión establecida correctamente' : 'No se pudo establecer la conexión',
+   164→   164→          },
+   165→   165→        }));
+   166→   166→        toast({
+   167→   167→          title: isSuccess ? 'Conexión exitosa' : 'Conexión fallida',
+   168→   168→          description: isSuccess ? 'La prueba de conexión fue exitosa' : 'No se pudo establecer la conexión',
+   169→   169→          variant: isSuccess ? 'default' : 'destructive',
+   170→   170→        });
+   171→   171→        fetchData();
+   172→   172→        // Clear test result after 5 seconds
+   173→   173→        setTimeout(() => {
+   174→   174→          setTestResults(prev => { const next = { ...prev }; delete next[id]; return next; });
+   175→   175→        }, 5000);
+   176→   176→      }
+   177→   177→    } catch {
+   178→   178→      setTestResults(prev => ({
+   179→   179→        ...prev,
+   180→   180→        [id]: { status: 'failure', message: 'Error de red al probar conexión' },
+   181→   181→      }));
+   182→   182→      toast({ title: 'Error', description: 'Error al probar conexión', variant: 'destructive' });
+   183→   183→    } finally {
+   184→   184→      setTesting(null);
+   185→   185→    }
+   186→   186→  };
+   187→   187→
+   188→   188→  const handleSync = async (id: string) => {
+   189→   189→    setSyncing(id);
+   190→   190→    try {
+   191→   191→      const res = await fetch('/api/admin/integraciones', {
+   192→   192→        method: 'PUT',
+   193→   193→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   194→   194→        body: JSON.stringify({ id, sync: true }),
+   195→   195→      });
+   196→   196→      if (res.ok) {
+   197→   197→        toast({ title: 'Sincronización iniciada', description: 'La sincronización se ha iniciado correctamente' });
+   198→   198→        fetchData();
+   199→   199→      } else {
+   200→   200→        toast({ title: 'Error', description: 'No se pudo iniciar la sincronización', variant: 'destructive' });
+   201→   201→      }
+   202→   202→    } catch {
+   203→   203→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   204→   204→    } finally {
+   205→   205→      setSyncing(null);
+   206→   206→    }
+   207→   207→  };
+   208→   208→
+   209→   209→  const toggleSyncHistory = (id: string) => {
+   210→   210→    setExpandedSyncHistory(prev => {
+   211→   211→      const next = new Set(prev);
+   212→   212→      if (next.has(id)) next.delete(id); else next.add(id);
+   213→   213→      return next;
+   214→   214→    });
+   215→   215→  };
+   216→   216→
+   217→   217→  const handleCreate = async () => {
+   218→   218→    if (!form.nombre || !form.tipo) {
+   219→   219→      toast({ title: 'Error', description: 'Tipo y nombre son requeridos', variant: 'destructive' });
+   220→   220→      return;
+   221→   221→    }
+   222→   222→    setSaving(true);
+   223→   223→    try {
+   224→   224→      const res = await fetch('/api/admin/integraciones', {
+   225→   225→        method: 'POST',
+   226→   226→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   227→   227→        body: JSON.stringify(form),
+   228→   228→      });
+   229→   229→      if (res.ok) {
+   230→   230→        toast({ title: 'Integración creada', description: 'La integración ha sido registrada' });
+   231→   231→        setShowCreateDialog(false);
+   232→   232→        setForm({ tipo: 'BANCO', nombre: '', configuracion: '', credenciales_cifradas: '' });
+   233→   233→        fetchData();
+   234→   234→      } else {
+   235→   235→        const data = await res.json();
+   236→   236→        toast({ title: 'Error', description: data.error, variant: 'destructive' });
+   237→   237→      }
+   238→   238→    } catch {
+   239→   239→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   240→   240→    } finally {
+   241→   241→      setSaving(false);
+   242→   242→    }
+   243→   243→  };
+   244→   244→
+   245→   245→  const handleEdit = async () => {
+   246→   246→    if (!editIntegracion) return;
+   247→   247→    setSaving(true);
+   248→   248→    try {
+   249→   249→      const res = await fetch('/api/admin/integraciones', {
+   250→   250→        method: 'PUT',
+   251→   251→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   252→   252→        body: JSON.stringify({
+   253→   253→          id: editIntegracion.id,
+   254→   254→          nombre: form.nombre,
+   255→   255→          configuracion: form.configuracion ? JSON.parse(form.configuracion) : null,
+   256→   256→          activo: editIntegracion.activo,
+   257→   257→        }),
+   258→   258→      });
+   259→   259→      if (res.ok) {
+   260→   260→        toast({ title: 'Integración actualizada' });
+   261→   261→        setEditIntegracion(null);
+   262→   262→        fetchData();
+   263→   263→      } else {
+   264→   264→        const data = await res.json();
+   265→   265→        toast({ title: 'Error', description: data.error, variant: 'destructive' });
+   266→   266→      }
+   267→   267→    } catch {
+   268→   268→      toast({ title: 'Error', description: 'Error de conexión o JSON inválido', variant: 'destructive' });
+   269→   269→    } finally {
+   270→   270→      setSaving(false);
+   271→   271→    }
+   272→   272→  };
+   273→   273→
+   274→   274→  const openEdit = (int: Integracion) => {
+   275→   275→    setEditIntegracion(int);
+   276→   276→    setForm({
+   277→   277→      tipo: int.tipo,
+   278→   278→      nombre: int.nombre,
+   279→   279→      configuracion: int.configuracion || '',
+   280→   280→      credenciales_cifradas: int.credenciales_cifradas || '',
+   281→   281→    });
+   282→   282→  };
+   283→   283→
+   284→   284→  const canManage = userRole === 'ADMIN';
+   285→   285→
+   286→   286→  // Parse ACH config for bank integrations
+   287→   287→  const getAchConfig = (integ: Integracion) => {
+   288→   288→    if (integ.tipo !== 'BANCO' || !integ.configuracion) return null;
+   289→   289→    try {
+   290→   290→      const config = typeof integ.configuracion === 'string' ? JSON.parse(integ.configuracion) : integ.configuracion;
+   291→   291→      return config;
+   292→   292→    } catch {
+   293→   293→      return null;
+   294→   294→    }
+   295→   295→  };
+   296→   296→
+   297→   297→  return (
+   298→   298→    <div className="space-y-4">
+   299→   299→      {/* Gradient Banner */}
+   300→   300→      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 p-6 text-white shadow-lg">
+   301→   301→        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZ2LTZoNnptMC0zMHY2aC02VjRoNnptMCAxMHY2aC02di02aDZ6bTAgMTB2NmgtNnYtNmg2em0tMTAgMHY2aC02di02aDZ6bTAtMTB2NmgtNnYtNmg2em0tMTAgMHY2aC02di02aDZ6bTAtMTB2NmgtNnYtNmg2eiIvPjwvZz48L2c+PC9zdmc+')] opacity-30" />
+   302→   302→        <div className="relative z-10">
+   303→   303→          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+   304→   304→            <div>
+   305→   305→              <div className="flex items-center gap-3 mb-1">
+   306→   306→                <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+   307→   307→                  <Plug className="h-6 w-6" />
+   308→   308→                </div>
+   309→   309→                <h2 className="text-2xl font-bold tracking-tight">Integraciones Externas</h2>
+   310→   310→              </div>
+   311→   311→              <p className="text-emerald-100 text-sm mt-1">Conexiones con sistemas externos: ACH, ISSS, AFP, SMTP, MH</p>
+   312→   312→            </div>
+   313→   313→            {canManage && (
+   314→   314→              <Button
+   315→   315→                onClick={() => setShowCreateDialog(true)}
+   316→   316→                className="bg-white text-emerald-700 hover:bg-emerald-50 font-semibold shadow-sm"
+   317→   317→              >
+   318→   318→                <Plus className="h-4 w-4 mr-2" /> Nueva Integración
+   319→   319→              </Button>
+   320→   320→            )}
+   321→   321→          </div>
+   322→   322→        </div>
+   323→   323→      </div>
+   324→   324→
+   325→   325→      {/* Stats Cards */}
+   326→   326→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   327→   327→        <Card className="shadow-sm border-emerald-200 dark:border-emerald-800 dark:bg-slate-900 overflow-hidden">
+   328→   328→          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-600" />
+   329→   329→          <CardContent className="p-4 flex items-center gap-4">
+   330→   330→            <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shrink-0">
+   331→   331→              <Zap className="h-6 w-6 text-white" />
+   332→   332→            </div>
+   333→   333→            <div>
+   334→   334→              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Activas</p>
+   335→   335→              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{stats.activas}</p>
+   336→   336→            </div>
+   337→   337→          </CardContent>
+   338→   338→        </Card>
+   339→   339→        <Card className="shadow-sm border-slate-200 dark:border-slate-700 dark:bg-slate-900 overflow-hidden">
+   340→   340→          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-slate-400 to-slate-500" />
+   341→   341→          <CardContent className="p-4 flex items-center gap-4">
+   342→   342→            <div className="p-3 rounded-xl bg-gradient-to-br from-slate-400 to-slate-500 shadow-md shrink-0">
+   343→   343→              <Server className="h-6 w-6 text-white" />
+   344→   344→            </div>
+   345→   345→            <div>
+   346→   346→              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Inactivas</p>
+   347→   347→              <p className="text-2xl font-bold text-slate-700 dark:text-slate-300">{stats.inactivas}</p>
+   348→   348→            </div>
+   349→   349→          </CardContent>
+   350→   350→        </Card>
+   351→   351→        <Card className="shadow-sm border-teal-200 dark:border-teal-800 dark:bg-slate-900 overflow-hidden">
+   352→   352→          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-400 to-teal-600" />
+   353→   353→          <CardContent className="p-4 flex items-center gap-4">
+   354→   354→            <div className="p-3 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 shadow-md shrink-0">
+   355→   355→              <Clock className="h-6 w-6 text-white" />
+   356→   356→            </div>
+   357→   357→            <div>
+   358→   358→              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Última Sincronización</p>
+   359→   359→              <p className="text-sm font-bold text-teal-700 dark:text-teal-300">{relativeTime(stats.lastSync || null)}</p>
+   360→   360→            </div>
+   361→   361→          </CardContent>
+   362→   362→        </Card>
+   363→   363→      </div>
+   364→   364→
+   365→   365→      {/* Integration Cards */}
+   366→   366→      {loading ? (
+   367→   367→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   368→   368→          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-64 w-full dark:bg-slate-700" />)}
+   369→   369→        </div>
+   370→   370→      ) : integraciones.length === 0 ? (
+   371→   371→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   372→   372→          <CardContent className="p-12 text-center">
+   373→   373→            <Plug className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+   374→   374→            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300">No hay integraciones</h3>
+   375→   375→            <p className="text-sm text-slate-500 dark:text-slate-400">Configure integraciones con sistemas externos</p>
+   376→   376→          </CardContent>
+   377→   377→        </Card>
+   378→   378→      ) : (
+   379→   379→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   380→   380→          {integraciones.map((integ) => {
+   381→   381→            const cfg = getTipoConfig(integ.tipo);
+   382→   382→            const achConfig = getAchConfig(integ);
+   383→   383→            const testResult = testResults[integ.id];
+   384→   384→            const isSyncHistoryExpanded = expandedSyncHistory.has(integ.id);
+   385→   385→            const lastLog = integ.logs[0];
+   386→   386→
+   387→   387→            return (
+   388→   388→              <Card key={integ.id} className={`shadow-sm border dark:bg-slate-900 ${cfg.border} transition-all duration-200 hover:shadow-md`}>
+   389→   389→                <CardHeader className="pb-3">
+   390→   390→                  <div className="flex items-start justify-between gap-2">
+   391→   391→                    <div className="flex items-center gap-3 min-w-0">
+   392→   392→                      <div className={`p-2.5 rounded-xl bg-gradient-to-br ${cfg.gradient} shadow-md shrink-0`}>
+   393→   393→                        {cfg.icon}
+   394→   394→                      </div>
+   395→   395→                      <div className="min-w-0">
+   396→   396→                        <CardTitle className="text-sm font-semibold truncate dark:text-slate-100">{integ.nombre}</CardTitle>
+   397→   397→                        <div className="flex items-center gap-2 mt-1">
+   398→   398→                          <Badge className={`text-[10px] ${cfg.badgeBg} ${cfg.badgeText} border-0`}>
+   399→   399→                            {integ.tipo === 'BANCO' ? 'ACH' : integ.tipo}
+   400→   400→                          </Badge>
+   401→   401→                          {/* Connection status with animated pulse */}
+   402→   402→                          <div className="flex items-center gap-1.5">
+   403→   403→                            <span className="relative flex h-2 w-2">
+   404→   404→                              {integ.activo && (
+   405→   405→                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+   406→   406→                              )}
+   407→   407→                              <span className={`relative inline-flex rounded-full h-2 w-2 ${integ.activo ? 'bg-emerald-500' : 'bg-red-500'}`} />
+   408→   408→                            </span>
+   409→   409→                            <span className={`text-[10px] font-medium ${integ.activo ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+   410→   410→                              {integ.activo ? 'Activa' : 'Inactiva'}
+   411→   411→                            </span>
+   412→   412→                          </div>
+   413→   413→                        </div>
+   414→   414→                      </div>
+   415→   415→                    </div>
+   416→   416→                  </div>
+   417→   417→                </CardHeader>
+   418→   418→                <CardContent className="space-y-3">
+   419→   419→                  {/* Last sync info */}
+   420→   420→                  <div className="flex items-center justify-between text-xs">
+   421→   421→                    <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+   422→   422→                      <Clock className="h-3 w-3" /> Último test:
+   423→   423→                    </span>
+   424→   424→                    <span className="font-medium dark:text-slate-300">{relativeTime(integ.ultimo_test)}</span>
+   425→   425→                  </div>
+   426→   426→
+   427→   427→                  {/* Test result */}
+   428→   428→                  {integ.estado_test && (
+   429→   429→                    <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
+   430→   430→                      integ.estado_test === 'EXITOSO'
+   431→   431→                        ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+   432→   432→                        : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+   433→   433→                    }`}>
+   434→   434→                      {integ.estado_test === 'EXITOSO' ? <CheckCircle className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+   435→   435→                      {integ.estado_test === 'EXITOSO' ? 'Conexión establecida' : 'Conexión fallida'}
+   436→   436→                    </div>
+   437→   437→                  )}
+   438→   438→
+   439→   439→                  {/* Connection test animation result */}
+   440→   440→                  {testResult && (
+   441→   441→                    <div className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium animate-in fade-in slide-in-from-top-1 ${
+   442→   442→                      testResult.status === 'success'
+   443→   443→                        ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+   444→   444→                        : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+   445→   445→                    }`}>
+   446→   446→                      {testResult.status === 'success'
+   447→   447→                        ? <CheckCircle className="h-4 w-4 shrink-0" />
+   448→   448→                        : <XCircle className="h-4 w-4 shrink-0" />
+   449→   449→                      }
+   450→   450→                      {testResult.message}
+   451→   451→                    </div>
+   452→   452→                  )}
+   453→   453→
+   454→   454→                  {/* Action buttons */}
+   455→   455→                  <div className="flex gap-2">
+   456→   456→                    <Button
+   457→   457→                      variant="outline"
+   458→   458→                      size="sm"
+   459→   459→                      className="flex-1 text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+   460→   460→                      onClick={() => handleTest(integ.id)}
+   461→   461→                      disabled={testing === integ.id}
+   462→   462→                    >
+   463→   463→                      {testing === integ.id ? (
+   464→   464→                        <>
+   465→   465→                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+   466→   466→                          Probando...
+   467→   467→                        </>
+   468→   468→                      ) : (
+   469→   469→                        <>
+   470→   470→                          <TestTube2 className="h-3.5 w-3.5 mr-1" />
+   471→   471→                          Probar Conexión
+   472→   472→                        </>
+   473→   473→                      )}
+   474→   474→                    </Button>
+   475→   475→                    <Button
+   476→   476→                      variant="outline"
+   477→   477→                      size="sm"
+   478→   478→                      className="text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+   479→   479→                      onClick={() => handleSync(integ.id)}
+   480→   480→                      disabled={syncing === integ.id || !integ.activo}
+   481→   481→                    >
+   482→   482→                      {syncing === integ.id ? (
+   483→   483→                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   484→   484→                      ) : (
+   485→   485→                        <RefreshCw className="h-3.5 w-3.5" />
+   486→   486→                      )}
+   487→   487→                    </Button>
+   488→   488→                    {canManage && (
+   489→   489→                      <Button
+   490→   490→                        variant="outline"
+   491→   491→                        size="sm"
+   492→   492→                        className="text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+   493→   493→                        onClick={() => openEdit(integ)}
+   494→   494→                      >
+   495→   495→                        <Settings className="h-3.5 w-3.5" />
+   496→   496→                      </Button>
+   497→   497→                    )}
+   498→   498→                  </div>
+   499→   499→
+   500→   500→                  {/* ACH Integration Detail */}
+   501→   501→                  {achConfig && (
+   502→   502→                    <div className="border-t dark:border-slate-800 pt-2">
+   503→   503→                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center gap-1">
+   504→   504→                        <ArrowRightLeft className="h-3 w-3" /> Configuración ACH
+   505→   505→                      </p>
+   506→   506→                      <div className="space-y-1 text-xs">
+   507→   507→                        {achConfig.banco && (
+   508→   508→                          <div className="flex justify-between">
+   509→   509→                            <span className="text-slate-500 dark:text-slate-400">Banco:</span>
+   510→   510→                            <span className="font-medium dark:text-slate-300">{achConfig.banco}</span>
+   511→   511→                          </div>
+   512→   512→                        )}
+   513→   513→                        {achConfig.codigo_banco && (
+   514→   514→                          <div className="flex justify-between">
+   515→   515→                            <span className="text-slate-500 dark:text-slate-400">Código:</span>
+   516→   516→                            <span className="font-medium dark:text-slate-300">{achConfig.codigo_banco}</span>
+   517→   517→                          </div>
+   518→   518→                        )}
+   519→   519→                        {achConfig.host && (
+   520→   520→                          <div className="flex justify-between">
+   521→   521→                            <span className="text-slate-500 dark:text-slate-400">Host:</span>
+   522→   522→                            <span className="font-medium dark:text-slate-300 truncate ml-2">{achConfig.host}</span>
+   523→   523→                          </div>
+   524→   524→                        )}
+   525→   525→                      </div>
+   526→   526→                    </div>
+   527→   527→                  )}
+   528→   528→
+   529→   529→                  {/* Sync History */}
+   530→   530→                  {integ.logs.length > 0 && (
+   531→   531→                    <div className="border-t dark:border-slate-800 pt-2">
+   532→   532→                      <button
+   533→   533→                        onClick={() => toggleSyncHistory(integ.id)}
+   534→   534→                        className="w-full flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+   535→   535→                      >
+   536→   536→                        <span className="flex items-center gap-1">
+   537→   537→                          <Activity className="h-3 w-3" /> Historial de Sincronización
+   538→   538→                        </span>
+   539→   539→                        <ChevronRight className={`h-3 w-3 transition-transform ${isSyncHistoryExpanded ? 'rotate-90' : ''}`} />
+   540→   540→                      </button>
+   541→   541→                      {isSyncHistoryExpanded && (
+   542→   542→                        <div className="space-y-1.5 mt-1.5 max-h-40 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-top-1">
+   543→   543→                          {integ.logs.slice(0, 5).map((log) => (
+   544→   544→                            <div key={log.id} className="flex items-start gap-2 text-xs p-1.5 rounded-md bg-slate-50 dark:bg-slate-800/50">
+   545→   545→                              <div className={`mt-0.5 shrink-0 ${log.estado === 'EXITOSO' ? 'text-emerald-500' : 'text-red-500'}`}>
+   546→   546→                                {log.estado === 'EXITOSO' ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+   547→   547→                              </div>
+   548→   548→                              <div className="min-w-0 flex-1">
+   549→   549→                                <div className="flex items-center justify-between">
+   550→   550→                                  <span className="font-medium dark:text-slate-300 truncate">{log.tipo_operacion}</span>
+   551→   551→                                  <span className="text-slate-400 dark:text-slate-500 shrink-0 ml-1">{relativeTime(log.fecha_creacion)}</span>
+   552→   552→                                </div>
+   553→   553→                                <div className="flex items-center gap-2 mt-0.5">
+   554→   554→                                  <Badge className={`text-[9px] px-1 py-0 ${
+   555→   555→                                    log.estado === 'EXITOSO' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' :
+   556→   556→                                    'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+   557→   557→                                  }`}>
+   558→   558→                                    {log.estado}
+   559→   559→                                  </Badge>
+   560→   560→                                  {log.registros_afectados !== null && log.registros_afectados > 0 && (
+   561→   561→                                    <span className="text-[10px] text-slate-400">{log.registros_afectados} registros</span>
+   562→   562→                                  )}
+   563→   563→                                  {log.duracion_ms && (
+   564→   564→                                    <span className="text-[10px] text-slate-400">{log.duracion_ms}ms</span>
+   565→   565→                                  )}
+   566→   566→                                </div>
+   567→   567→                                {log.mensaje_error && (
+   568→   568→                                  <p className="text-[10px] text-red-500 mt-0.5 truncate">{log.mensaje_error}</p>
+   569→   569→                                )}
+   570→   570→                              </div>
+   571→   571→                            </div>
+   572→   572→                          ))}
+   573→   573→                        </div>
+   574→   574→                      )}
+   575→   575→                    </div>
+   576→   576→                  )}
+   577→   577→
+   578→   578→                  {/* Last sync summary */}
+   579→   579→                  {lastLog && !isSyncHistoryExpanded && (
+   580→   580→                    <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 border-t dark:border-slate-800 pt-2">
+   581→   581→                      {lastLog.estado === 'EXITOSO' ? <CheckCircle className="h-3 w-3 text-emerald-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
+   582→   582→                      <span className="truncate">{lastLog.tipo_operacion}</span>
+   583→   583→                      <span className="ml-auto shrink-0">{relativeTime(lastLog.fecha_creacion)}</span>
+   584→   584→                    </div>
+   585→   585→                  )}
+   586→   586→                </CardContent>
+   587→   587→              </Card>
+   588→   588→            );
+   589→   589→          })}
+   590→   590→        </div>
+   591→   591→      )}
+   592→   592→
+   593→   593→      {/* Create Dialog */}
+   594→   594→      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+   595→   595→        <DialogContent className="sm:max-w-md dark:bg-slate-900 dark:border-slate-800">
+   596→   596→          <DialogHeader>
+   597→   597→            <DialogTitle className="flex items-center gap-2 dark:text-slate-100">
+   598→   598→              <Plug className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   599→   599→              Nueva Integración
+   600→   600→            </DialogTitle>
+   601→   601→            <DialogDescription className="dark:text-slate-400">Configure una nueva conexión con un sistema externo</DialogDescription>
+   602→   602→          </DialogHeader>
+   603→   603→          <div className="space-y-4 py-4">
+   604→   604→            <div className="space-y-2">
+   605→   605→              <Label className="dark:text-slate-300">Tipo</Label>
+   606→   606→              <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v })}>
+   607→   607→                <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue /></SelectTrigger>
+   608→   608→                <SelectContent>
+   609→   609→                  <SelectItem value="BANCO">🏦 Banco / ACH</SelectItem>
+   610→   610→                  <SelectItem value="ISSS">🏥 ISSS</SelectItem>
+   611→   611→                  <SelectItem value="AFP">💼 AFP</SelectItem>
+   612→   612→                  <SelectItem value="SMTP">📧 SMTP</SelectItem>
+   613→   613→                  <SelectItem value="MH">🏛️ Ministerio de Hacienda</SelectItem>
+   614→   614→                </SelectContent>
+   615→   615→              </Select>
+   616→   616→            </div>
+   617→   617→            <div className="space-y-2">
+   618→   618→              <Label className="dark:text-slate-300">Nombre *</Label>
+   619→   619→              <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre descriptivo" className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   620→   620→            </div>
+   621→   621→            <div className="space-y-2">
+   622→   622→              <Label className="dark:text-slate-300">Configuración (JSON)</Label>
+   623→   623→              <Textarea value={form.configuracion} onChange={(e) => setForm({ ...form, configuracion: e.target.value })} placeholder='{"host": "...", "port": 443}' rows={4} className="font-mono text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   624→   624→            </div>
+   625→   625→            <div className="flex justify-end gap-3">
+   626→   626→              <Button variant="outline" onClick={() => setShowCreateDialog(false)} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">Cancelar</Button>
+   627→   627→              <Button onClick={handleCreate} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800">
+   628→   628→                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+   629→   629→                Crear
+   630→   630→              </Button>
+   631→   631→            </div>
+   632→   632→          </div>
+   633→   633→        </DialogContent>
+   634→   634→      </Dialog>
+   635→   635→
+   636→   636→      {/* Edit Dialog */}
+   637→   637→      <Dialog open={!!editIntegracion} onOpenChange={(open) => !open && setEditIntegracion(null)}>
+   638→   638→        <DialogContent className="sm:max-w-md dark:bg-slate-900 dark:border-slate-800">
+   639→   639→          <DialogHeader>
+   640→   640→            <DialogTitle className="flex items-center gap-2 dark:text-slate-100">
+   641→   641→              <Settings className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   642→   642→              Configurar: {editIntegracion?.nombre}
+   643→   643→            </DialogTitle>
+   644→   644→            <DialogDescription className="dark:text-slate-400">Modifique la configuración de la integración</DialogDescription>
+   645→   645→          </DialogHeader>
+   646→   646→          <div className="space-y-4 py-4">
+   647→   647→            <div className="space-y-2">
+   648→   648→              <Label className="dark:text-slate-300">Nombre</Label>
+   649→   649→              <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   650→   650→            </div>
+   651→   651→            <div className="space-y-2">
+   652→   652→              <Label className="dark:text-slate-300">Configuración (JSON)</Label>
+   653→   653→              <Textarea value={form.configuracion} onChange={(e) => setForm({ ...form, configuracion: e.target.value })} rows={6} className="font-mono text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   654→   654→            </div>
+   655→   655→            <div className="flex justify-end gap-3">
+   656→   656→              <Button variant="outline" onClick={() => setEditIntegracion(null)} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">Cancelar</Button>
+   657→   657→              <Button onClick={handleEdit} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800">
+   658→   658→                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+   659→   659→                Guardar
+   660→   660→              </Button>
+   661→   661→            </div>
+   662→   662→          </div>
+   663→   663→        </DialogContent>
+   664→   664→      </Dialog>
+   665→   665→    </div>
+   666→   666→  );
+   667→   667→}
+   668→   668→
+   669→   669→
+   670→   670→
