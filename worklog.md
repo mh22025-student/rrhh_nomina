@@ -1249,3 +1249,108 @@ Stage Summary:
 4. **Sidebar navigation** — Some sidebar items may not respond to click in headless browser (works with JS eval)
 5. **More seed data** — Add more incidencias and solicitudes for demo purposes
 
+
+---
+
+## QA Round 4 + Major Component Enhancements (2026-06-13 Session 2)
+
+### Task ID: QA-R4-ENHANCE
+
+### QA Testing Results
+- ✅ **21 views tested** with agent-browser — ZERO errors across all views
+- ✅ All 6 user roles tested (ADMIN, ANALISTA, APROBADOR, GERENCIA, AUDITOR, EMPLEADO)
+- ✅ Dark mode toggle working correctly
+- ✅ Self-service portal fully functional for EMPLEADO role
+- ✅ All API endpoints returning 200
+- ✅ Lint passes with 0 errors
+
+### Components Enhanced (8 Major Enhancements)
+
+#### 1. LoginPage (page.tsx) — Complete Redesign
+- **Split layout**: Left decorative panel (emerald→teal gradient, SVG patterns, system info, feature highlights) + right login form
+- **Enhanced form**: Shield icon, Mail/Lock icon prefixes, Eye/EyeOff password toggle, gradient login button with Loader2
+- **Quick login**: Role-specific colored badges (ADMIN=red, ANALISTA=teal, APROBADOR=emerald, GERENCIA=amber, AUDITOR=violet, EMPLEADO=cyan)
+- **Security**: Failed attempt counter, 5-attempt lockout with 5-min countdown, rate limit warning
+- **Mobile**: Stacked layout with compact gradient header
+- **Forgot password**: Dialog with email → OTP → new password flow
+- **Visual polish**: Fade-in animations, emerald focus rings, scale transitions
+
+#### 2. PayrollApproval.tsx — Complete Overhaul
+- 4 KPI cards: Pendientes, Aprobadas Hoy, Monto Pendiente, Monto Aprobado
+- Visual workflow stepper: CALCULADA → EN REVISIÓN → APROBADA → PAGADA
+- Enhanced planilla cards with financial breakdown and action buttons
+- Approval confirmation dialog with checklist and signature input
+- Rejection confirmation dialog with required motivo textarea
+- Rejection reason display in red alert cards
+
+#### 3. BankDispersion.tsx — Complete Overhaul
+- 4 KPI cards: Planillas por Dispersar, Monto Total, Empleados, Bancos
+- 3-step workflow: Seleccionar → Generar → Confirmar
+- Enhanced dispersion table: avatars, bank badges, masked accounts, status badges
+- ACH preview: syntax-highlighted, line numbers, copy/download buttons
+- Confirmation step with success animation (CheckCircle + PartyPopper)
+- Bank summary widget with proportional bars
+
+#### 4. LiquidationView.tsx — Complete Overhaul
+- Legal reference banner: "Art. 58 Código de Trabajo"
+- Searchable employee dropdown with avatar and info preview
+- Step-by-step calculator: Salario Base → Indemnización → Aguinaldo Proporcional → Vacación No Gozada → Salario Pendiente
+- Professional "Recibo de Liquidación" card with PDF generation
+- Enhanced liquidation history with stats bar
+
+#### 5. AguinaldoView.tsx — Complete Overhaul
+- Legal reference banner: "Arts. 196-202 CT"
+- Year selector with navigation arrows and "Período: Diciembre YYYY"
+- 4-step calculator visualization with progress bars
+- Tenure tier badges (1-3yr: 15d, 3-10yr: 19d, 10+yr: 21d)
+- Enhanced employee results table with sortable columns
+- Summary dashboard with animated counters and Cumplimiento Legal indicator
+- useAnimatedNumber hook with cubic easing
+
+#### 6. UserManagement.tsx — Complete Overhaul
+- 4 KPI cards: Total, Activos, Nuevos este Mes, Administradores
+- Card grid layout with avatar initials, role badges, status dots, relative login times
+- Search + filter by role (colored options) + status + active filter chips
+- 3-step Create User wizard (Personal Info → Role → Review) with password strength meter
+- Edit User dialog with visual role selector and status toggle
+- Reset Password dialog
+
+#### 7. NewEmployeeForm.tsx — Complete Overhaul
+- 4-step wizard: Datos Personales → Datos Laborales → Contrato → Revisión
+- DUI/NIT format validation and auto-formatting
+- Salary band display with visual range bar and position indicator
+- Contract type visual selector (Indefinido/Plazo Fijo)
+- Bank account section with 5 SV banks
+- Emergency contact with relation dropdown
+- Review step with grouped summary cards and edit buttons
+
+#### 8. EmployeeDetail.tsx + ProfileDescriptiveForm.tsx — Complete Overhaul
+- **EmployeeDetail**: Gradient header with avatar, 6 enhanced tabs with icons (General, Contratos, Salario, Vacaciones, Incidencias, Documentos), grouped info cards, contract timeline, salary band indicator, CircularProgress vacation rings
+- **ProfileDescriptiveForm**: Enhanced section layout with letter badges, 4-quadrant point valuation grid, skill level chips (Básico/Intermedio/Avanzado), responsibility weight indicators, grade scale highlighting
+
+### Files Modified
+- `/src/app/page.tsx` — LoginPage complete redesign, EyeOff/Mail imports
+- `/src/components/modules/PayrollApproval.tsx` — Complete overhaul
+- `/src/components/modules/BankDispersion.tsx` — Complete overhaul
+- `/src/components/modules/LiquidationView.tsx` — Complete overhaul
+- `/src/components/modules/AguinaldoView.tsx` — Complete overhaul
+- `/src/components/modules/UserManagement.tsx` — Complete overhaul
+- `/src/components/modules/NewEmployeeForm.tsx` — Complete overhaul
+- `/src/components/modules/EmployeeDetail.tsx` — Complete overhaul
+- `/src/components/modules/ProfileDescriptiveForm.tsx` — Complete overhaul
+
+### Verification
+- ✅ 21 views tested — 0 errors
+- ✅ 6 user roles tested — all working
+- ✅ Dark mode — working
+- ✅ Lint — 0 errors
+- ✅ All API endpoints — 200
+
+### Unresolved Issues / Next Steps
+1. **PDF generation** — Boleta de pago and liquidación PDF generation could be enhanced with more professional templates
+2. **File download** — OIS, SEPP, F-910 actual file generation and download
+3. **WebSocket** — Real-time notifications instead of polling
+4. **More seed data** — Additional demo liquidaciones and solicitudes
+5. **Mobile testing** — More thorough responsive testing on various screen sizes
+6. **Accessibility** — ARIA labels and keyboard navigation improvements
+

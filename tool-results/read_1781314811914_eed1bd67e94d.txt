@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useCallback, useEffect, createContext, useContext } from 'react';
+     4→import {
+     5→  Users, Briefcase, Calculator, FileText, Settings, User, Shield,
+     6→  ChevronDown, ChevronRight, LogOut, Lock, Menu, X, LayoutDashboard,
+     7→  DollarSign, CheckCircle, Send, Gift, ClipboardList, ListChecks,
+     8→  BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye,
+     9→  AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle,
+    10→  Sun, Moon, TrendingUp, TrendingDown, Bell, Info, AlertTriangle,
+    11→  PieChart, CalendarDays, Megaphone
+    12→} from 'lucide-react';
+    13→import { Button } from '@/components/ui/button';
+    14→import { Input } from '@/components/ui/input';
+    15→import { Label } from '@/components/ui/label';
+    16→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    17→import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+    18→import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+    19→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    20→import { Progress } from '@/components/ui/progress';
+    21→import { Badge } from '@/components/ui/badge';
+    22→import { Separator } from '@/components/ui/separator';
+    23→import { ScrollArea } from '@/components/ui/scroll-area';
+    24→import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+    25→import { useToast } from '@/hooks/use-toast';
+    26→import { useTheme } from 'next-themes';
+    27→
+    28→// Module components
+    29→import EmployeeDirectory from '@/components/modules/EmployeeDirectory';
+    30→import EmployeeDetail from '@/components/modules/EmployeeDetail';
+    31→import NewEmployeeForm from '@/components/modules/NewEmployeeForm';
+    32→import IncidenceManager from '@/components/modules/IncidenceManager';
+    33→import UserManagement from '@/components/modules/UserManagement';
+    34→import PayrollDashboard from '@/components/modules/PayrollDashboard';
+    35→import PayrollPeriods from '@/components/modules/PayrollPeriods';
+    36→import PayrollCalculation from '@/components/modules/PayrollCalculation';
+    37→import PayrollApproval from '@/components/modules/PayrollApproval';
+    38→import BankDispersion from '@/components/modules/BankDispersion';
+    39→import AguinaldoView from '@/components/modules/AguinaldoView';
+    40→import LiquidationView from '@/components/modules/LiquidationView';
+    41→import ProfileCatalog from '@/components/modules/ProfileCatalog';
+    42→import SalaryBands from '@/components/modules/SalaryBands';
+    43→import IsssReport from '@/components/modules/IsssReport';
+    44→import AfpReport from '@/components/modules/AfpReport';
+    45→import IsrReport from '@/components/modules/IsrReport';
+    46→import TalentReport from '@/components/modules/TalentReport';
+    47→import LegalParameters from '@/components/modules/LegalParameters';
+    48→import OrgChart from '@/components/modules/OrgChart';
+    49→import Integrations from '@/components/modules/Integrations';
+    50→import AuditLog from '@/components/modules/AuditLog';
+    51→import SelfServicePortal from '@/components/modules/SelfServicePortal';
+    52→import ProfileDescriptiveForm from '@/components/modules/ProfileDescriptiveForm';
+    53→import ChangePasswordDialog from '@/components/ChangePasswordDialog';
+    54→import NotificationBell from '@/components/NotificationBell';
+    55→
+    56→// ============================================================
+    57→// Types
+    58→// ============================================================
+    59→type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+    60→
+    61→interface UserData {
+    62→  id: string;
+    63→  email: string;
+    64→  nombre: string;
+    65→  apellido: string;
+    66→  rol: UserRole;
+    67→  debe_cambiar_password: boolean;
+    68→  empleadoId?: string;
+    69→}
+    70→
+    71→interface AuthContextType {
+    72→  user: UserData | null;
+    73→  accessToken: string | null;
+    74→  login: (email: string, password: string) => Promise<void>;
+    75→  logout: () => Promise<void>;
+    76→  refreshAccessToken: () => Promise<string | null>;
+    77→  isLoading: boolean;
+    78→}
+    79→
+    80→// ============================================================
+    81→// Auth Context
+    82→// ============================================================
+    83→const AuthContext = createContext<AuthContextType | null>(null);
+    84→
+    85→function useAuth() {
+    86→  const ctx = useContext(AuthContext);
+    87→  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+    88→  return ctx;
+    89→}
+    90→
+    91→// ============================================================
+    92→// View Types
+    93→// ============================================================
+    94→type ViewId =
+    95→  | 'dashboard'
+    96→  | '02-01' | '02-02' | '02-03' | '02-04'
+    97→  | '03-01' | '03-02' | '03-03'
+    98→  | '04-01' | '04-02' | '04-03' | '04-04' | '04-05' | '04-06' | '04-07'
+    99→  | '05-01' | '05-02' | '05-03' | '05-04'
+   100→  | '06-01' | '06-02' | '06-03' | '06-04' | '06-05'
+   101→  | '01-03';
+   102→
+   103→interface NavItem {
+   104→  id: ViewId;
+   105→  label: string;
+   106→  icon: React.ElementType;
+   107→}
+   108→
+   109→interface NavGroup {
+   110→  title: string;
+   111→  icon: React.ElementType;
+   112→  items: NavItem[];
+   113→  roles: UserRole[];
+   114→}
+   115→
+   116→// ============================================================
+   117→// Navigation Configuration (RBAC)
+   118→// ============================================================
+   119→const NAV_GROUPS: NavGroup[] = [
+   120→  {
+   121→    title: 'Seguridad',
+   122→    icon: Shield,
+   123→    roles: ['ADMIN'],
+   124→    items: [
+   125→      { id: '01-03', label: 'Gestión Usuarios', icon: Users },
+   126→    ],
+   127→  },
+   128→  {
+   129→    title: 'Módulo 02 - Empleados',
+   130→    icon: Users,
+   131→    roles: ['ADMIN', 'ANALISTA', 'AUDITOR'],
+   132→    items: [
+   133→      { id: '02-01', label: 'Directorio', icon: ListChecks },
+   134→      { id: '02-03', label: 'Nuevo Empleado', icon: User },
+   135→      { id: '02-04', label: 'Incidencias', icon: AlertCircle },
+   136→    ],
+   137→  },
+   138→  {
+   139→    title: 'Módulo 03 - Perfiles',
+   140→    icon: Briefcase,
+   141→    roles: ['ADMIN', 'ANALISTA', 'APROBADOR', 'AUDITOR'],
+   142→    items: [
+   143→      { id: '03-01', label: 'Catálogo', icon: BookOpen },
+   144→      { id: '03-02', label: 'Formulario de Perfil', icon: FileText },
+   145→      { id: '03-03', label: 'Bandas Salariales', icon: DollarSign },
+   146→    ],
+   147→  },
+   148→  {
+   149→    title: 'Módulo 04 - Nómina',
+   150→    icon: Calculator,
+   151→    roles: ['ADMIN', 'ANALISTA', 'APROBADOR', 'GERENCIA', 'AUDITOR'],
+   152→    items: [
+   153→      { id: '04-01', label: 'Dashboard', icon: LayoutDashboard },
+   154→      { id: '04-02', label: 'Períodos', icon: CalendarIcon },
+   155→      { id: '04-03', label: 'Cálculo', icon: Calculator },
+   156→      { id: '04-04', label: 'Aprobación', icon: CheckCircle },
+   157→      { id: '04-05', label: 'Dispersión', icon: Send },
+   158→      { id: '04-06', label: 'Aguinaldo', icon: Gift },
+   159→      { id: '04-07', label: 'Liquidaciones', icon: ClipboardList },
+   160→    ],
+   161→  },
+   162→  {
+   163→    title: 'Módulo 05 - Reportes',
+   164→    icon: FileText,
+   165→    roles: ['ADMIN', 'GERENCIA', 'AUDITOR'],
+   166→    items: [
+   167→      { id: '05-01', label: 'Planilla ISSS', icon: FileText },
+   168→      { id: '05-02', label: 'Planilla AFP', icon: FileText },
+   169→      { id: '05-03', label: 'Retenciones ISR', icon: FileText },
+   170→      { id: '05-04', label: 'Gestión Talento', icon: BarChart3 },
+   171→    ],
+   172→  },
+   173→  {
+   174→    title: 'Módulo 06 - Admin',
+   175→    icon: Settings,
+   176→    roles: ['ADMIN', 'APROBADOR'],
+   177→    items: [
+   178→      { id: '06-01', label: 'Parámetros Legales', icon: ScaleIcon },
+   179→      { id: '06-02', label: 'Organigrama', icon: GitBranch },
+   180→      { id: '06-03', label: 'Integraciones', icon: Plug },
+   181→      { id: '06-04', label: 'Bitácora', icon: ScrollText },
+   182→    ],
+   183→  },
+   184→  {
+   185→    title: 'Vista Empleado',
+   186→    icon: User,
+   187→    roles: ['EMPLEADO'],
+   188→    items: [
+   189→      { id: '06-05', label: 'Mi Portal', icon: Eye },
+   190→    ],
+   191→  },
+   192→];
+   193→
+   194→// Filter items within a group based on more granular RBAC
+   195→function getVisibleItems(group: NavGroup, role: UserRole): NavItem[] {
+   196→  const roleItemMap: Record<UserRole, Record<string, string[]>> = {
+   197→    ADMIN: {
+   198→      'Seguridad': ['01-03'],
+   199→      'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
+   200→      'Módulo 03 - Perfiles': ['03-01', '03-02', '03-03'],
+   201→      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-04', '04-05', '04-06', '04-07'],
+   202→      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+   203→      'Módulo 06 - Admin': ['06-01', '06-02', '06-03', '06-04'],
+   204→      'Vista Empleado': [],
+   205→    },
+   206→    ANALISTA: {
+   207→      'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
+   208→      'Módulo 03 - Perfiles': ['03-01', '03-02'],
+   209→      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-06'],
+   210→    },
+   211→    APROBADOR: {
+   212→      'Módulo 03 - Perfiles': ['03-03'],
+   213→      'Módulo 04 - Nómina': ['04-04', '04-05', '04-07'],
+   214→      'Módulo 06 - Admin': ['06-01'],
+   215→    },
+   216→    GERENCIA: {
+   217→      'Módulo 04 - Nómina': ['04-01'],
+   218→      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+   219→    },
+   220→    AUDITOR: {
+   221→      'Módulo 02 - Empleados': ['02-01'],
+   222→      'Módulo 03 - Perfiles': ['03-01'],
+   223→      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03'],
+   224→      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+   225→      'Módulo 06 - Admin': ['06-04'],
+   226→    },
+   227→    EMPLEADO: {
+   228→      'Vista Empleado': ['06-05'],
+   229→    },
+   230→  };
+   231→
+   232→  const allowedIds = roleItemMap[role]?.[group.title] ?? [];
+   233→  return group.items.filter(item => allowedIds.includes(item.id));
+   234→}
+   235→
+   236→// Custom calendar icon since we can't import it from lucide
+   237→function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
+   238→  return (
+   239→    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+   240→      <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+   241→      <line x1="16" x2="16" y1="2" y2="6"/>
+   242→      <line x1="8" x2="8" y1="2" y2="6"/>
+   243→      <line x1="3" x2="21" y1="10" y2="10"/>
+   244→    </svg>
+   245→  );
+   246→}
+   247→
+   248→function ScaleIcon(props: React.SVGProps<SVGSVGElement>) {
+   249→  return (
+   250→    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+   251→      <path d="M16 3h5v5"/>
+   252→      <path d="M8 3H3v5"/>
+   253→      <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/>
+   254→      <path d="m15 9 6-6"/>
+   255→    </svg>
+   256→  );
+   257→}
+   258→
+   259→// ============================================================
+   260→// VIEW LABELS MAP
+   261→// ============================================================
+   262→const VIEW_LABELS: Record<ViewId, string> = {
+   263→  'dashboard': 'Dashboard',
+   264→  '01-03': 'Gestión de Usuarios',
+   265→  '02-01': 'Directorio de Empleados',
+   266→  '02-02': 'Detalle de Empleado',
+   267→  '02-03': 'Nuevo Empleado',
+   268→  '02-04': 'Incidencias',
+   269→  '03-01': 'Catálogo de Perfiles',
+   270→  '03-02': 'Formulario de Perfil',
+   271→  '03-03': 'Bandas Salariales',
+   272→  '04-01': 'Dashboard Nómina',
+   273→  '04-02': 'Períodos de Nómina',
+   274→  '04-03': 'Cálculo de Nómina',
+   275→  '04-04': 'Aprobación de Nómina',
+   276→  '04-05': 'Dispersión de Pago',
+   277→  '04-06': 'Aguinaldo',
+   278→  '04-07': 'Liquidaciones',
+   279→  '05-01': 'Planilla ISSS',
+   280→  '05-02': 'Planilla AFP',
+   281→  '05-03': 'Retenciones ISR',
+   282→  '05-04': 'Gestión de Talento',
+   283→  '06-01': 'Parámetros Legales',
+   284→  '06-02': 'Organigrama',
+   285→  '06-03': 'Integraciones',
+   286→  '06-04': 'Bitácora',
+   287→  '06-05': 'Mi Portal',
+   288→};
+   289→
+   290→// ============================================================
+   291→// LOGIN SCREEN
+   292→// ============================================================
+   293→interface LoginScreenProps {
+   294→  onLogin: (email: string, password: string) => Promise<void>;
+   295→  isLoading: boolean;
+   296→  error: string | null;
+   297→}
+   298→
+   299→function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
+   300→  const [email, setEmail] = useState('');
+   301→  const [password, setPassword] = useState('');
+   302→  const [showRecovery, setShowRecovery] = useState(false);
+   303→  const [rememberMe, setRememberMe] = useState(false);
+   304→
+   305→  const handleSubmit = async (e: React.FormEvent) => {
+   306→    e.preventDefault();
+   307→    await onLogin(email, password);
+   308→  };
+   309→
+   310→  return (
+   311→    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20 p-4">
+   312→      {/* Background decorative elements */}
+   313→      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+   314→        <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-100/40 dark:bg-emerald-900/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '0s' }} />
+   315→        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-100/30 dark:bg-teal-900/15 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
+   316→        <div className="absolute top-1/4 right-1/4 w-2 h-2 bg-emerald-400/30 dark:bg-emerald-500/20 rounded-full" />
+   317→        <div className="absolute top-1/3 left-1/3 w-1.5 h-1.5 bg-teal-400/20 dark:bg-teal-500/15 rounded-full" />
+   318→        <div className="absolute bottom-1/4 right-1/3 w-1 h-1 bg-emerald-300/30 dark:bg-emerald-500/10 rounded-full" />
+   319→        {/* Animated floating shapes */}
+   320→        <div className="absolute top-20 left-20 w-12 h-12 border border-emerald-200/30 dark:border-emerald-700/20 rounded-lg rotate-12 animate-float" style={{ animationDelay: '1s' }} />
+   321→        <div className="absolute bottom-32 right-32 w-8 h-8 border border-teal-200/30 dark:border-teal-700/20 rounded-full animate-float" style={{ animationDelay: '3s' }} />
+   322→        {/* Subtle grid pattern */}
+   323→        <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.03]" style={{
+   324→          backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)',
+   325→          backgroundSize: '24px 24px'
+   326→        }} />
+   327→      </div>
+   328→
+   329→      <div className="w-full max-w-md relative z-10 animate-fade-in">
+   330→        {/* Logo & Title */}
+   331→        <div className="text-center mb-8">
+   332→          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20 dark:shadow-emerald-800/30 mb-4 relative animate-float">
+   333→            <svg viewBox="0 0 40 40" className="w-10 h-10 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
+   334→              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
+   335→              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
+   336→              <path d="M4 12V28L20 36V20L4 12Z" stroke="currentColor" strokeWidth="2"/>
+   337→              <path d="M36 12V28L20 36V20L36 12Z" stroke="currentColor" strokeWidth="2"/>
+   338→            </svg>
+   339→            {/* Decorative ring */}
+   340→            <div className="absolute inset-0 rounded-2xl border-2 border-emerald-400/30 scale-110" />
+   341→          </div>
+   342→          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+   343→            Sistema de Nómina y Perfiles de Puestos
+   344→          </h1>
+   345→          <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm flex items-center justify-center gap-1.5">
+   346→            <span className="inline-block w-4 h-[1px] bg-slate-300 dark:bg-slate-600" />
+   347→            República de El Salvador
+   348→            <span className="inline-block w-4 h-[1px] bg-slate-300 dark:bg-slate-600" />
+   349→          </p>
+   350→        </div>
+   351→
+   352→        {/* Login Card */}
+   353→        <Card className="shadow-xl border-0 shadow-slate-200/60 dark:shadow-slate-900/40 dark:bg-slate-900 animate-scale-in">
+   354→          <CardHeader className="pb-4">
+   355→            <CardTitle className="text-lg flex items-center gap-2 dark:text-slate-100">
+   356→              <div className="w-1.5 h-5 rounded-full bg-emerald-500" />
+   357→              Iniciar Sesión
+   358→            </CardTitle>
+   359→            <CardDescription className="dark:text-slate-400">Ingrese sus credenciales para acceder al sistema</CardDescription>
+   360→          </CardHeader>
+   361→          <CardContent>
+   362→            <form onSubmit={handleSubmit} className="space-y-4">
+   363→              <div className="space-y-2">
+   364→                <Label htmlFor="email" className="flex items-center gap-1.5">
+   365→                  <svg className="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+   366→                  Correo Electrónico
+   367→                </Label>
+   368→                <Input
+   369→                  id="email"
+   370→                  type="email"
+   371→                  placeholder="usuario@nomina.gob.sv"
+   372→                  value={email}
+   373→                  onChange={(e) => setEmail(e.target.value)}
+   374→                  required
+   375→                  disabled={isLoading}
+   376→                  className="h-11 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+   377→                />
+   378→              </div>
+   379→              <div className="space-y-2">
+   380→                <Label htmlFor="password" className="flex items-center gap-1.5 dark:text-slate-300">
+   381→                  <svg className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+   382→                  Contraseña
+   383→                </Label>
+   384→                <Input
+   385→                  id="password"
+   386→                  type="password"
+   387→                  placeholder="••••••••"
+   388→                  value={password}
+   389→                  onChange={(e) => setPassword(e.target.value)}
+   390→                  required
+   391→                  disabled={isLoading}
+   392→                  className="h-11 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 dark:bg-slate-800 dark:border-slate-700"
+   393→                />
+   394→              </div>
+   395→
+   396→              {/* Remember me checkbox */}
+   397→              <div className="flex items-center gap-2">
+   398→                <input
+   399→                  type="checkbox"
+   400→                  id="remember"
+   401→                  checked={rememberMe}
+   402→                  onChange={(e) => setRememberMe(e.target.checked)}
+   403→                  className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 focus:ring-2"
+   404→                />
+   405→                <Label htmlFor="remember" className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer select-none">Recordarme</Label>
+   406→              </div>
+   407→
+   408→              {error && (
+   409→                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100 animate-fade-in">
+   410→                  <AlertCircle className="h-4 w-4 shrink-0" />
+   411→                  <span>{error}</span>
+   412→                </div>
+   413→              )}
+   414→
+   415→              <Button
+   416→                type="submit"
+   417→                className="w-full h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20 hover:shadow-lg hover:shadow-emerald-600/30 transition-all active:scale-[0.98]"
+   418→                disabled={isLoading}
+   419→              >
+   420→                {isLoading ? (
+   421→                  <>
+   422→                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+   423→                    Verificando...
+   424→                  </>
+   425→                ) : (
+   426→                  <span className="flex items-center gap-2">
+   427→                    Iniciar Sesión
+   428→                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+   429→                  </span>
+   430→                )}
+   431→              </Button>
+   432→
+   433→              <button
+   434→                type="button"
+   435→                onClick={() => setShowRecovery(true)}
+   436→                className="w-full text-sm text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:underline transition-colors flex items-center justify-center gap-1"
+   437→              >
+   438→                <Lock className="h-3 w-3" />
+   439→                ¿Olvidó su contraseña?
+   440→              </button>
+   441→            </form>
+   442→          </CardContent>
+   443→        </Card>
+   444→
+   445→        {/* Demo Credentials */}
+   446→        <Card className="mt-4 bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/60 dark:border-amber-800/40 shadow-sm animate-fade-in" style={{ animationDelay: '200ms' }}>
+   447→          <CardContent className="p-4">
+   448→            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-2.5 flex items-center gap-1.5">
+   449→              <KeyRound className="h-3.5 w-3.5" />
+   450→              Credenciales de Demostración
+   451→            </p>
+   452→            <div className="grid grid-cols-2 gap-1.5 text-xs">
+   453→              {[
+   454→                { email: 'admin@nomina.gob.sv', pass: 'Admin2026!', role: 'ADMIN' },
+   455→                { email: 'analista@nomina.gob.sv', pass: 'Analista2026!', role: 'ANALISTA' },
+   456→                { email: 'aprobador@nomina.gob.sv', pass: 'Aprobador2026!', role: 'APROBADOR' },
+   457→                { email: 'gerencia@nomina.gob.sv', pass: 'Gerencia2026!', role: 'GERENCIA' },
+   458→                { email: 'auditor@nomina.gob.sv', pass: 'Auditor2026!', role: 'AUDITOR' },
+   459→                { email: 'empleado@nomina.gob.sv', pass: 'Empleado2026!', role: 'EMPLEADO' },
+   460→              ].map((cred) => (
+   461→                <button
+   462→                  key={cred.email}
+   463→                  type="button"
+   464→                  onClick={() => { setEmail(cred.email); setPassword(cred.pass); }}
+   465→                  className="flex items-center gap-1.5 p-1.5 rounded-md hover:bg-amber-100/60 dark:hover:bg-amber-900/30 transition-colors text-left group"
+   466→                >
+   467→                  <span className="text-amber-700 dark:text-amber-400 group-hover:text-amber-900 dark:group-hover:text-amber-300 truncate">{cred.email}</span>
+   468→                  <span className="text-amber-400 dark:text-amber-500 ml-auto shrink-0 tabular-nums">{cred.pass}</span>
+   469→                </button>
+   470→              ))}
+   471→            </div>
+   472→          </CardContent>
+   473→        </Card>
+   474→
+   475→        {/* Password Recovery Dialog */}
+   476→        <PasswordRecoveryDialog open={showRecovery} onOpenChange={setShowRecovery} />
+   477→      </div>
+   478→    </div>
+   479→  );
+   480→}
+   481→
+   482→// ============================================================
+   483→// PASSWORD RECOVERY DIALOG
+   484→// ============================================================
+   485→interface PasswordRecoveryDialogProps {
+   486→  open: boolean;
+   487→  onOpenChange: (open: boolean) => void;
+   488→}
+   489→
+   490→function PasswordRecoveryDialog({ open, onOpenChange }: PasswordRecoveryDialogProps) {
+   491→  const [step, setStep] = useState(1);
+   492→  const [email, setEmail] = useState('');
+   493→  const [otp, setOtp] = useState('');
+   494→  const [otpId, setOtpId] = useState('');
+   495→  const [newPassword, setNewPassword] = useState('');
+   496→  const [confirmPassword, setConfirmPassword] = useState('');
+   497→  const [demoOtp, setDemoOtp] = useState<string | null>(null);
+   498→  const [isLoading, setIsLoading] = useState(false);
+   499→  const [error, setError] = useState<string | null>(null);
+   500→  const [success, setSuccess] = useState<string | null>(null);
+   501→  const { toast } = useToast();
+   502→
+   503→  const handleReset = () => {
+   504→    setStep(1);
+   505→    setEmail('');
+   506→    setOtp('');
+   507→    setOtpId('');
+   508→    setNewPassword('');
+   509→    setConfirmPassword('');
+   510→    setDemoOtp(null);
+   511→    setIsLoading(false);
+   512→    setError(null);
+   513→    setSuccess(null);
+   514→  };
+   515→
+   516→  const handleClose = (newOpen: boolean) => {
+   517→    if (!newOpen) handleReset();
+   518→    onOpenChange(newOpen);
+   519→  };
+   520→
+   521→  const handleStep1 = async () => {
+   522→    setError(null);
+   523→    setIsLoading(true);
+   524→    try {
+   525→      const res = await fetch('/api/auth/forgot-password', {
+   526→        method: 'POST',
+   527→        headers: { 'Content-Type': 'application/json' },
+   528→        body: JSON.stringify({ email }),
+   529→      });
+   530→      const data = await res.json();
+   531→      if (!res.ok) {
+   532→        setError(data.error || 'Error al solicitar código');
+   533→        return;
+   534→      }
+   535→      setDemoOtp(data.demo_otp);
+   536→      setSuccess('Código enviado. Verifique su correo.');
+   537→      setStep(2);
+   538→    } catch {
+   539→      setError('Error de conexión');
+   540→    } finally {
+   541→      setIsLoading(false);
+   542→    }
+   543→  };
+   544→
+   545→  const handleStep2 = async () => {
+   546→    setError(null);
+   547→    setIsLoading(true);
+   548→    try {
+   549→      const res = await fetch('/api/auth/verify-otp', {
+   550→        method: 'POST',
+   551→        headers: { 'Content-Type': 'application/json' },
+   552→        body: JSON.stringify({ email, otp }),
+   553→      });
+   554→      const data = await res.json();
+   555→      if (!res.ok) {
+   556→        setError(data.error || 'Código inválido');
+   557→        return;
+   558→      }
+   559→      setOtpId(data.otp_id);
+   560→      setSuccess('Código verificado');
+   561→      setStep(3);
+   562→    } catch {
+   563→      setError('Error de conexión');
+   564→    } finally {
+   565→      setIsLoading(false);
+   566→    }
+   567→  };
+   568→
+   569→  const handleStep3 = async () => {
+   570→    setError(null);
+   571→    if (newPassword !== confirmPassword) {
+   572→      setError('Las contraseñas no coinciden');
+   573→      return;
+   574→    }
+   575→    if (newPassword.length < 8) {
+   576→      setError('La contraseña debe tener al menos 8 caracteres');
+   577→      return;
+   578→    }
+   579→    setIsLoading(true);
+   580→    try {
+   581→      const res = await fetch('/api/auth/reset-password', {
+   582→        method: 'POST',
+   583→        headers: { 'Content-Type': 'application/json' },
+   584→        body: JSON.stringify({ otp_id: otpId, email, new_password: newPassword }),
+   585→      });
+   586→      const data = await res.json();
+   587→      if (!res.ok) {
+   588→        setError(data.error || 'Error al actualizar contraseña');
+   589→        return;
+   590→      }
+   591→      toast({
+   592→        title: 'Contraseña actualizada',
+   593→        description: 'Puede iniciar sesión con su nueva contraseña',
+   594→      });
+   595→      handleClose(false);
+   596→    } catch {
+   597→      setError('Error de conexión');
+   598→    } finally {
+   599→      setIsLoading(false);
+   600→    }
+   601→  };
+   602→
+   603→  const stepLabels = ['Email', 'Verificación', 'Nueva Contraseña'];
+   604→  const progressValue = (step / 3) * 100;
+   605→
+   606→  return (
+   607→    <Dialog open={open} onOpenChange={handleClose}>
+   608→      <DialogContent className="sm:max-w-md">
+   609→        <DialogHeader>
+   610→          <DialogTitle className="flex items-center gap-2">
+   611→            <Lock className="h-5 w-5 text-emerald-600" />
+   612→            Recuperar Contraseña
+   613→          </DialogTitle>
+   614→          <DialogDescription>
+   615→            Siga los pasos para restablecer su contraseña
+   616→          </DialogDescription>
+   617→        </DialogHeader>
+   618→
+   619→        {/* Progress indicator */}
+   620→        <div className="space-y-2">
+   621→          <div className="flex justify-between text-xs text-slate-500">
+   622→            {stepLabels.map((label, i) => (
+   623→              <span key={i} className={step > i ? 'text-emerald-600 font-medium' : step === i + 1 ? 'text-slate-900 font-medium' : ''}>
+   624→                {i + 1}. {label}
+   625→              </span>
+   626→            ))}
+   627→          </div>
+   628→          <Progress value={progressValue} className="h-2" />
+   629→        </div>
+   630→
+   631→        <div className="space-y-4">
+   632→          {error && (
+   633→            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+   634→              <AlertCircle className="h-4 w-4 shrink-0" />
+   635→              <span>{error}</span>
+   636→            </div>
+   637→          )}
+   638→
+   639→          {success && step > 1 && (
+   640→            <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg">
+   641→              <CheckCircle className="h-4 w-4 shrink-0" />
+   642→              <span>{success}</span>
+   643→            </div>
+   644→          )}
+   645→
+   646→          {/* Step 1: Email */}
+   647→          {step === 1 && (
+   648→            <div className="space-y-4">
+   649→              <div className="space-y-2">
+   650→                <Label>Correo Electrónico</Label>
+   651→                <Input
+   652→                  type="email"
+   653→                  placeholder="usuario@nomina.gob.sv"
+   654→                  value={email}
+   655→                  onChange={(e) => setEmail(e.target.value)}
+   656→                  disabled={isLoading}
+   657→                />
+   658→              </div>
+   659→              <Button onClick={handleStep1} disabled={isLoading || !email} className="w-full bg-emerald-600 hover:bg-emerald-700">
+   660→                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+   661→                Enviar Código
+   662→              </Button>
+   663→            </div>
+   664→          )}
+   665→
+   666→          {/* Step 2: OTP */}
+   667→          {step === 2 && (
+   668→            <div className="space-y-4">
+   669→              <div className="space-y-2">
+   670→                <Label>Código de Verificación</Label>
+   671→                <Input
+   672→                  placeholder="000000"
+   673→                  value={otp}
+   674→                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+   675→                  disabled={isLoading}
+   676→                  className="text-center text-lg tracking-[0.5em] font-mono"
+   677→                  maxLength={6}
+   678→                />
+   679→              </div>
+   680→              {demoOtp && (
+   681→                <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded">
+   682→                  Demo - Código: <strong>{demoOtp}</strong>
+   683→                </p>
+   684→              )}
+   685→              <div className="flex gap-2">
+   686→                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+   687→                  <ArrowLeft className="mr-1 h-4 w-4" /> Volver
+   688→                </Button>
+   689→                <Button onClick={handleStep2} disabled={isLoading || otp.length !== 6} className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+   690→                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+   691→                  Verificar
+   692→                </Button>
+   693→              </div>
+   694→            </div>
+   695→          )}
+   696→
+   697→          {/* Step 3: New Password */}
+   698→          {step === 3 && (
+   699→            <div className="space-y-4">
+   700→              <div className="space-y-2">
+   701→                <Label>Nueva Contraseña</Label>
+   702→                <Input
+   703→                  type="password"
+   704→                  placeholder="Mínimo 8 caracteres"
+   705→                  value={newPassword}
+   706→                  onChange={(e) => setNewPassword(e.target.value)}
+   707→                  disabled={isLoading}
+   708→                />
+   709→              </div>
+   710→              <div className="space-y-2">
+   711→                <Label>Confirmar Contraseña</Label>
+   712→                <Input
+   713→                  type="password"
+   714→                  placeholder="Repita la contraseña"
+   715→                  value={confirmPassword}
+   716→                  onChange={(e) => setConfirmPassword(e.target.value)}
+   717→                  disabled={isLoading}
+   718→                />
+   719→              </div>
+   720→              <Button onClick={handleStep3} disabled={isLoading || !newPassword || !confirmPassword} className="w-full bg-emerald-600 hover:bg-emerald-700">
+   721→                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+   722→                Actualizar Contraseña
+   723→              </Button>
+   724→            </div>
+   725→          )}
+   726→        </div>
+   727→      </DialogContent>
+   728→    </Dialog>
+   729→  );
+   730→}
+   731→
+   732→// ============================================================
+   733→// SIDEBAR
+   734→// ============================================================
+   735→interface SidebarProps {
+   736→  user: UserData;
+   737→  currentView: ViewId;
+   738→  onNavigate: (view: ViewId) => void;
+   739→  collapsed: boolean;
+   740→  onToggle: () => void;
+   741→}
+   742→
+   743→function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: SidebarProps) {
+   744→  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+   745→    const initial = new Set<string>();
+   746→    NAV_GROUPS.forEach(g => {
+   747→      if (g.roles.includes(user.rol)) {
+   748→        initial.add(g.title);
+   749→      }
+   750→    });
+   751→    return initial;
+   752→  });
+   753→
+   754→  const toggleGroup = (title: string) => {
+   755→    setExpandedGroups(prev => {
+   756→      const next = new Set(prev);
+   757→      if (next.has(title)) next.delete(title);
+   758→      else next.add(title);
+   759→      return next;
+   760→    });
+   761→  };
+   762→
+   763→  return (
+   764→    <>
+   765→      {/* Mobile overlay */}
+   766→      {!collapsed && (
+   767→        <div
+   768→          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+   769→          onClick={onToggle}
+   770→        />
+   771→      )}
+   772→
+   773→      <aside
+   774→        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 text-white transition-all duration-300 ease-in-out ${
+   775→          collapsed ? '-translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden' : 'w-64 translate-x-0'
+   776→        }`}
+   777→      >
+   778→        {/* Brand */}
+   779→        <div className="flex items-center gap-3 px-4 h-14 border-b border-slate-700/50 shrink-0">
+   780→          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0 shadow-lg shadow-emerald-900/40">
+   781→            <svg viewBox="0 0 40 40" className="w-5 h-5 text-white" fill="none">
+   782→              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
+   783→              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
+   784→            </svg>
+   785→          </div>
+   786→          <div className="overflow-hidden">
+   787→            <p className="font-bold text-sm leading-tight whitespace-nowrap tracking-tight">Nómina SV</p>
+   788→            <p className="text-[10px] text-slate-500 whitespace-nowrap">El Salvador</p>
+   789→          </div>
+   790→          <button onClick={onToggle} className="ml-auto lg:hidden text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors">
+   791→            <X className="h-5 w-5" />
+   792→          </button>
+   793→        </div>
+   794→
+   795→        {/* Navigation */}
+   796→        <ScrollArea className="flex-1 py-2 dark-scrollbar">
+   797→          <nav className="space-y-0.5 px-2">
+   798→            {/* Dashboard link at top */}
+   799→            <button
+   800→              onClick={() => { onNavigate('dashboard'); if (window.innerWidth < 1024) onToggle(); }}
+   801→              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-sm transition-all mb-2 ${
+   802→                currentView === 'dashboard'
+   803→                  ? 'bg-emerald-600/20 text-emerald-400 font-medium'
+   804→                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+   805→              }`}
+   806→            >
+   807→              <LayoutDashboard className={`h-4 w-4 ${currentView === 'dashboard' ? 'text-emerald-400' : 'text-slate-500'}`} />
+   808→              <span>Dashboard</span>
+   809→              {currentView === 'dashboard' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+   810→            </button>
+   811→
+   812→            {NAV_GROUPS.map(group => {
+   813→              const visibleItems = getVisibleItems(group, user.rol);
+   814→              if (visibleItems.length === 0) return null;
+   815→
+   816→              const isExpanded = expandedGroups.has(group.title);
+   817→              const GroupIcon = group.icon;
+   818→
+   819→              return (
+   820→                <div key={group.title}>
+   821→                  <button
+   822→                    onClick={() => toggleGroup(group.title)}
+   823→                    className="flex items-center gap-2 w-full px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-300 transition-colors rounded-md hover:bg-slate-800/30"
+   824→                  >
+   825→                    <GroupIcon className="h-3 w-3" />
+   826→                    <span className="truncate flex-1 text-left">{group.title}</span>
+   827→                    <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+   828→                  </button>
+   829→
+   830→                  <div className={`overflow-hidden transition-all duration-200 ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+   831→                    <div className="space-y-0.5 mt-0.5 mb-1.5">
+   832→                      {visibleItems.map(item => {
+   833→                        const isActive = currentView === item.id;
+   834→                        const ItemIcon = item.icon;
+   835→                        return (
+   836→                          <button
+   837→                            key={item.id}
+   838→                            onClick={() => {
+   839→                              onNavigate(item.id);
+   840→                              if (window.innerWidth < 1024) onToggle();
+   841→                            }}
+   842→                            className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-all relative group/item ${
+   843→                              isActive
+   844→                                ? 'bg-emerald-600/20 text-emerald-400 font-medium'
+   845→                                : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
+   846→                            }`}
+   847→                          >
+   848→                            {isActive && (
+   849→                              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-emerald-400 rounded-r-full" />
+   850→                            )}
+   851→                            <ItemIcon className={`h-4 w-4 transition-colors ${isActive ? 'text-emerald-400' : 'text-slate-600 group-hover/item:text-slate-400'}`} />
+   852→                            <span>{item.label}</span>
+   853→                            {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+   854→                          </button>
+   855→                        );
+   856→                      })}
+   857→                    </div>
+   858→                  </div>
+   859→                </div>
+   860→              );
+   861→            })}
+   862→          </nav>
+   863→        </ScrollArea>
+   864→
+   865→        {/* User info at bottom */}
+   866→        <div className="border-t border-slate-700/50 p-3 shrink-0">
+   867→          <div className="flex items-center gap-2.5">
+   868→            <Avatar className="h-9 w-9 bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0">
+   869→              <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-xs font-semibold">
+   870→                {user.nombre[0]}{user.apellido[0]}
+   871→              </AvatarFallback>
+   872→            </Avatar>
+   873→            <div className="overflow-hidden flex-1 min-w-0">
+   874→              <p className="text-sm font-medium truncate">{user.nombre} {user.apellido}</p>
+   875→              <div className="flex items-center gap-1">
+   876→                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+   877→                <p className="text-[10px] text-slate-400 truncate">{user.rol}</p>
+   878→              </div>
+   879→            </div>
+   880→          </div>
+   881→        </div>
+   882→      </aside>
+   883→    </>
+   884→  );
+   885→}
+   886→
+   887→// ============================================================
+   888→// TOP HEADER BAR
+   889→// ============================================================
+   890→interface HeaderBarProps {
+   891→  user: UserData;
+   892→  currentView: ViewId;
+   893→  accessToken: string | null;
+   894→  onToggleSidebar: () => void;
+   895→  onLogout: () => void;
+   896→  onNavigate?: (viewId: ViewId) => void;
+   897→}
+   898→
+   899→function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onLogout, onNavigate }: HeaderBarProps) {
+   900→  const { toast } = useToast();
+   901→  const [showChangePassword, setShowChangePassword] = useState(false);
+   902→  const { theme, setTheme } = useTheme();
+   903→
+   904→  const handleLogout = async () => {
+   905→    try {
+   906→      await fetch('/api/auth/logout', { method: 'POST' });
+   907→    } catch {
+   908→      // ignore
+   909→    }
+   910→    onLogout();
+   911→  };
+   912→
+   913→  return (
+   914→    <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-700/50 shadow-sm dark:shadow-slate-900/50 flex items-center px-4 gap-3 shrink-0 z-30">
+   915→      {/* Mobile menu toggle */}
+   916→      <button
+   917→        onClick={onToggleSidebar}
+   918→        className="lg:hidden text-slate-600 hover:text-slate-900 p-1 rounded-md hover:bg-slate-100 transition-colors"
+   919→      >
+   920→        <Menu className="h-5 w-5" />
+   921→      </button>
+   922→
+   923→      {/* Desktop sidebar toggle */}
+   924→      <TooltipProvider>
+   925→        <Tooltip>
+   926→          <TooltipTrigger asChild>
+   927→            <button
+   928→              onClick={onToggleSidebar}
+   929→              className="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+   930→            >
+   931→              <Menu className="h-4 w-4" />
+   932→            </button>
+   933→          </TooltipTrigger>
+   934→          <TooltipContent>Alternar menú</TooltipContent>
+   935→        </Tooltip>
+   936→      </TooltipProvider>
+   937→
+   938→      {/* Breadcrumb / Current view name */}
+   939→      <div className="flex-1 min-w-0">
+   940→        <div className="flex items-center gap-2">
+   941→          <h2 className="text-sm font-semibold text-slate-900 truncate">
+   942→            {VIEW_LABELS[currentView] || 'Dashboard'}
+   943→          </h2>
+   944→          {currentView !== 'dashboard' && (
+   945→            <Badge variant="secondary" className="text-[9px] shrink-0 bg-slate-100 text-slate-500">
+   946→              {currentView}
+   947→            </Badge>
+   948→          )}
+   949→        </div>
+   950→      </div>
+   951→
+   952→      {/* Dark mode toggle */}
+   953→      <TooltipProvider>
+   954→        <Tooltip>
+   955→          <TooltipTrigger asChild>
+   956→            <button
+   957→              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+   958→              className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+   959→              aria-label="Cambiar tema"
+   960→            >
+   961→              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+   962→              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+   963→            </button>
+   964→          </TooltipTrigger>
+   965→          <TooltipContent>{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</TooltipContent>
+   966→        </Tooltip>
+   967→      </TooltipProvider>
+   968→
+   969→      {/* Notification bell */}
+   970→      <NotificationBell accessToken={accessToken} onNavigate={onNavigate} />
+   971→
+   972→      {/* User dropdown */}
+   973→      <DropdownMenu>
+   974→        <DropdownMenuTrigger asChild>
+   975→          <button className="flex items-center gap-2 hover:bg-slate-50 rounded-lg px-2 py-1.5 transition-colors">
+   976→            <Avatar className="h-8 w-8">
+   977→              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs font-medium">
+   978→                {user.nombre[0]}{user.apellido[0]}
+   979→              </AvatarFallback>
+   980→            </Avatar>
+   981→            <div className="hidden sm:block text-left">
+   982→              <p className="text-sm font-medium text-slate-700 leading-tight">{user.nombre} {user.apellido}</p>
+   983→              <p className="text-[10px] text-slate-400 leading-tight">{user.rol}</p>
+   984→            </div>
+   985→            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+   986→          </button>
+   987→        </DropdownMenuTrigger>
+   988→        <DropdownMenuContent align="end" className="w-56">
+   989→          <div className="px-2 py-1.5">
+   990→            <p className="text-sm font-medium">{user.nombre} {user.apellido}</p>
+   991→            <p className="text-xs text-slate-500">{user.email}</p>
+   992→          </div>
+   993→          <DropdownMenuSeparator />
+   994→          <DropdownMenuItem onClick={() => toast({ title: 'Perfil', description: 'Módulo de perfil en desarrollo' })}>
+   995→            <User className="mr-2 h-4 w-4" />
+   996→            Mi Perfil
+   997→          </DropdownMenuItem>
+   998→          <DropdownMenuItem onClick={() => setShowChangePassword(true)}>
+   999→            <Lock className="mr-2 h-4 w-4" />
+  1000→            Cambiar Contraseña
+  1001→          </DropdownMenuItem>
+  1002→          <DropdownMenuSeparator />
+  1003→          <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
+  1004→            <LogOut className="mr-2 h-4 w-4" />
+  1005→            Cerrar Sesión
+  1006→          </DropdownMenuItem>
+  1007→        </DropdownMenuContent>
+  1008→      </DropdownMenu>
+  1009→
+  1010→      <ChangePasswordDialog
+  1011→        open={showChangePassword}
+  1012→        onOpenChange={setShowChangePassword}
+  1013→        accessToken={accessToken}
+  1014→      />
+  1015→    </header>
+  1016→  );
+  1017→}
+  1018→
+  1019→// ============================================================
+  1020→// DASHBOARD / WELCOME VIEW
+  1021→// ============================================================
+  1022→
+  1023→// Mock payroll trend data for the bar chart
+  1024→const PAYROLL_TREND_DATA = [
+  1025→  { month: 'Ene', value: 45200 },
+  1026→  { month: 'Feb', value: 43800 },
+  1027→  { month: 'Mar', value: 47100 },
+  1028→  { month: 'Abr', value: 46500 },
+  1029→  { month: 'May', value: 48900 },
+  1030→  { month: 'Jun', value: 50200 },
+  1031→  { month: 'Jul', value: 49800 },
+  1032→  { month: 'Ago', value: 51300 },
+  1033→  { month: 'Sep', value: 52600 },
+  1034→  { month: 'Oct', value: 54100 },
+  1035→  { month: 'Nov', value: 53800 },
+  1036→  { month: 'Dic', value: 55400 },
+  1037→];
+  1038→
+  1039→// Mock area distribution data
+  1040→const AREA_DISTRIBUTION_DATA = [
+  1041→  { name: 'Administración', count: 12, color: 'bg-teal-500' },
+  1042→  { name: 'Ventas', count: 18, color: 'bg-emerald-500' },
+  1043→  { name: 'Tecnología', count: 15, color: 'bg-cyan-500' },
+  1044→  { name: 'Recursos Humanos', count: 8, color: 'bg-amber-500' },
+  1045→  { name: 'Finanzas', count: 10, color: 'bg-violet-500' },
+  1046→  { name: 'Operaciones', count: 14, color: 'bg-rose-500' },
+  1047→];
+  1048→
+  1049→// Mock announcements
+  1050→const MOCK_ANNOUNCEMENTS = [
+  1051→  { id: '1', title: 'Cierre de nómina febrero 2025', message: 'El plazo para el cierre de nómina del mes de febrero finaliza el 28 de febrero. Asegúrese de registrar todas las incidencias.', severity: 'high' as const, date: '2025-02-20', icon: CalendarDays },
+  1052→  { id: '2', title: 'Actualización de parámetros ISSS', message: 'Se han actualizado los topes de cotización ISSS según la última resolución vigente.', severity: 'info' as const, date: '2025-02-15', icon: Info },
+  1053→  { id: '3', title: 'Mantenimiento programado', message: 'El sistema estará en mantenimiento el próximo sábado de 02:00 a 06:00 AM. Guarde sus cambios antes de esa hora.', severity: 'warning' as const, date: '2025-02-18', icon: AlertTriangle },
+  1054→];
+  1055→
+  1056→// Enhanced sparkline bars component for KPI cards (3-5 small bars showing trend)
+  1057→function SparklineBars({ trend, color }: { trend: 'up' | 'down' | 'neutral'; color: string }) {
+  1058→  const heights = trend === 'up' ? [4, 6, 5, 8, 7, 10] : trend === 'down' ? [10, 7, 8, 5, 6, 4] : [6, 7, 6, 7, 6, 7];
+  1059→  return (
+  1060→    <div className="flex items-end gap-[3px] h-4">
+  1061→      {heights.map((h, i) => (
+  1062→        <div
+  1063→          key={i}
+  1064→          className={`w-1.5 rounded-sm ${color}`}
+  1065→          style={{ height: `${h}px`, opacity: 0.3 + (i / heights.length) * 0.7 }}
+  1066→        />
+  1067→      ))}
+  1068→    </div>
+  1069→  );
+  1070→}
+  1071→
+  1072→// Time-of-day greeting helper
+  1073→function getGreeting(): string {
+  1074→  const hour = new Date().getHours();
+  1075→  if (hour < 12) return 'Buenos días';
+  1076→  if (hour < 18) return 'Buenas tardes';
+  1077→  return 'Buenas noches';
+  1078→}
+  1079→
+  1080→// Get Spanish formatted date
+  1081→function getSpanishDate(): string {
+  1082→  return new Date().toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  1083→}
+  1084→
+  1085→// Get motivational message based on compliance level
+  1086→function getMotivationalMessage(compliance: number | undefined): string {
+  1087→  if (!compliance || compliance >= 90) return 'Cumplimiento laboral excelente. Continúe manteniendo los estándares del Código de Trabajo.';
+  1088→  if (compliance >= 70) return 'Buen nivel de cumplimiento. Revise los elementos pendientes para alcanzar la conformidad total.';
+  1089→  if (compliance >= 50) return 'Atención: Hay obligaciones laborales pendientes. Priorice los vencimientos próximos.';
+  1090→  return 'Alerta: Cumplimiento por debajo del mínimo. Acción inmediata requerida según legislación salvadoreña.';
+  1091→}
+  1092→
+  1093→// Audit action-specific icons (create=plus, update=pencil, delete=trash, login=key)
+  1094→function getEnhancedAuditIcon(accion: string) {
+  1095→  const upper = accion.toUpperCase();
+  1096→  if (upper.includes('LOGIN') || upper.includes('AUTH')) return <KeyRound className="h-4 w-4" />;
+  1097→  if (upper.includes('CREATE') || upper.includes('INSERT')) return <Plus className="h-4 w-4" />;
+  1098→  if (upper.includes('UPDATE') || upper.includes('EDIT') || upper.includes('MODIFY')) return <FileText className="h-4 w-4" />;
+  1099→  if (upper.includes('DELETE') || upper.includes('REMOVE')) return <AlertCircle className="h-4 w-4" />;
+  1100→  if (upper.includes('APPROVE') || upper.includes('APROBAR')) return <CheckCircle className="h-4 w-4" />;
+  1101→  return <ScrollText className="h-4 w-4" />;
+  1102→}
+  1103→
+  1104→// Enhanced audit color-coding by severity level
+  1105→function getEnhancedAuditColor(nivel: string) {
+  1106→  if (nivel === 'ALTA') return 'text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-400 ring-1 ring-red-200 dark:ring-red-800';
+  1107→  if (nivel === 'MEDIA') return 'text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400 ring-1 ring-amber-200 dark:ring-amber-800';
+  1108→  return 'text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 ring-1 ring-teal-200 dark:ring-teal-800';
+  1109→}
+  1110→
+  1111→function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; accessToken: string | null; onNavigate: (view: ViewId) => void }) {
+  1112→  const [dashboardData, setDashboardData] = useState<{
+  1113→    total_empleados_activos: number;
+  1114→    nomina_mes: number;
+  1115→    cumplimiento_previsional: number;
+  1116→    semaforo: string;
+  1117→    cumplimientos: { nombre: string; presentado: boolean; peso: number }[];
+  1118→    vencimientos: { nombre: string; fecha: string; dias: number }[];
+  1119→  } | null>(null);
+  1120→  const [totalPerfiles, setTotalPerfiles] = useState(0);
+  1121→  const [auditEntries, setAuditEntries] = useState<Array<{
+  1122→    id: string;
+  1123→    accion: string;
+  1124→    tabla_afectada: string | null;
+  1125→    fecha_accion: string;
+  1126→    nivel_criticidad: string;
+  1127→    usuario_email: string | null;
+  1128→    usuario: { nombre: string; apellido: string } | null;
+  1129→  }>>([]);
+  1130→  const [loading, setLoading] = useState(true);
+  1131→
+  1132→  // System stats state
+  1133→  const [planillasCount, setPlanillasCount] = useState(0);
+  1134→  const [incidenciasCount, setIncidenciasCount] = useState(0);
+  1135→  const [usuariosActivos, setUsuariosActivos] = useState(0);
+  1136→  const [areaDistribution, setAreaDistribution] = useState(AREA_DISTRIBUTION_DATA);
+  1137→  const [statsLoading, setStatsLoading] = useState(true);
+  1138→  const [lastPayrollDate, setLastPayrollDate] = useState<string>('');
+  1139→  const [nextDeadlineDate, setNextDeadlineDate] = useState<string>('');
+  1140→
+  1141→  useEffect(() => {
+  1142→    if (!accessToken) return;
+  1143→    const fetchData = async () => {
+  1144→      try {
+  1145→        const headers = { Authorization: `Bearer ${accessToken}` };
+  1146→        const [dashRes, perfilesRes, auditRes] = await Promise.all([
+  1147→          fetch('/api/nomina/dashboard', { headers }),
+  1148→          fetch('/api/perfiles-puesto', { headers }),
+  1149→          fetch('/api/admin/bitacora?page=1&page_size=5', { headers }),
+  1150→        ]);
+  1151→        if (dashRes.ok) {
+  1152→          const dashData = await dashRes.json();
+  1153→          setDashboardData(dashData.kpis);
+  1154→          // Extract next deadline from vencimientos
+  1155→          if (dashData.kpis?.vencimientos?.length > 0) {
+  1156→            const sorted = [...dashData.kpis.vencimientos].sort((a: { dias: number }, b: { dias: number }) => a.dias - b.dias);
+  1157→            const next = sorted.find((v: { dias: number }) => v.dias > 0);
+  1158→            if (next) setNextDeadlineDate(next.fecha);
+  1159→          }
+  1160→        }
+  1161→        if (perfilesRes.ok) {
+  1162→          const perfData = await perfilesRes.json();
+  1163→          setTotalPerfiles(perfData.data?.length || 0);
+  1164→        }
+  1165→        if (auditRes.ok) {
+  1166→          const auditData = await auditRes.json();
+  1167→          setAuditEntries(auditData.entries || []);
+  1168→        }
+  1169→      } catch (err) {
+  1170→        console.error('Error fetching dashboard data:', err);
+  1171→      } finally {
+  1172→        setLoading(false);
+  1173→      }
+  1174→    };
+  1175→    fetchData();
+  1176→  }, [accessToken]);
+  1177→
+  1178→  // Fetch system stats
+  1179→  useEffect(() => {
+  1180→    if (!accessToken) return;
+  1181→    const fetchStats = async () => {
+  1182→      try {
+  1183→        const headers = { Authorization: `Bearer ${accessToken}` };
+  1184→        const [planillasRes, incidenciasRes, usuariosRes, empleadosRes] = await Promise.all([
+  1185→          fetch('/api/nomina/planillas?limit=50', { headers }).catch(() => null),
+  1186→          fetch('/api/incidencias', { headers }).catch(() => null),
+  1187→          fetch('/api/usuarios', { headers }).catch(() => null),
+  1188→          fetch('/api/empleados?page=1&pageSize=100', { headers }).catch(() => null),
+  1189→        ]);
+  1190→
+  1191→        if (planillasRes?.ok) {
+  1192→          const data = await planillasRes.json();
+  1193→          const now = new Date();
+  1194→          const currentMonth = now.getMonth();
+  1195→          const currentYear = now.getFullYear();
+  1196→          const planillas = data.data || data.planillas || data || [];
+  1197→          const thisMonth = Array.isArray(planillas)
+  1198→            ? planillas.filter((p: { fecha_creacion?: string; fecha?: string; periodo?: string }) => {
+  1199→                const d = new Date(p.fecha_creacion || p.fecha || p.periodo || '');
+  1200→                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  1201→              })
+  1202→            : [];
+  1203→          setPlanillasCount(thisMonth.length || (Array.isArray(planillas) ? planillas.length : 0));
+  1204→          // Get last payroll date
+  1205→          if (Array.isArray(planillas) && planillas.length > 0) {
+  1206→            const sorted = [...planillas].sort((a: { fecha_creacion?: string; fecha?: string }, b: { fecha_creacion?: string; fecha?: string }) => {
+  1207→              const da = new Date(a.fecha_creacion || a.fecha || '');
+  1208→              const db = new Date(b.fecha_creacion || b.fecha || '');
+  1209→              return db.getTime() - da.getTime();
+  1210→            });
+  1211→            const lastDate = sorted[0]?.fecha_creacion || sorted[0]?.fecha;
+  1212→            if (lastDate) setLastPayrollDate(lastDate);
+  1213→          }
+  1214→        }
+  1215→
+  1216→        if (incidenciasRes?.ok) {
+  1217→          const data = await incidenciasRes.json();
+  1218→          const incidencias = data.data || data.incidencias || data || [];
+  1219→          if (Array.isArray(incidencias)) {
+  1220→            const pending = incidencias.filter((inc: { estado?: string }) =>
+  1221→              inc.estado === 'PENDIENTE' || inc.estado === 'pendiente' || inc.estado === 'Pendiente'
+  1222→            );
+  1223→            setIncidenciasCount(pending.length || incidencias.length);
+  1224→          }
+  1225→        }
+  1226→
+  1227→        if (usuariosRes?.ok) {
+  1228→          const data = await usuariosRes.json();
+  1229→          const usuarios = data.data || data.usuarios || data || [];
+  1230→          if (Array.isArray(usuarios)) {
+  1231→            const active = usuarios.filter((u: { activo?: boolean; estado?: string }) =>
+  1232→              u.activo === true || u.activo === 1 || u.estado === 'ACTIVO'
+  1233→            );
+  1234→            setUsuariosActivos(active.length || usuarios.length);
+  1235→          }
+  1236→        }
+  1237→
+  1238→        if (empleadosRes?.ok) {
+  1239→          const data = await empleadosRes.json();
+  1240→          const empleados = data.data || data.empleados || data || [];
+  1241→          if (Array.isArray(empleados) && empleados.length > 0) {
+  1242→            const areaMap: Record<string, number> = {};
+  1243→            empleados.forEach((emp: { area?: string; departamento?: string; seccion?: string }) => {
+  1244→              const areaName = emp.area || emp.departamento || emp.seccion || 'Sin Área';
+  1245→              areaMap[areaName] = (areaMap[areaName] || 0) + 1;
+  1246→            });
+  1247→            const colors = ['bg-teal-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-amber-500', 'bg-violet-500', 'bg-rose-500', 'bg-lime-500', 'bg-orange-500'];
+  1248→            const distEntries = Object.entries(areaMap)
+  1249→              .sort(([, a], [, b]) => b - a)
+  1250→              .slice(0, 8)
+  1251→              .map(([name, count], i) => ({
+  1252→                name,
+  1253→                count,
+  1254→                color: colors[i % colors.length],
+  1255→              }));
+  1256→            if (distEntries.length > 0) {
+  1257→              setAreaDistribution(distEntries);
+  1258→            }
+  1259→          }
+  1260→        }
+  1261→      } catch (err) {
+  1262→        console.error('Error fetching system stats:', err);
+  1263→      } finally {
+  1264→        setStatsLoading(false);
+  1265→      }
+  1266→    };
+  1267→    fetchStats();
+  1268→  }, [accessToken]);
+  1269→
+  1270→  // Enhanced KPI data with gradient borders, sparklines and change indicators
+  1271→  const kpis = [
+  1272→    {
+  1273→      label: 'Empleados Activos',
+  1274→      value: dashboardData?.total_empleados_activos ?? 0,
+  1275→      icon: Users,
+  1276→      color: 'text-teal-600 dark:text-teal-400',
+  1277→      bg: 'bg-teal-50 dark:bg-teal-900/30',
+  1278→      gradient: 'from-teal-50/80 to-white dark:from-teal-950/40 dark:to-slate-900',
+  1279→      borderAccent: 'border-l-teal-500',
+  1280→      sparkColor: 'bg-teal-500',
+  1281→      trend: 'up' as const,
+  1282→      change: '+3.2%',
+  1283→      changeLabel: 'vs mes anterior',
+  1284→    },
+  1285→    {
+  1286→      label: 'Perfiles de Puesto',
+  1287→      value: totalPerfiles,
+  1288→      icon: Briefcase,
+  1289→      color: 'text-emerald-600 dark:text-emerald-400',
+  1290→      bg: 'bg-emerald-50 dark:bg-emerald-900/30',
+  1291→      gradient: 'from-emerald-50/80 to-white dark:from-emerald-950/40 dark:to-slate-900',
+  1292→      borderAccent: 'border-l-emerald-500',
+  1293→      sparkColor: 'bg-emerald-500',
+  1294→      trend: 'up' as const,
+  1295→      change: '+1.5%',
+  1296→      changeLabel: 'vs mes anterior',
+  1297→    },
+  1298→    {
+  1299→      label: 'Nómina del Mes',
+  1300→      value: dashboardData?.nomina_mes ? `$${dashboardData.nomina_mes.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00',
+  1301→      icon: Calculator,
+  1302→      color: 'text-cyan-600 dark:text-cyan-400',
+  1303→      bg: 'bg-cyan-50 dark:bg-cyan-900/30',
+  1304→      gradient: 'from-cyan-50/80 to-white dark:from-cyan-950/40 dark:to-slate-900',
+  1305→      borderAccent: 'border-l-cyan-500',
+  1306→      sparkColor: 'bg-cyan-500',
+  1307→      trend: 'up' as const,
+  1308→      change: '+2.5%',
+  1309→      changeLabel: 'vs mes anterior',
+  1310→    },
+  1311→    {
+  1312→      label: 'Cumplimiento',
+  1313→      value: dashboardData ? `${dashboardData.cumplimiento_previsional}%` : '0%',
+  1314→      icon: Shield,
+  1315→      color: 'text-amber-600 dark:text-amber-400',
+  1316→      bg: 'bg-amber-50 dark:bg-amber-900/30',
+  1317→      gradient: 'from-amber-50/80 to-white dark:from-amber-950/40 dark:to-slate-900',
+  1318→      borderAccent: 'border-l-amber-500',
+  1319→      sparkColor: 'bg-amber-500',
+  1320→      trend: (dashboardData?.cumplimiento_previsional ?? 0) >= 80 ? 'up' as const : 'down' as const,
+  1321→      change: dashboardData && dashboardData.cumplimiento_previsional >= 80 ? '+5.0%' : '-2.3%',
+  1322→      changeLabel: 'vs mes anterior',
+  1323→    },
+  1324→  ];
+  1325→
+  1326→  // Enhanced quick actions with gradient icon backgrounds and count summaries
+  1327→  const quickActions: Array<{ label: string; desc: string; icon: React.ElementType; color: string; bg: string; gradientBg: string; viewId: ViewId; roles: UserRole[]; count?: string }> = [
+  1328→    { label: 'Directorio Empleados', desc: 'Buscar y gestionar empleados', icon: Users, color: 'text-teal-700 dark:text-teal-300', bg: 'bg-teal-50', gradientBg: 'bg-gradient-to-br from-teal-400 to-teal-600', viewId: '02-01', roles: ['ADMIN', 'ANALISTA', 'AUDITOR'], count: `${dashboardData?.total_empleados_activos ?? 0} activos` },
+  1329→    { label: 'Dashboard Nómina', desc: 'Ver resumen de nómina', icon: LayoutDashboard, color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50', gradientBg: 'bg-gradient-to-br from-emerald-400 to-emerald-600', viewId: '04-01', roles: ['ADMIN', 'ANALISTA', 'GERENCIA', 'AUDITOR'], count: `${planillasCount} planillas` },
+  1330→    { label: 'Calcular Nómina', desc: 'Iniciar cálculo del período', icon: Calculator, color: 'text-cyan-700 dark:text-cyan-300', bg: 'bg-cyan-50', gradientBg: 'bg-gradient-to-br from-cyan-400 to-cyan-600', viewId: '04-03', roles: ['ADMIN', 'ANALISTA'] },
+  1331→    { label: 'Aprobar Nómina', desc: 'Revisar y aprobar nóminas', icon: CheckCircle, color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-50', gradientBg: 'bg-gradient-to-br from-amber-400 to-amber-600', viewId: '04-04', roles: ['ADMIN', 'APROBADOR'], count: incidenciasCount > 0 ? `${incidenciasCount} pendientes` : undefined },
+  1332→    { label: 'Gestionar Usuarios', desc: 'Crear, editar y desactivar', icon: Users, color: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50', gradientBg: 'bg-gradient-to-br from-rose-400 to-rose-600', viewId: '01-03', roles: ['ADMIN'], count: `${usuariosActivos} activos` },
+  1333→    { label: 'Reportes', desc: 'Planillas ISSS, AFP, ISR', icon: BarChart3, color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50', gradientBg: 'bg-gradient-to-br from-violet-400 to-violet-600', viewId: '05-01', roles: ['ADMIN', 'GERENCIA', 'AUDITOR'] },
+  1334→    { label: 'Mi Portal', desc: 'Vacaciones, recibos, solicitudes', icon: Eye, color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50', gradientBg: 'bg-gradient-to-br from-emerald-400 to-emerald-600', viewId: '06-05', roles: ['EMPLEADO'] },
+  1335→  ];
+  1336→
+  1337→  const visibleActions = quickActions.filter(a => a.roles.includes(user.rol));
+  1338→
+  1339→  // System health status items
+  1340→  const systemHealthItems = [
+  1341→    {
+  1342→      label: 'Estado del Sistema',
+  1343→      value: 'Operativo',
+  1344→      statusColor: 'bg-emerald-500',
+  1345→      statusGlow: 'shadow-emerald-500/50',
+  1346→      icon: <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+  1347→      iconBg: 'bg-emerald-100 dark:bg-emerald-900/40',
+  1348→    },
+  1349→    {
+  1350→      label: 'Usuarios Activos',
+  1351→      value: statsLoading ? '...' : `${usuariosActivos}`,
+  1352→      statusColor: 'bg-emerald-500',
+  1353→      statusGlow: 'shadow-emerald-500/50',
+  1354→      icon: <Users className="h-4 w-4 text-teal-600 dark:text-teal-400" />,
+  1355→      iconBg: 'bg-teal-100 dark:bg-teal-900/40',
+  1356→    },
+  1357→    {
+  1358→      label: 'Última Nómina',
+  1359→      value: lastPayrollDate ? new Date(lastPayrollDate).toLocaleDateString('es-SV', { day: '2-digit', month: 'short' }) : 'N/A',
+  1360→      statusColor: lastPayrollDate ? 'bg-emerald-500' : 'bg-amber-500',
+  1361→      statusGlow: lastPayrollDate ? 'shadow-emerald-500/50' : 'shadow-amber-500/50',
+  1362→      icon: <CalendarDays className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />,
+  1363→      iconBg: 'bg-cyan-100 dark:bg-cyan-900/40',
+  1364→    },
+  1365→    {
+  1366→      label: 'Próximo Vencimiento',
+  1367→      value: nextDeadlineDate ? new Date(nextDeadlineDate).toLocaleDateString('es-SV', { day: '2-digit', month: 'short' }) : 'N/A',
+  1368→      statusColor: dashboardData?.vencimientos?.some((v: { dias: number }) => v.dias <= 5) ? 'bg-red-500' : 'bg-emerald-500',
+  1369→      statusGlow: dashboardData?.vencimientos?.some((v: { dias: number }) => v.dias <= 5) ? 'shadow-red-500/50' : 'shadow-emerald-500/50',
+  1370→      icon: <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
+  1371→      iconBg: 'bg-amber-100 dark:bg-amber-900/40',
+  1372→    },
+  1373→  ];
+  1374→
+  1375→  // Compute bar chart values
+  1376→  const maxValue = Math.max(...PAYROLL_TREND_DATA.map(d => d.value));
+  1377→
+  1378→  // Compute area total
+  1379→  const areaTotal = areaDistribution.reduce((sum, a) => sum + a.count, 0);
+  1380→
+  1381→  // Announcement severity styles
+  1382→  const getSeverityStyle = (severity: string) => {
+  1383→    switch (severity) {
+  1384→      case 'high': return 'border-l-red-500 bg-red-50/50 dark:bg-red-950/20';
+  1385→      case 'warning': return 'border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20';
+  1386→      case 'info': return 'border-l-teal-500 bg-teal-50/50 dark:bg-teal-950/20';
+  1387→      default: return 'border-l-slate-400 bg-slate-50/50 dark:bg-slate-800/50';
+  1388→    }
+  1389→  };
+  1390→
+  1391→  const getSeverityIcon = (severity: string) => {
+  1392→    switch (severity) {
+  1393→      case 'high': return <AlertCircle className="h-4 w-4 text-red-500" />;
+  1394→      case 'warning': return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+  1395→      case 'info': return <Info className="h-4 w-4 text-teal-500" />;
+  1396→      default: return <Bell className="h-4 w-4 text-slate-400" />;
+  1397→    }
+  1398→  };
+  1399→
+  1400→  const getSeverityBadge = (severity: string) => {
+  1401→    switch (severity) {
+  1402→      case 'high': return <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[10px]">Urgente</Badge>;
+  1403→      case 'warning': return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-[10px]">Precaución</Badge>;
+  1404→      case 'info': return <Badge className="bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300 text-[10px]">Informativo</Badge>;
+  1405→      default: return <Badge className="bg-slate-100 text-slate-700 text-[10px]">Normal</Badge>;
+  1406→    }
+  1407→  };
+  1408→
+  1409→  // Urgency color for vencimientos countdown
+  1410→  const getUrgencyClasses = (dias: number) => {
+  1411→    if (dias <= 3) return { bg: 'bg-gradient-to-r from-red-50 to-red-100/50 dark:from-red-950/30 dark:to-red-900/20', border: 'border-red-200 dark:border-red-800', text: 'text-red-600 dark:text-red-400', countdown: 'text-red-600 dark:text-red-400', dot: 'bg-red-500' };
+  1412→    if (dias <= 7) return { bg: 'bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20', border: 'border-amber-200 dark:border-amber-800', text: 'text-amber-600 dark:text-amber-400', countdown: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-500' };
+  1413→    return { bg: 'bg-gradient-to-r from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800', text: 'text-emerald-600 dark:text-emerald-400', countdown: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' };
+  1414→  };
+  1415→
+  1416→  // Greeting and date
+  1417→  const greeting = getGreeting();
+  1418→  const todayFormatted = getSpanishDate();
+  1419→  const motivationalMsg = getMotivationalMessage(dashboardData?.cumplimiento_previsional);
+  1420→
+  1421→  return (
+  1422→    <div className="space-y-6 stagger-children">
+  1423→      {/* ═══════════════════════════════════════════════════════════
+  1424→          1. ENHANCED WELCOME BANNER - Time-based greeting, Spanish date, motivational message, gradient
+  1425→          ═══════════════════════════════════════════════════════════ */}
+  1426→      <div className="relative rounded-xl overflow-hidden shadow-lg animate-fade-in">
+  1427→        {/* Gradient background */}
+  1428→        <div className="absolute inset-0 bg-gradient-to-br from-emerald-700 via-teal-600 to-emerald-800" />
+  1429→        {/* Decorative shapes */}
+  1430→        <div className="absolute top-0 right-0 w-72 h-72 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3 animate-float" />
+  1431→        <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+  1432→        <div className="absolute top-1/2 right-1/4 w-20 h-20 bg-white/[0.03] rounded-lg rotate-12 animate-float" style={{ animationDelay: '2s' }} />
+  1433→        <div className="absolute top-1/4 left-1/3 w-10 h-10 bg-white/[0.04] rounded-full animate-float" style={{ animationDelay: '0.5s' }} />
+  1434→        {/* Shimmer overlay */}
+  1435→        <div className="absolute inset-0 animate-shimmer opacity-20" />
+  1436→        {/* Content */}
+  1437→        <div className="relative z-10 p-6 sm:p-8">
+  1438→          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+  1439→            <div>
+  1440→              <p className="text-emerald-200 text-sm font-medium mb-1">{greeting}</p>
+  1441→              <h1 className="text-2xl sm:text-3xl font-bold text-white">
+  1442→                {user.nombre} {user.apellido}
+  1443→              </h1>
+  1444→              <p className="text-emerald-100/80 mt-1 text-sm">
+  1445→                Sistema de Nómina y Perfiles de Puestos — República de El Salvador
+  1446→              </p>
+  1447→              <div className="flex flex-wrap items-center gap-2 mt-3">
+  1448→                <Badge variant="secondary" className="bg-white/15 text-white border-white/20 hover:bg-white/25 backdrop-blur-sm">
+  1449→                  <Shield className="h-3 w-3 mr-1" />
+  1450→                  {user.rol}
+  1451→                </Badge>
+  1452→                <Badge variant="secondary" className="bg-white/15 text-white border-white/20 hover:bg-white/25 backdrop-blur-sm">
+  1453→                  <CalendarDays className="h-3 w-3 mr-1" />
+  1454→                  {todayFormatted}
+  1455→                </Badge>
+  1456→              </div>
+  1457→            </div>
+  1458→            {/* Compliance indicator in banner */}
+  1459→            {dashboardData && (
+  1460→              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2.5 border border-white/10">
+  1461→                <div className={`w-3 h-3 rounded-full animate-pulse ${dashboardData.semaforo === 'verde' ? 'bg-emerald-400 shadow-lg shadow-emerald-400/50' : dashboardData.semaforo === 'amarillo' ? 'bg-amber-400 shadow-lg shadow-amber-400/50' : 'bg-red-400 shadow-lg shadow-red-400/50'}`} />
+  1462→                <div>
+  1463→                  <p className="text-xs text-white/70">Cumplimiento</p>
+  1464→                  <p className="text-lg font-bold text-white">{dashboardData.cumplimiento_previsional}%</p>
+  1465→                </div>
+  1466→              </div>
+  1467→            )}
+  1468→          </div>
+  1469→          {/* Motivational / legal compliance message */}
+  1470→          <div className="mt-4 p-3 rounded-lg bg-white/[0.08] backdrop-blur-sm border border-white/10">
+  1471→            <div className="flex items-start gap-2">
+  1472→              <Info className="h-4 w-4 text-emerald-200 shrink-0 mt-0.5" />
+  1473→              <p className="text-xs text-emerald-100/90 leading-relaxed">{motivationalMsg}</p>
+  1474→            </div>
+  1475→          </div>
+  1476→        </div>
+  1477→      </div>
+  1478→
+  1479→      {/* ═══════════════════════════════════════════════════════════
+  1480→          3. SYSTEM STATUS WIDGET - Health indicators with colored dots
+  1481→          ═══════════════════════════════════════════════════════════ */}
+  1482→      <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/80">
+  1483→        <CardContent className="p-4 sm:p-6">
+  1484→          <div className="flex items-center gap-2 mb-3">
+  1485→            <div className="p-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40">
+  1486→              <Shield className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+  1487→            </div>
+  1488→            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Estado del Sistema</h3>
+  1489→          </div>
+  1490→          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+  1491→            {systemHealthItems.map((item) => (
+  1492→              <div key={item.label} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/60 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50">
+  1493→                <div className={`p-2 rounded-lg ${item.iconBg} shrink-0`}>
+  1494→                  {item.icon}
+  1495→                </div>
+  1496→                <div className="min-w-0">
+  1497→                  <div className="flex items-center gap-1.5">
+  1498→                    <div className={`w-2 h-2 rounded-full ${item.statusColor} shadow-sm ${item.statusGlow} animate-pulse`} />
+  1499→                    {statsLoading && item.label !== 'Estado del Sistema' ? (
+  1500→                      <div className="h-4 w-12 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+  1501→                    ) : (
+  1502→                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{item.value}</p>
+  1503→                    )}
+  1504→                  </div>
+  1505→                  <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{item.label}</p>
+  1506→                </div>
+  1507→              </div>
+  1508→            ))}
+  1509→          </div>
+  1510→        </CardContent>
+  1511→      </Card>
+  1512→
+  1513→      {/* ═══════════════════════════════════════════════════════════
+  1514→          2. ENHANCED KPI CARDS - Gradient left border, sparkline bars, skeleton, change indicators
+  1515→          ═══════════════════════════════════════════════════════════ */}
+  1516→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+  1517→        {loading ? (
+  1518→          Array.from({ length: 4 }).map((_, i) => (
+  1519→            <Card key={i} className="shadow-sm border-l-4 border-l-slate-200 dark:border-l-slate-700">
+  1520→              <CardContent className="p-4 sm:p-6">
+  1521→                <div className="animate-pulse space-y-3">
+  1522→                  <div className="flex items-center justify-between">
+  1523→                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-20" />
+  1524→                    <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+  1525→                  </div>
+  1526→                  <div className="h-7 bg-slate-200 dark:bg-slate-700 rounded w-24" />
+  1527→                  <div className="flex items-center gap-2">
+  1528→                    <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-10" />
+  1529→                    <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-16" />
+  1530→                  </div>
+  1531→                </div>
+  1532→              </CardContent>
+  1533→            </Card>
+  1534→          ))
+  1535→        ) : (
+  1536→          kpis.map(kpi => (
+  1537→            <Card key={kpi.label} className={`shadow-sm card-hover-lift bg-gradient-to-br ${kpi.gradient} border-slate-200/60 dark:border-slate-700/40 border-l-4 ${kpi.borderAccent} transition-all duration-200 hover:shadow-md`}>
+  1538→              <CardContent className="p-4 sm:p-6">
+  1539→                <div className="flex items-center justify-between mb-2">
+  1540→                  <div className="flex items-center gap-2">
+  1541→                    <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">{kpi.label}</p>
+  1542→                    <SparklineBars trend={kpi.trend} color={kpi.sparkColor} />
+  1543→                  </div>
+  1544→                  <div className={`p-2 sm:p-2.5 rounded-xl ${kpi.bg} shrink-0 transition-transform duration-200 group-hover:scale-110`}>
+  1545→                    <kpi.icon className={`h-5 w-5 sm:h-5 sm:w-5 ${kpi.color}`} />
+  1546→                  </div>
+  1547→                </div>
+  1548→                <p className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 truncate">{kpi.value}</p>
+  1549→                <div className="flex items-center gap-1.5 mt-2">
+  1550→                  {kpi.trend === 'up' ? (
+  1551→                    <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+  1552→                  ) : kpi.trend === 'down' ? (
+  1553→                    <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+  1554→                  ) : null}
+  1555→                  <span className={`text-xs font-semibold ${kpi.trend === 'up' ? 'text-emerald-600 dark:text-emerald-400' : kpi.trend === 'down' ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
+  1556→                    {kpi.change}
+  1557→                  </span>
+  1558→                  <span className="text-[10px] text-slate-400 dark:text-slate-500">{kpi.changeLabel}</span>
+  1559→                </div>
+  1560→              </CardContent>
+  1561→            </Card>
+  1562→          ))
+  1563→        )}
+  1564→      </div>
+  1565→
+  1566→      {/* ═══════════════════════════════════════════════════════════
+  1567→          8. PAYROLL TREND CHART + AREA DISTRIBUTION MINI-CHART
+  1568→          ═══════════════════════════════════════════════════════════ */}
+  1569→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+  1570→        {/* Mini Payroll Trend Chart */}
+  1571→        <Card className="shadow-sm">
+  1572→          <CardHeader className="pb-3">
+  1573→            <CardTitle className="text-base flex items-center gap-2">
+  1574→              <BarChart3 className="h-4 w-4 text-emerald-500" />
+  1575→              Tendencia de Nómina
+  1576→            </CardTitle>
+  1577→            <CardDescription className="text-xs">Totales mensuales (últimos 12 meses)</CardDescription>
+  1578→          </CardHeader>
+  1579→          <CardContent>
+  1580→            <div className="relative h-44 sm:h-52">
+  1581→              {/* Grid lines */}
+  1582→              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+  1583→                {[...Array(5)].map((_, i) => (
+  1584→                  <div key={i} className="border-b border-slate-100 dark:border-slate-800 relative">
+  1585→                    <span className="absolute -left-0 -top-2.5 text-[9px] text-slate-400 dark:text-slate-500">
+  1586→                      {i === 0 ? '' : `$${Math.round(maxValue - (i * maxValue / 4)).toLocaleString()}`}
+  1587→                    </span>
+  1588→                  </div>
+  1589→                ))}
+  1590→              </div>
+  1591→              {/* Bars */}
+  1592→              <div className="absolute inset-0 flex items-end gap-1 sm:gap-1.5 pl-10 sm:pl-12 pb-5 pt-1">
+  1593→                {PAYROLL_TREND_DATA.map((item) => {
+  1594→                  const heightPct = (item.value / maxValue) * 100;
+  1595→                  return (
+  1596→                    <div key={item.month} className="flex-1 flex flex-col items-center justify-end h-full group">
+  1597→                      {/* Tooltip on hover */}
+  1598→                      <div className="opacity-0 group-hover:opacity-100 transition-opacity mb-1 text-[9px] font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow-sm border border-slate-100 dark:border-slate-700 whitespace-nowrap z-10">
+  1599→                        ${item.value.toLocaleString()}
+  1600→                      </div>
+  1601→                      <div
+  1602→                        className="w-full rounded-t-sm sm:rounded-t transition-all duration-200 group-hover:opacity-90"
+  1603→                        style={{
+  1604→                          height: `${heightPct}%`,
+  1605→                          background: `linear-gradient(to top, oklch(0.6 0.15 160), oklch(0.55 0.12 180))`,
+  1606→                          minHeight: '4px',
+  1607→                        }}
+  1608→                      />
+  1609→                      <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">{item.month}</span>
+  1610→                    </div>
+  1611→                  );
+  1612→                })}
+  1613→              </div>
+  1614→            </div>
+  1615→          </CardContent>
+  1616→        </Card>
+  1617→
+  1618→        {/* Area Distribution Visual */}
+  1619→        <Card className="shadow-sm">
+  1620→          <CardHeader className="pb-3">
+  1621→            <CardTitle className="text-base flex items-center gap-2">
+  1622→              <PieChart className="h-4 w-4 text-teal-500" />
+  1623→              Distribución por Área
+  1624→            </CardTitle>
+  1625→            <CardDescription className="text-xs">Empleados por departamento ({areaTotal} total)</CardDescription>
+  1626→          </CardHeader>
+  1627→          <CardContent className="space-y-4">
+  1628→            {/* Horizontal stacked bar */}
+  1629→            <div className="flex h-6 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+  1630→              {areaDistribution.map((area) => {
+  1631→                const pct = areaTotal > 0 ? (area.count / areaTotal) * 100 : 0;
+  1632→                return (
+  1633→                  <div
+  1634→                    key={area.name}
+  1635→                    className={`${area.color} transition-all duration-300 hover:opacity-80 relative group`}
+  1636→                    style={{ width: `${pct}%`, minWidth: pct > 0 ? '4px' : '0' }}
+  1637→                    title={`${area.name}: ${area.count} (${pct.toFixed(1)}%)`}
+  1638→                  >
+  1639→                    {pct > 12 && (
+  1640→                      <span className="absolute inset-0 flex items-center justify-center text-[8px] font-semibold text-white/90 truncate px-0.5">
+  1641→                        {pct.toFixed(0)}%
+  1642→                      </span>
+  1643→                    )}
+  1644→                  </div>
+  1645→                );
+  1646→              })}
+  1647→            </div>
+  1648→
+  1649→            {/* Legend with mini bars */}
+  1650→            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+  1651→              {areaDistribution.map((area) => {
+  1652→                const pct = areaTotal > 0 ? (area.count / areaTotal) * 100 : 0;
+  1653→                return (
+  1654→                  <div key={area.name} className="flex items-center gap-2">
+  1655→                    <div className={`w-2.5 h-2.5 rounded-sm ${area.color} shrink-0`} />
+  1656→                    <div className="flex-1 min-w-0">
+  1657→                      <div className="flex items-center justify-between">
+  1658→                        <span className="text-xs text-slate-600 dark:text-slate-300 truncate">{area.name}</span>
+  1659→                        <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 ml-1">{area.count}</span>
+  1660→                      </div>
+  1661→                      <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-0.5">
+  1662→                        <div
+  1663→                          className={`h-1.5 rounded-full ${area.color} opacity-70 transition-all duration-300`}
+  1664→                          style={{ width: `${pct}%` }}
+  1665→                        />
+  1666→                      </div>
+  1667→                    </div>
+  1668→                  </div>
+  1669→                );
+  1670→              })}
+  1671→            </div>
+  1672→          </CardContent>
+  1673→        </Card>
+  1674→      </div>
+  1675→
+  1676→      {/* ═══════════════════════════════════════════════════════════
+  1677→          ANNOUNCEMENTS / ALERTS SECTION
+  1678→          ═══════════════════════════════════════════════════════════ */}
+  1679→      <Card className="shadow-sm">
+  1680→        <CardHeader className="pb-3">
+  1681→          <CardTitle className="text-base flex items-center gap-2">
+  1682→            <Megaphone className="h-4 w-4 text-amber-500" />
+  1683→            Avisos del Sistema
+  1684→          </CardTitle>
+  1685→        </CardHeader>
+  1686→        <CardContent>
+  1687→          <div className="space-y-2">
+  1688→            {MOCK_ANNOUNCEMENTS.map((announcement) => (
+  1689→              <div
+  1690→                key={announcement.id}
+  1691→                className={`flex items-start gap-3 p-3 rounded-lg border-l-4 ${getSeverityStyle(announcement.severity)} transition-all duration-200 hover:shadow-sm`}
+  1692→              >
+  1693→                <div className="shrink-0 mt-0.5">
+  1694→                  {getSeverityIcon(announcement.severity)}
+  1695→                </div>
+  1696→                <div className="flex-1 min-w-0">
+  1697→                  <div className="flex items-center gap-2 flex-wrap">
+  1698→                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{announcement.title}</p>
+  1699→                    {getSeverityBadge(announcement.severity)}
+  1700→                  </div>
+  1701→                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">{announcement.message}</p>
+  1702→                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+  1703→                    {new Date(announcement.date).toLocaleDateString('es-SV', { day: '2-digit', month: 'short', year: 'numeric' })}
+  1704→                  </p>
+  1705→                </div>
+  1706→              </div>
+  1707→            ))}
+  1708→          </div>
+  1709→        </CardContent>
+  1710→      </Card>
+  1711→
+  1712→      {/* ═══════════════════════════════════════════════════════════
+  1713→          5. ENHANCED COMPLIANCE SEMAPHORE & 7. ENHANCED VENCIMIENTOS
+  1714→          ═══════════════════════════════════════════════════════════ */}
+  1715→      {dashboardData && (
+  1716→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+  1717→          {/* Enhanced Compliance Semaphore */}
+  1718→          <Card className="shadow-sm overflow-hidden">
+  1719→            {/* Colored top bar based on semaphore */}
+  1720→            <div className={`h-1.5 ${
+  1721→              dashboardData.semaforo === 'verde' ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' :
+  1722→              dashboardData.semaforo === 'amarillo' ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+  1723→              'bg-gradient-to-r from-red-400 to-red-600'
+  1724→            }`} />
+  1725→            <CardHeader className="pb-3">
+  1726→              <CardTitle className="text-base flex items-center gap-2">
+  1727→                <Shield className="h-4 w-4 text-emerald-500" />
+  1728→                Semáforo de Cumplimiento
+  1729→                {/* Prominent animated traffic light */}
+  1730→                <div className="flex items-center gap-1.5 ml-auto p-1.5 bg-slate-900 dark:bg-slate-700 rounded-full shadow-inner">
+  1731→                  <div className={`w-3 h-3 rounded-full transition-all duration-500 ${dashboardData.semaforo === 'rojo' ? 'bg-red-500 shadow-md shadow-red-500/60 animate-pulse' : 'bg-red-900/40'}`} />
+  1732→                  <div className={`w-3 h-3 rounded-full transition-all duration-500 ${dashboardData.semaforo === 'amarillo' ? 'bg-amber-400 shadow-md shadow-amber-400/60 animate-pulse' : 'bg-amber-900/40'}`} />
+  1733→                  <div className={`w-3 h-3 rounded-full transition-all duration-500 ${dashboardData.semaforo === 'verde' ? 'bg-emerald-400 shadow-md shadow-emerald-400/60 animate-pulse' : 'bg-emerald-900/40'}`} />
+  1734→                </div>
+  1735→              </CardTitle>
+  1736→            </CardHeader>
+  1737→            <CardContent className="space-y-3">
+  1738→              {/* Overall compliance progress bar */}
+  1739→              <div className="p-3 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
+  1740→                <div className="flex items-center justify-between mb-1.5">
+  1741→                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Cumplimiento General</span>
+  1742→                  <span className={`text-sm font-bold ${dashboardData.cumplimiento_previsional >= 80 ? 'text-emerald-600 dark:text-emerald-400' : dashboardData.cumplimiento_previsional >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+  1743→                    {dashboardData.cumplimiento_previsional}%
+  1744→                  </span>
+  1745→                </div>
+  1746→                <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+  1747→                  <div
+  1748→                    className={`h-2 rounded-full transition-all duration-700 ${
+  1749→                      dashboardData.cumplimiento_previsional >= 80 ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' :
+  1750→                      dashboardData.cumplimiento_previsional >= 50 ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+  1751→                      'bg-gradient-to-r from-red-400 to-red-600'
+  1752→                    }`}
+  1753→                    style={{ width: `${dashboardData.cumplimiento_previsional}%` }}
+  1754→                  />
+  1755→                </div>
+  1756→              </div>
+  1757→              {/* Compliance items grid with progress bars */}
+  1758→              <div className="grid grid-cols-1 gap-2">
+  1759→                {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => (
+  1760→                  <div key={c.nombre} className="p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+  1761→                    <div className="flex items-center justify-between mb-1.5">
+  1762→                      <div className="flex items-center gap-2">
+  1763→                        {c.presentado ? (
+  1764→                          <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+  1765→                        ) : (
+  1766→                          <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+  1767→                        )}
+  1768→                        <span className="text-sm text-slate-700 dark:text-slate-300">{c.nombre}</span>
+  1769→                      </div>
+  1770→                      <div className="flex items-center gap-2">
+  1771→                        <span className="text-[10px] text-slate-400 dark:text-slate-500">Peso: {c.peso}%</span>
+  1772→                        <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+  1773→                          {c.presentado ? 'Presentado' : 'Pendiente'}
+  1774→                        </Badge>
+  1775→                      </div>
+  1776→                    </div>
+  1777→                    {/* Progress bar for each compliance item */}
+  1778→                    <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+  1779→                      <div
+  1780→                        className={`h-1.5 rounded-full transition-all duration-500 ${c.presentado ? 'bg-emerald-500' : 'bg-red-400'}`}
+  1781→                        style={{ width: c.presentado ? '100%' : `${Math.max(c.peso * 0.3, 5)}%` }}
+  1782→                      />
+  1783→                    </div>
+  1784→                  </div>
+  1785→                ))}
+  1786→              </div>
+  1787→            </CardContent>
+  1788→          </Card>
+  1789→
+  1790→          {/* Enhanced Vencimientos with countdown display and urgency gradient */}
+  1791→          <Card className="shadow-sm overflow-hidden">
+  1792→            <div className="h-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-emerald-500" />
+  1793→            <CardHeader className="pb-3">
+  1794→              <CardTitle className="text-base flex items-center gap-2">
+  1795→                <CalendarDays className="h-4 w-4 text-amber-500" />
+  1796→                Próximos Vencimientos
+  1797→              </CardTitle>
+  1798→            </CardHeader>
+  1799→            <CardContent className="space-y-3">
+  1800→              {dashboardData.vencimientos?.length === 0 ? (
+  1801→                <div className="flex flex-col items-center justify-center py-8">
+  1802→                  <CheckCircle className="h-10 w-10 text-emerald-500 mb-2" />
+  1803→                  <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Todos los pagos al día</p>
+  1804→                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">No hay vencimientos próximos</p>
+  1805→                </div>
+  1806→              ) : (
+  1807→                dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => {
+  1808→                  const urgency = getUrgencyClasses(v.dias);
+  1809→                  return (
+  1810→                    <div key={v.nombre} className={`p-3 rounded-lg border ${urgency.bg} ${urgency.border} transition-all duration-200 hover:shadow-sm`}>
+  1811→                      <div className="flex items-center justify-between">
+  1812→                        <div className="flex items-center gap-3">
+  1813→                          <div className={`p-2 rounded-lg ${urgency.dot === 'bg-red-500' ? 'bg-red-100 dark:bg-red-900/30' : urgency.dot === 'bg-amber-500' ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-emerald-100 dark:bg-emerald-900/30'}`}>
+  1814→                            <CalendarDays className={`h-4 w-4 ${urgency.countdown}`} />
+  1815→                          </div>
+  1816→                          <div>
+  1817→                            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{v.nombre}</p>
+  1818→                            <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(v.fecha).toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' })}</p>
+  1819→                          </div>
+  1820→                        </div>
+  1821→                        <div className="text-center shrink-0 ml-2">
+  1822→                          {v.dias > 0 ? (
+  1823→                            <>
+  1824→                              <p className={`text-2xl sm:text-3xl font-bold ${urgency.countdown}`}>{v.dias}</p>
+  1825→                              <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-0.5">días</p>
+  1826→                            </>
+  1827→                          ) : (
+  1828→                            <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs">Vencido</Badge>
+  1829→                          )}
+  1830→                        </div>
+  1831→                      </div>
+  1832→                      {/* Urgency progress bar */}
+  1833→                      {v.dias > 0 && (
+  1834→                        <div className="mt-2 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+  1835→                          <div
+  1836→                            className={`h-1 rounded-full transition-all duration-500 ${
+  1837→                              v.dias <= 3 ? 'bg-gradient-to-r from-red-400 to-red-600' :
+  1838→                              v.dias <= 7 ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+  1839→                              'bg-gradient-to-r from-emerald-400 to-emerald-600'
+  1840→                            }`}
+  1841→                            style={{ width: `${Math.min((1 - v.dias / 30) * 100, 100)}%` }}
+  1842→                          />
+  1843→                        </div>
+  1844→                      )}
+  1845→                    </div>
+  1846→                  );
+  1847→                })
+  1848→              )}
+  1849→            </CardContent>
+  1850→          </Card>
+  1851→        </div>
+  1852→      )}
+  1853→
+  1854→      {/* ═══════════════════════════════════════════════════════════
+  1855→          4. ENHANCED QUICK ACTIONS + 6. ENHANCED AUDIT TIMELINE
+  1856→          ═══════════════════════════════════════════════════════════ */}
+  1857→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+  1858→        {/* Enhanced Quick Actions */}
+  1859→        <Card className="shadow-sm">
+  1860→          <CardHeader className="pb-3">
+  1861→            <CardTitle className="text-base flex items-center gap-2">
+  1862→              <ListChecks className="h-4 w-4 text-emerald-500" />
+  1863→              Acciones Rápidas
+  1864→            </CardTitle>
+  1865→          </CardHeader>
+  1866→          <CardContent>
+  1867→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  1868→              {visibleActions.map(action => (
+  1869→                <button
+  1870→                  key={action.viewId + action.label}
+  1871→                  onClick={() => onNavigate(action.viewId)}
+  1872→                  className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-all duration-200 cursor-pointer text-left border border-slate-100 dark:border-slate-700/50 hover:border-emerald-200 dark:hover:border-emerald-700/50 hover:shadow-md hover:scale-[1.02] active:scale-[0.98] group"
+  1873→                >
+  1874→                  <div className={`p-2.5 rounded-xl ${action.gradientBg} shrink-0 shadow-sm group-hover:shadow-md transition-all duration-200`}>
+  1875→                    <action.icon className="h-5 w-5 text-white" />
+  1876→                  </div>
+  1877→                  <div className="min-w-0 flex-1">
+  1878→                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{action.label}</p>
+  1879→                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{action.desc}</p>
+  1880→                    {action.count && (
+  1881→                      <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">{action.count}</p>
+  1882→                    )}
+  1883→                  </div>
+  1884→                </button>
+  1885→              ))}
+  1886→            </div>
+  1887→          </CardContent>
+  1888→        </Card>
+  1889→
+  1890→        {/* Enhanced Audit Timeline */}
+  1891→        <Card className="shadow-sm">
+  1892→          <CardHeader className="pb-3">
+  1893→            <CardTitle className="text-base flex items-center gap-2">
+  1894→              <ScrollText className="h-4 w-4 text-emerald-500" />
+  1895→              Actividad Reciente
+  1896→            </CardTitle>
+  1897→          </CardHeader>
+  1898→          <CardContent>
+  1899→            {auditEntries.length === 0 ? (
+  1900→              <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+  1901→                <ScrollText className="h-8 w-8 mb-2" />
+  1902→                <p className="text-sm">Sin actividad reciente</p>
+  1903→              </div>
+  1904→            ) : (
+  1905→              <div className="relative max-h-80 overflow-y-auto pr-1">
+  1906→                {/* Timeline connecting line */}
+  1907→                <div className="absolute left-5 top-3 bottom-3 w-px bg-slate-200 dark:bg-slate-700" />
+  1908→                <div className="space-y-1">
+  1909→                  {auditEntries.map((entry, idx) => (
+  1910→                    <div key={entry.id} className="relative flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-150 group">
+  1911→                      {/* Timeline node */}
+  1912→                      <div className={`relative z-10 p-2 rounded-full shrink-0 mt-0.5 ${getEnhancedAuditColor(entry.nivel_criticidad)} shadow-sm group-hover:shadow-md transition-shadow duration-200`}>
+  1913→                        {getEnhancedAuditIcon(entry.accion)}
+  1914→                      </div>
+  1915→                      {/* Content */}
+  1916→                      <div className="min-w-0 flex-1 pt-0.5">
+  1917→                        <div className="flex items-center gap-2 flex-wrap">
+  1918→                          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+  1919→                            {entry.accion.replace(/_/g, ' ')}
+  1920→                          </p>
+  1921→                          {entry.nivel_criticidad === 'ALTA' && (
+  1922→                            <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] py-0 px-1.5">Alta</Badge>
+  1923→                          )}
+  1924→                        </div>
+  1925→                        {entry.tabla_afectada && (
+  1926→                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+  1927→                            Tabla: <span className="font-mono text-slate-500 dark:text-slate-400">{entry.tabla_afectada}</span>
+  1928→                          </p>
+  1929→                        )}
+  1930→                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+  1931→                          {entry.usuario?.nombre ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : entry.usuario_email || 'Sistema'}
+  1932→                          <span className="mx-1">·</span>
+  1933→                          {new Date(entry.fecha_accion).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+  1934→                        </p>
+  1935→                      </div>
+  1936→                    </div>
+  1937→                  ))}
+  1938→                </div>
+  1939→              </div>
+  1940→            )}
+  1941→          </CardContent>
+  1942→        </Card>
+  1943→      </div>
+  1944→    </div>
+  1945→  );
+  1946→}
+  1947→
+  1948→// ============================================================
+  1949→// PLACEHOLDER VIEW
+  1950→// ============================================================
+  1951→function PlaceholderView({ viewId }: { viewId: ViewId }) {
+  1952→  const label = VIEW_LABELS[viewId] || 'Vista';
+  1953→  return (
+  1954→    <Card className="shadow-sm">
+  1955→      <CardContent className="p-12 text-center">
+  1956→        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 mb-4">
+  1957→          <LayoutDashboard className="h-8 w-8 text-slate-400" />
+  1958→        </div>
+  1959→        <h2 className="text-xl font-semibold text-slate-900">{label}</h2>
+  1960→        <p className="text-slate-500 mt-2 max-w-md mx-auto">
+  1961→          Este módulo se encuentra en desarrollo. Pronto estará disponible con todas sus funcionalidades.
+  1962→        </p>
+  1963→        <Badge variant="secondary" className="mt-4">
+  1964→          Vista {viewId}
+  1965→        </Badge>
+  1966→      </CardContent>
+  1967→    </Card>
+  1968→  );
+  1969→}
+  1970→
+  1971→// ============================================================
+  1972→// MAIN APPLICATION LAYOUT
+  1973→// ============================================================
+  1974→interface AppLayoutProps {
+  1975→  user: UserData;
+  1976→  accessToken: string | null;
+  1977→  onLogout: () => void;
+  1978→}
+  1979→
+  1980→function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
+  1981→  const [currentView, setCurrentView] = useState<ViewId>('dashboard');
+  1982→  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  1983→  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  1984→
+  1985→  const renderView = () => {
+  1986→    if (currentView === 'dashboard') {
+  1987→      return <WelcomeDashboard user={user} accessToken={accessToken} onNavigate={setCurrentView} />;
+  1988→    }
+  1989→    switch (currentView) {
+  1990→      case '02-01':
+  1991→        return <EmployeeDirectory accessToken={accessToken} userRole={user.rol} onNavigateToDetail={(id) => { setSelectedEmployeeId(id); setCurrentView('02-02'); }} onNavigateToNew={() => setCurrentView('02-03')} />;
+  1992→      case '02-02':
+  1993→        return selectedEmployeeId ? <EmployeeDetail empleadoId={selectedEmployeeId} onBack={() => setCurrentView('02-01')} userRole={user.rol} accessToken={accessToken} /> : <PlaceholderView viewId={currentView} />;
+  1994→      case '02-03':
+  1995→        return <NewEmployeeForm accessToken={accessToken} userRole={user.rol} onBack={() => setCurrentView('02-01')} onSuccess={() => setCurrentView('02-01')} />;
+  1996→      case '02-04':
+  1997→        return <IncidenceManager accessToken={accessToken} userRole={user.rol} />;
+  1998→      case '01-03':
+  1999→        return <UserManagement accessToken={accessToken} />;
+  2000→      case '04-01':
+
+[showing lines 1-2000 of 2210; use offset=2001 with limit to continue reading]

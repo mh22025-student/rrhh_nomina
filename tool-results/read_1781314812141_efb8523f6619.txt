@@ -1,0 +1,684 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  CheckCircle, AlertTriangle, Loader2, Shield, FileCheck, PenTool,
+     6→  RefreshCw, Lock, Eye, XCircle, DollarSign, Clock, ArrowRight,
+     7→  Ban, Send, History
+     8→} from 'lucide-react';
+     9→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    10→import { Badge } from '@/components/ui/badge';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Checkbox } from '@/components/ui/checkbox';
+    13→import { Label } from '@/components/ui/label';
+    14→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    15→import { Skeleton } from '@/components/ui/skeleton';
+    16→import { Separator } from '@/components/ui/separator';
+    17→import { Input } from '@/components/ui/input';
+    18→import { Textarea } from '@/components/ui/textarea';
+    19→import { useToast } from '@/hooks/use-toast';
+    20→
+    21→interface PayrollApprovalProps {
+    22→  accessToken: string;
+    23→  userRole: string;
+    24→}
+    25→
+    26→const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    27→
+    28→interface ChecklistItem {
+    29→  id: string;
+    30→  item: string;
+    31→  completado: boolean;
+    32→  completado_por: { nombre: string; apellido: string } | null;
+    33→  fecha_completado: string | null;
+    34→}
+    35→
+    36→interface TimelineEntry {
+    37→  id: string;
+    38→  accion: string;
+    39→  usuario_email: string | null;
+    40→  valor_anterior: string | null;
+    41→  valor_nuevo: string | null;
+    42→  detalle_adicional: string | null;
+    43→  fecha_accion: string;
+    44→}
+    45→
+    46→interface PlanillaSummary {
+    47→  id: string;
+    48→  codigo_planilla: string;
+    49→  tipo: string;
+    50→  estado: string;
+    51→  total_empleados: number;
+    52→  total_salarios_brutos: number;
+    53→  total_neto_a_pagar: number;
+    54→  total_cargas_patronales: number;
+    55→  motivo_rechazo?: string | null;
+    56→  fecha_pago?: string | null;
+    57→  referencia_pago?: string | null;
+    58→}
+    59→
+    60→// Workflow step definitions
+    61→const WORKFLOW_STEPS = [
+    62→  { key: 'CALCULADA', label: 'Calculada', icon: Clock, description: 'Planilla calculada por analista' },
+    63→  { key: 'EN_CORRECCION', label: 'En Corrección', icon: RefreshCw, description: 'Devuelta para corrección' },
+    64→  { key: 'APROBADA', label: 'Aprobada', icon: CheckCircle, description: 'Aprobada por aprobador' },
+    65→  { key: 'PAGADA', label: 'Pagada', icon: DollarSign, description: 'Pago confirmado' },
+    66→];
+    67→
+    68→const ESTADO_COLORS: Record<string, string> = {
+    69→  BORRADOR: 'bg-slate-100 text-slate-700',
+    70→  CALCULADA: 'bg-amber-100 text-amber-800',
+    71→  EN_CORRECCION: 'bg-orange-100 text-orange-800',
+    72→  APROBADA: 'bg-emerald-100 text-emerald-800',
+    73→  PAGADA: 'bg-green-100 text-green-800',
+    74→};
+    75→
+    76→const ACCION_LABELS: Record<string, string> = {
+    77→  CALCULO_PLANILLA: 'Cálculo de Planilla',
+    78→  CALCULO_AGUINALDO: 'Cálculo de Aguinaldo',
+    79→  ENVIO_APROBACION: 'Envío para Aprobación',
+    80→  APROBACION_PLANILLA: 'Aprobación',
+    81→  RECHAZO_PLANILLA: 'Rechazo / Corrección',
+    82→  CORRECCION_PLANILLA: 'Corrección Aplicada',
+    83→  PAGO_PLANILLA: 'Pago Confirmado',
+    84→};
+    85→
+    86→export default function PayrollApproval({ accessToken, userRole }: PayrollApprovalProps) {
+    87→  const { toast } = useToast();
+    88→  const [planillas, setPlanillas] = useState<PlanillaSummary[]>([]);
+    89→  const [selectedId, setSelectedId] = useState<string>('');
+    90→  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
+    91→  const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
+    92→  const [loading, setLoading] = useState(true);
+    93→  const [loadingChecklist, setLoadingChecklist] = useState(false);
+    94→  const [approving, setApproving] = useState(false);
+    95→  const [rejecting, setRejecting] = useState(false);
+    96→  const [paying, setPaying] = useState(false);
+    97→  const [signatureName, setSignatureName] = useState('');
+    98→  const [confirmChecked, setConfirmChecked] = useState(false);
+    99→  const [rejectionReason, setRejectionReason] = useState('');
+   100→  const [paymentReference, setPaymentReference] = useState('');
+   101→  const [planillaDetail, setPlanillaDetail] = useState<Record<string, unknown> | null>(null);
+   102→  const [showRejectForm, setShowRejectForm] = useState(false);
+   103→  const [showPayForm, setShowPayForm] = useState(false);
+   104→  const [showTimeline, setShowTimeline] = useState(true);
+   105→
+   106→  const fetchPlanillas = useCallback(async () => {
+   107→    setLoading(true);
+   108→    try {
+   109→      const res = await fetch('/api/nomina/planillas?limit=50', {
+   110→        headers: { Authorization: `Bearer ${accessToken}` },
+   111→      });
+   112→      if (!res.ok) throw new Error('Error');
+   113→      const data = await res.json();
+   114→      // Show all planillas that are in workflow states (not BORRADOR)
+   115→      setPlanillas(data.planillas?.filter((p: PlanillaSummary) =>
+   116→        ['CALCULADA', 'EN_CORRECCION', 'APROBADA', 'PAGADA'].includes(p.estado)
+   117→      ) || []);
+   118→    } catch {
+   119→      toast({ title: 'Error', description: 'No se pudieron cargar planillas', variant: 'destructive' });
+   120→    } finally {
+   121→      setLoading(false);
+   122→    }
+   123→  }, [accessToken, toast]);
+   124→
+   125→  const fetchChecklist = useCallback(async (planillaId: string) => {
+   126→    setLoadingChecklist(true);
+   127→    try {
+   128→      const res = await fetch(`/api/nomina/planillas/${planillaId}`, {
+   129→        headers: { Authorization: `Bearer ${accessToken}` },
+   130→      });
+   131→      if (!res.ok) throw new Error('Error');
+   132→      const data = await res.json();
+   133→      setChecklist(data.planilla?.checklist_aprobacion || []);
+   134→      setTimeline(data.timeline || []);
+   135→      setPlanillaDetail(data.planilla);
+   136→
+   137→      // Reset forms
+   138→      setSignatureName('');
+   139→      setConfirmChecked(false);
+   140→      setRejectionReason('');
+   141→      setPaymentReference('');
+   142→      setShowRejectForm(false);
+   143→      setShowPayForm(false);
+   144→    } catch {
+   145→      toast({ title: 'Error', description: 'No se pudo cargar el detalle', variant: 'destructive' });
+   146→    } finally {
+   147→      setLoadingChecklist(false);
+   148→    }
+   149→  }, [accessToken, toast]);
+   150→
+   151→  useEffect(() => { fetchPlanillas(); }, [fetchPlanillas]);
+   152→
+   153→  useEffect(() => {
+   154→    if (selectedId) fetchChecklist(selectedId);
+   155→  }, [selectedId, fetchChecklist]);
+   156→
+   157→  const handleToggleChecklist = async (itemId: string, completado: boolean) => {
+   158→    try {
+   159→      const res = await fetch(`/api/nomina/planillas/${selectedId}/checklist`, {
+   160→        method: 'POST',
+   161→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   162→        body: JSON.stringify({ item_id: itemId, completado }),
+   163→      });
+   164→      if (!res.ok) {
+   165→        const data = await res.json();
+   166→        throw new Error(data.error || 'Error');
+   167→      }
+   168→      setChecklist(prev => prev.map(c => c.id === itemId ? { ...c, completado, completado_por: completado ? { nombre: 'Usted', apellido: '' } : null, fecha_completado: completado ? new Date().toISOString() : null } : c));
+   169→    } catch (err) {
+   170→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al actualizar', variant: 'destructive' });
+   171→    }
+   172→  };
+   173→
+   174→  const handleApprove = async () => {
+   175→    if (!signatureName.trim()) {
+   176→      toast({ title: 'Error', description: 'Ingrese su nombre como firma digital', variant: 'destructive' });
+   177→      return;
+   178→    }
+   179→    if (!confirmChecked) {
+   180→      toast({ title: 'Error', description: 'Debe confirmar la aprobación', variant: 'destructive' });
+   181→      return;
+   182→    }
+   183→    setApproving(true);
+   184→    try {
+   185→      const res = await fetch(`/api/nomina/planillas/${selectedId}`, {
+   186→        method: 'PUT',
+   187→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   188→        body: JSON.stringify({ estado: 'APROBADA' }),
+   189→      });
+   190→      const data = await res.json();
+   191→      if (!res.ok) throw new Error(data.error || 'Error al aprobar');
+   192→      toast({ title: 'Planilla Aprobada', description: 'La planilla ha sido aprobada exitosamente' });
+   193→      fetchPlanillas();
+   194→      fetchChecklist(selectedId);
+   195→    } catch (err) {
+   196→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al aprobar', variant: 'destructive' });
+   197→    } finally {
+   198→      setApproving(false);
+   199→    }
+   200→  };
+   201→
+   202→  const handleReject = async () => {
+   203→    if (!rejectionReason.trim()) {
+   204→      toast({ title: 'Error', description: 'Debe indicar el motivo de rechazo', variant: 'destructive' });
+   205→      return;
+   206→    }
+   207→    setRejecting(true);
+   208→    try {
+   209→      const res = await fetch(`/api/nomina/planillas/${selectedId}`, {
+   210→        method: 'PUT',
+   211→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   212→        body: JSON.stringify({ estado: 'EN_CORRECCION', motivo_rechazo: rejectionReason }),
+   213→      });
+   214→      const data = await res.json();
+   215→      if (!res.ok) throw new Error(data.error || 'Error al rechazar');
+   216→      toast({ title: 'Planilla Devuelta', description: 'La planilla ha sido devuelta para corrección', variant: 'default' });
+   217→      fetchPlanillas();
+   218→      fetchChecklist(selectedId);
+   219→    } catch (err) {
+   220→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al rechazar', variant: 'destructive' });
+   221→    } finally {
+   222→      setRejecting(false);
+   223→    }
+   224→  };
+   225→
+   226→  const handlePay = async () => {
+   227→    setPaying(true);
+   228→    try {
+   229→      const res = await fetch(`/api/nomina/planillas/${selectedId}`, {
+   230→        method: 'PUT',
+   231→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   232→        body: JSON.stringify({ estado: 'PAGADA', referencia_pago: paymentReference || undefined }),
+   233→      });
+   234→      const data = await res.json();
+   235→      if (!res.ok) throw new Error(data.error || 'Error al marcar como pagada');
+   236→      toast({ title: 'Planilla Pagada', description: 'La planilla ha sido marcada como pagada exitosamente' });
+   237→      fetchPlanillas();
+   238→      fetchChecklist(selectedId);
+   239→    } catch (err) {
+   240→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al pagar', variant: 'destructive' });
+   241→    } finally {
+   242→      setPaying(false);
+   243→    }
+   244→  };
+   245→
+   246→  const allChecked = checklist.length > 0 && checklist.every(c => c.completado);
+   247→  const selectedPlanilla = planillas.find(p => p.id === selectedId);
+   248→
+   249→  // Determine what actions the current user can take
+   250→  const canApprove = selectedPlanilla &&
+   251→    ['CALCULADA', 'EN_CORRECCION'].includes(selectedPlanilla.estado) &&
+   252→    ['ADMIN', 'APROBADOR', 'GERENCIA'].includes(userRole);
+   253→
+   254→  const canReject = selectedPlanilla &&
+   255→    ['CALCULADA', 'EN_CORRECCION'].includes(selectedPlanilla.estado) &&
+   256→    ['ADMIN', 'APROBADOR', 'GERENCIA'].includes(userRole);
+   257→
+   258→  const canPay = selectedPlanilla &&
+   259→    selectedPlanilla.estado === 'APROBADA' &&
+   260→    ['ADMIN', 'APROBADOR', 'GERENCIA'].includes(userRole);
+   261→
+   262→  // Get current step index for stepper
+   263→  const getCurrentStepIndex = (estado: string) => {
+   264→    if (estado === 'PAGADA') return 3;
+   265→    if (estado === 'APROBADA') return 2;
+   266→    if (estado === 'EN_CORRECCION') return 1;
+   267→    return 0; // CALCULADA or BORRADOR
+   268→  };
+   269→
+   270→  return (
+   271→    <div className="space-y-4">
+   272→      {/* Planilla selection */}
+   273→      <Card className="shadow-sm">
+   274→        <CardHeader className="pb-3">
+   275→          <CardTitle className="text-base flex items-center gap-2">
+   276→            <Shield className="h-4 w-4" /> Flujo de Aprobación de Planillas
+   277→          </CardTitle>
+   278→          <CardDescription>Segregación de funciones: Analista calcula → Aprobador aprueba → Admin/Admin paga</CardDescription>
+   279→        </CardHeader>
+   280→        <CardContent>
+   281→          {loading ? (
+   282→            <Skeleton className="h-10 w-full" />
+   283→          ) : planillas.length === 0 ? (
+   284→            <p className="text-sm text-slate-400 text-center py-4">No hay planillas en el flujo de aprobación</p>
+   285→          ) : (
+   286→            <Select value={selectedId} onValueChange={setSelectedId}>
+   287→              <SelectTrigger><SelectValue placeholder="Seleccione una planilla..." /></SelectTrigger>
+   288→              <SelectContent>
+   289→                {planillas.map(p => (
+   290→                  <SelectItem key={p.id} value={p.id}>
+   291→                    <span className="flex items-center gap-2">
+   292→                      {p.codigo_planilla} — {p.tipo} — {fmt(p.total_neto_a_pagar)} ({p.total_empleados} emp.)
+   293→                      <Badge className={`text-[9px] ml-1 ${ESTADO_COLORS[p.estado] || 'bg-slate-100'}`} variant="secondary">
+   294→                        {p.estado}
+   295→                      </Badge>
+   296→                    </span>
+   297→                  </SelectItem>
+   298→                ))}
+   299→              </SelectContent>
+   300→            </Select>
+   301→          )}
+   302→        </CardContent>
+   303→      </Card>
+   304→
+   305→      {selectedId && selectedPlanilla && (
+   306→        <>
+   307→          {/* Workflow Stepper */}
+   308→          <Card className="shadow-sm">
+   309→            <CardContent className="p-4">
+   310→              <div className="flex items-center justify-between">
+   311→                {WORKFLOW_STEPS.map((step, idx) => {
+   312→                  const currentIdx = getCurrentStepIndex(selectedPlanilla.estado);
+   313→                  const isCompleted = idx < currentIdx;
+   314→                  const isCurrent = idx === currentIdx;
+   315→                  const isPending = idx > currentIdx;
+   316→                  const StepIcon = step.icon;
+   317→
+   318→                  return (
+   319→                    <React.Fragment key={step.key}>
+   320→                      <div className="flex flex-col items-center gap-1 flex-1">
+   321→                        <div className={`
+   322→                          h-10 w-10 rounded-full flex items-center justify-center border-2 transition-all
+   323→                          ${isCompleted ? 'bg-emerald-600 border-emerald-600 text-white' : ''}
+   324→                          ${isCurrent ? 'bg-amber-50 border-amber-500 text-amber-600' : ''}
+   325→                          ${isPending ? 'bg-slate-50 border-slate-200 text-slate-300' : ''}
+   326→                        `}>
+   327→                          {isCompleted ? <CheckCircle className="h-5 w-5" /> : <StepIcon className="h-5 w-5" />}
+   328→                        </div>
+   329→                        <p className={`text-xs font-medium text-center ${isCurrent ? 'text-amber-700' : isCompleted ? 'text-emerald-700' : 'text-slate-400'}`}>
+   330→                          {step.label}
+   331→                        </p>
+   332→                        <p className="text-[10px] text-slate-400 text-center hidden sm:block">{step.description}</p>
+   333→                      </div>
+   334→                      {idx < WORKFLOW_STEPS.length - 1 && (
+   335→                        <ArrowRight className={`h-4 w-4 shrink-0 mx-1 ${idx < currentIdx ? 'text-emerald-500' : 'text-slate-200'}`} />
+   336→                      )}
+   337→                    </React.Fragment>
+   338→                  );
+   339→                })}
+   340→              </div>
+   341→            </CardContent>
+   342→          </Card>
+   343→
+   344→          {/* Rejection reason banner */}
+   345→          {selectedPlanilla.estado === 'EN_CORRECCION' && selectedPlanilla.motivo_rechazo && (
+   346→            <Card className="shadow-sm border-orange-200 bg-orange-50/50">
+   347→              <CardContent className="p-4">
+   348→                <div className="flex items-start gap-2">
+   349→                  <AlertTriangle className="h-4 w-4 text-orange-600 shrink-0 mt-0.5" />
+   350→                  <div>
+   351→                    <p className="text-xs font-medium text-orange-800">Motivo de rechazo / corrección:</p>
+   352→                    <p className="text-sm text-orange-700 mt-1">{selectedPlanilla.motivo_rechazo}</p>
+   353→                  </div>
+   354→                </div>
+   355→              </CardContent>
+   356→            </Card>
+   357→          )}
+   358→
+   359→          {/* Payment info banner */}
+   360→          {selectedPlanilla.estado === 'PAGADA' && (
+   361→            <Card className="shadow-sm border-green-200 bg-green-50/50">
+   362→              <CardContent className="p-4">
+   363→                <div className="flex items-start gap-2">
+   364→                  <DollarSign className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+   365→                  <div className="text-xs text-green-800 space-y-1">
+   366→                    <p className="font-medium">Pago Confirmado</p>
+   367→                    {selectedPlanilla.fecha_pago && (
+   368→                      <p>Fecha de pago: {new Date(selectedPlanilla.fecha_pago).toLocaleDateString('es-SV')}</p>
+   369→                    )}
+   370→                    {selectedPlanilla.referencia_pago && (
+   371→                      <p>Referencia: {selectedPlanilla.referencia_pago}</p>
+   372→                    )}
+   373→                  </div>
+   374→                </div>
+   375→              </CardContent>
+   376→            </Card>
+   377→          )}
+   378→
+   379→          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   380→            {/* Left column: Checklist + Timeline */}
+   381→            <div className="space-y-4">
+   382→              {/* Checklist */}
+   383→              <Card className="shadow-sm">
+   384→                <CardHeader className="pb-3">
+   385→                  <CardTitle className="text-base flex items-center gap-2">
+   386→                    <FileCheck className="h-4 w-4" /> Checklist de Aprobación
+   387→                  </CardTitle>
+   388→                  <CardDescription>Todos los items deben ser completados antes de aprobar</CardDescription>
+   389→                </CardHeader>
+   390→                <CardContent className="space-y-3">
+   391→                  {loadingChecklist ? (
+   392→                    <div className="space-y-2">{[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-8 w-full" />)}</div>
+   393→                  ) : checklist.length === 0 ? (
+   394→                    <p className="text-sm text-slate-400 text-center py-2">No hay items de checklist</p>
+   395→                  ) : (
+   396→                    checklist.map(item => (
+   397→                      <div key={item.id} className="flex items-start gap-3 p-3 rounded-lg bg-slate-50">
+   398→                        <Checkbox
+   399→                          checked={item.completado}
+   400→                          onCheckedChange={(checked) => handleToggleChecklist(item.id, !!checked)}
+   401→                          className="mt-0.5"
+   402→                        />
+   403→                        <div className="flex-1">
+   404→                          <p className={`text-sm font-medium ${item.completado ? 'text-emerald-700 line-through' : 'text-slate-700'}`}>
+   405→                            {item.item}
+   406→                          </p>
+   407→                          {item.completado && item.completado_por && (
+   408→                            <p className="text-xs text-slate-400">
+   409→                              Completado por: {item.completado_por.nombre} {item.completado_por.apellido}
+   410→                            </p>
+   411→                          )}
+   412→                        </div>
+   413→                        {item.completado ? (
+   414→                          <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+   415→                        ) : (
+   416→                          <div className="h-4 w-4 rounded-full border-2 border-slate-300 shrink-0" />
+   417→                        )}
+   418→                      </div>
+   419→                    ))
+   420→                  )}
+   421→                  {!allChecked && checklist.length > 0 && (
+   422→                    <div className="p-3 bg-amber-50 rounded-lg text-xs text-amber-700 flex items-center gap-2">
+   423→                      <AlertTriangle className="h-3.5 w-3.5" />
+   424→                      Complete todos los items del checklist para habilitar la aprobación
+   425→                    </div>
+   426→                  )}
+   427→                </CardContent>
+   428→              </Card>
+   429→
+   430→              {/* Workflow Timeline */}
+   431→              <Card className="shadow-sm">
+   432→                <CardHeader className="pb-3">
+   433→                  <div className="flex items-center justify-between">
+   434→                    <CardTitle className="text-base flex items-center gap-2">
+   435→                      <History className="h-4 w-4" /> Historial de Cambios
+   436→                    </CardTitle>
+   437→                    <Button variant="ghost" size="sm" onClick={() => setShowTimeline(!showTimeline)}>
+   438→                      <Eye className="h-3.5 w-3.5 mr-1" /> {showTimeline ? 'Ocultar' : 'Mostrar'}
+   439→                    </Button>
+   440→                  </div>
+   441→                </CardHeader>
+   442→                {showTimeline && (
+   443→                  <CardContent>
+   444→                    {timeline.length === 0 ? (
+   445→                      <p className="text-sm text-slate-400 text-center py-2">No hay historial de cambios</p>
+   446→                    ) : (
+   447→                      <div className="space-y-3 max-h-64 overflow-y-auto">
+   448→                        {timeline.map((entry, idx) => (
+   449→                          <div key={entry.id} className="flex gap-3">
+   450→                            <div className="flex flex-col items-center">
+   451→                              <div className={`h-3 w-3 rounded-full mt-1 ${
+   452→                                entry.accion.includes('RECHAZO') ? 'bg-orange-400' :
+   453→                                entry.accion.includes('PAGO') ? 'bg-green-500' :
+   454→                                entry.accion.includes('APROBACION') ? 'bg-emerald-500' :
+   455→                                'bg-slate-400'
+   456→                              }`} />
+   457→                              {idx < timeline.length - 1 && <div className="w-px h-full bg-slate-200 mt-1" />}
+   458→                            </div>
+   459→                            <div className="flex-1 min-w-0">
+   460→                              <p className="text-xs font-medium text-slate-700">
+   461→                                {ACCION_LABELS[entry.accion] || entry.accion}
+   462→                              </p>
+   463→                              <p className="text-[11px] text-slate-500">{entry.usuario_email || 'Sistema'}</p>
+   464→                              <p className="text-[11px] text-slate-400">
+   465→                                {new Date(entry.fecha_accion).toLocaleString('es-SV')}
+   466→                              </p>
+   467→                              {entry.detalle_adicional && (
+   468→                                <p className="text-[11px] text-slate-500 mt-0.5 truncate">{entry.detalle_adicional}</p>
+   469→                              )}
+   470→                            </div>
+   471→                          </div>
+   472→                        ))}
+   473→                      </div>
+   474→                    )}
+   475→                  </CardContent>
+   476→                )}
+   477→              </Card>
+   478→            </div>
+   479→
+   480→            {/* Right column: Summary + Actions */}
+   481→            <div className="space-y-4">
+   482→              {/* Summary */}
+   483→              <Card className="shadow-sm">
+   484→                <CardHeader className="pb-3">
+   485→                  <div className="flex items-center justify-between">
+   486→                    <CardTitle className="text-base">Resumen de Planilla</CardTitle>
+   487→                    <Badge className={`text-xs ${ESTADO_COLORS[selectedPlanilla.estado] || 'bg-slate-100'}`} variant="secondary">
+   488→                      {selectedPlanilla.estado}
+   489→                    </Badge>
+   490→                  </div>
+   491→                </CardHeader>
+   492→                <CardContent className="space-y-2">
+   493→                  <div className="grid grid-cols-2 gap-2 text-sm">
+   494→                    <div className="text-slate-500">Código:</div><div className="font-mono">{selectedPlanilla.codigo_planilla}</div>
+   495→                    <div className="text-slate-500">Tipo:</div><div>{selectedPlanilla.tipo}</div>
+   496→                    <div className="text-slate-500">Empleados:</div><div>{selectedPlanilla.total_empleados}</div>
+   497→                    <div className="text-slate-500">Total Bruto:</div><div className="font-medium">{fmt(selectedPlanilla.total_salarios_brutos)}</div>
+   498→                    <div className="text-slate-500">Total Neto:</div><div className="font-bold text-emerald-700">{fmt(selectedPlanilla.total_neto_a_pagar)}</div>
+   499→                    <div className="text-slate-500">Cargas Patronales:</div><div>{fmt(selectedPlanilla.total_cargas_patronales)}</div>
+   500→                  </div>
+   501→                </CardContent>
+   502→              </Card>
+   503→
+   504→              {/* Inmutabilidad warning */}
+   505→              <Card className="shadow-sm border-amber-200 bg-amber-50/50">
+   506→                <CardContent className="p-4">
+   507→                  <div className="flex items-start gap-2">
+   508→                    <Lock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+   509→                    <div className="text-xs text-amber-800">
+   510→                      <p className="font-medium">Segregación de Funciones</p>
+   511→                      <p className="mt-1">El analista que calculó la planilla no puede aprobarla. Solo APROBADOR, GERENCIA o ADMIN pueden aprobar.</p>
+   512→                    </div>
+   513→                  </div>
+   514→                </CardContent>
+   515→              </Card>
+   516→
+   517→              {/* Role-specific action panels */}
+   518→              {/* Approve Action */}
+   519→              {canApprove && (
+   520→                <Card className="shadow-sm">
+   521→                  <CardHeader className="pb-3">
+   522→                    <CardTitle className="text-base flex items-center gap-2">
+   523→                      <PenTool className="h-4 w-4" /> Aprobar Planilla
+   524→                    </CardTitle>
+   525→                  </CardHeader>
+   526→                  <CardContent className="space-y-3">
+   527→                    <div className="space-y-2">
+   528→                      <Label>Nombre del Aprobador</Label>
+   529→                      <Input
+   530→                        value={signatureName}
+   531→                        onChange={e => setSignatureName(e.target.value)}
+   532→                        placeholder="Ingrese su nombre completo"
+   533→                        disabled={!allChecked}
+   534→                      />
+   535→                    </div>
+   536→                    <div className="flex items-start gap-2">
+   537→                      <Checkbox
+   538→                        checked={confirmChecked}
+   539→                        onCheckedChange={(checked) => setConfirmChecked(!!checked)}
+   540→                        disabled={!allChecked}
+   541→                        className="mt-0.5"
+   542→                      />
+   543→                      <Label className="text-xs text-slate-600 leading-tight">
+   544→                        Confirmo que he revisado la planilla y autorizo su aprobación conforme a las normativas vigentes.
+   545→                      </Label>
+   546→                    </div>
+   547→                    <Button
+   548→                      onClick={handleApprove}
+   549→                      disabled={!allChecked || !signatureName.trim() || !confirmChecked || approving}
+   550→                      className="w-full bg-emerald-600 hover:bg-emerald-700"
+   551→                    >
+   552→                      {approving ? (
+   553→                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Aprobando...</>
+   554→                      ) : (
+   555→                        <><CheckCircle className="h-4 w-4 mr-1" /> Aprobar Planilla</>
+   556→                      )}
+   557→                    </Button>
+   558→                  </CardContent>
+   559→                </Card>
+   560→              )}
+   561→
+   562→              {/* Reject Action */}
+   563→              {canReject && !showRejectForm && (
+   564→                <Button
+   565→                  variant="outline"
+   566→                  className="w-full border-orange-300 text-orange-700 hover:bg-orange-50"
+   567→                  onClick={() => setShowRejectForm(true)}
+   568→                >
+   569→                  <Ban className="h-4 w-4 mr-1" /> Devolver para Corrección
+   570→                </Button>
+   571→              )}
+   572→
+   573→              {canReject && showRejectForm && (
+   574→                <Card className="shadow-sm border-orange-200">
+   575→                  <CardHeader className="pb-3">
+   576→                    <CardTitle className="text-base flex items-center gap-2 text-orange-700">
+   577→                      <Ban className="h-4 w-4" /> Devolver para Corrección
+   578→                    </CardTitle>
+   579→                    <CardDescription>La planilla volverá al estado EN_CORRECCIÓN</CardDescription>
+   580→                  </CardHeader>
+   581→                  <CardContent className="space-y-3">
+   582→                    <div className="space-y-2">
+   583→                      <Label>Motivo de rechazo / corrección *</Label>
+   584→                      <Textarea
+   585→                        value={rejectionReason}
+   586→                        onChange={e => setRejectionReason(e.target.value)}
+   587→                        placeholder="Indique el motivo por el cual se devuelve la planilla para corrección..."
+   588→                        rows={3}
+   589→                      />
+   590→                    </div>
+   591→                    <div className="flex gap-2">
+   592→                      <Button
+   593→                        onClick={handleReject}
+   594→                        disabled={!rejectionReason.trim() || rejecting}
+   595→                        className="flex-1 bg-orange-600 hover:bg-orange-700"
+   596→                      >
+   597→                        {rejecting ? (
+   598→                          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Procesando...</>
+   599→                        ) : (
+   600→                          <><XCircle className="h-4 w-4 mr-1" /> Confirmar Rechazo</>
+   601→                        )}
+   602→                      </Button>
+   603→                      <Button variant="outline" onClick={() => setShowRejectForm(false)} className="flex-1">
+   604→                        Cancelar
+   605→                      </Button>
+   606→                    </div>
+   607→                  </CardContent>
+   608→                </Card>
+   609→              )}
+   610→
+   611→              {/* Pay Action */}
+   612→              {canPay && !showPayForm && (
+   613→                <Button
+   614→                  className="w-full bg-green-600 hover:bg-green-700"
+   615→                  onClick={() => setShowPayForm(true)}
+   616→                >
+   617→                  <DollarSign className="h-4 w-4 mr-1" /> Confirmar Pago
+   618→                </Button>
+   619→              )}
+   620→
+   621→              {canPay && showPayForm && (
+   622→                <Card className="shadow-sm border-green-200">
+   623→                  <CardHeader className="pb-3">
+   624→                    <CardTitle className="text-base flex items-center gap-2 text-green-700">
+   625→                      <DollarSign className="h-4 w-4" /> Confirmar Pago
+   626→                    </CardTitle>
+   627→                    <CardDescription>Marcar planilla como PAGADA</CardDescription>
+   628→                  </CardHeader>
+   629→                  <CardContent className="space-y-3">
+   630→                    <div className="space-y-2">
+   631→                      <Label>Referencia de Pago (opcional)</Label>
+   632→                      <Input
+   633→                        value={paymentReference}
+   634→                        onChange={e => setPaymentReference(e.target.value)}
+   635→                        placeholder="Número de referencia, lote, etc."
+   636→                      />
+   637→                    </div>
+   638→                    <div className="p-3 bg-emerald-50 rounded-lg">
+   639→                      <p className="text-xs text-emerald-800">
+   640→                        <strong>Total a pagar:</strong> {fmt(selectedPlanilla.total_neto_a_pagar)} ({selectedPlanilla.total_empleados} empleados)
+   641→                      </p>
+   642→                    </div>
+   643→                    <div className="flex gap-2">
+   644→                      <Button
+   645→                        onClick={handlePay}
+   646→                        disabled={paying}
+   647→                        className="flex-1 bg-green-600 hover:bg-green-700"
+   648→                      >
+   649→                        {paying ? (
+   650→                          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Procesando...</>
+   651→                        ) : (
+   652→                          <><DollarSign className="h-4 w-4 mr-1" /> Confirmar Pago</>
+   653→                        )}
+   654→                      </Button>
+   655→                      <Button variant="outline" onClick={() => setShowPayForm(false)} className="flex-1">
+   656→                        Cancelar
+   657→                      </Button>
+   658→                    </div>
+   659→                  </CardContent>
+   660→                </Card>
+   661→              )}
+   662→
+   663→              {/* ANALISTA info: can only send for approval */}
+   664→              {userRole === 'ANALISTA' && selectedPlanilla.estado === 'CALCULADA' && (
+   665→                <Card className="shadow-sm border-blue-200 bg-blue-50/50">
+   666→                  <CardContent className="p-4">
+   667→                    <div className="flex items-start gap-2">
+   668→                      <Send className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+   669→                      <div className="text-xs text-blue-800">
+   670→                        <p className="font-medium">Rol Analista</p>
+   671→                        <p className="mt-1">Como analista, usted ha calculado esta planilla. Un APROBADOR, GERENCIA o ADMIN debe revisarla y aprobarla.</p>
+   672→                      </div>
+   673→                    </div>
+   674→                  </CardContent>
+   675→                </Card>
+   676→              )}
+   677→            </div>
+   678→          </div>
+   679→        </>
+   680→      )}
+   681→    </div>
+   682→  );
+   683→}
+   684→

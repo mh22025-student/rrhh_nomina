@@ -1,0 +1,635 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→     4→import {
+     5→     5→  ArrowLeft, Edit2, Save, X, FileText, Briefcase, Heart, DollarSign,
+     6→     6→  Palmtree, FolderOpen, Loader2, AlertCircle, Plus, Clock
+     7→     7→} from 'lucide-react';
+     8→     8→import { Button } from '@/components/ui/button';
+     9→     9→import { Input } from '@/components/ui/input';
+    10→    10→import { Label } from '@/components/ui/label';
+    11→    11→import { Badge } from '@/components/ui/badge';
+    12→    12→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    13→    13→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    14→    14→import {
+    15→    15→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    16→    16→} from '@/components/ui/table';
+    17→    17→import {
+    18→    18→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    19→    19→} from '@/components/ui/select';
+    20→    20→import {
+    21→    21→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+    22→    22→} from '@/components/ui/dialog';
+    23→    23→import { Separator } from '@/components/ui/separator';
+    24→    24→import { Skeleton } from '@/components/ui/skeleton';
+    25→    25→import { useToast } from '@/hooks/use-toast';
+    26→    26→
+    27→    27→type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+    28→    28→
+    29→    29→interface EmployeeDetailProps {
+    30→    30→  empleadoId: string;
+    31→    31→  onBack: () => void;
+    32→    32→  userRole: UserRole;
+    33→    33→  accessToken: string | null;
+    34→    34→}
+    35→    35→
+    36→    36→interface EmpleadoDetail {
+    37→    37→  id: string;
+    38→    38→  codigo_empleado: string;
+    39→    39→  primer_nombre: string;
+    40→    40→  segundo_nombre: string | null;
+    41→    41→  primer_apellido: string;
+    42→    42→  segundo_apellido: string | null;
+    43→    43→  apellido_casada: string | null;
+    44→    44→  dui: string;
+    45→    45→  nit: string | null;
+    46→    46→  fecha_nacimiento: string | null;
+    47→    47→  genero: string | null;
+    48→    48→  estado_civil: string | null;
+    49→    49→  direccion: string | null;
+    50→    50→  telefono: string | null;
+    51→    51→  email_personal: string | null;
+    52→    52→  numero_isss: string | null;
+    53→    53→  numero_afp: string | null;
+    54→    54→  afp_administradora: string | null;
+    55→    55→  tipo_sangre: string | null;
+    56→    56→  contacto_emergencia_nombre: string | null;
+    57→    57→  contacto_emergencia_telefono: string | null;
+    58→    58→  contacto_emergencia_relacion: string | null;
+    59→    59→  nacionalidad: string;
+    60→    60→  fecha_ingreso: string;
+    61→    61→  fecha_salida: string | null;
+    62→    62→  salario_base: number;
+    63→    63→  estado: string;
+    64→    64→  area: { id: string; nombre: string; codigo: string } | null;
+    65→    65→  perfil_puesto: { id: string; nombre_puesto: string; codigo: string; banda_salarial: { nombre: string; salario_minimo: number; salario_maximo: number } | null } | null;
+    66→    66→  contratos: Array<{
+    67→    67→    id: string; tipo_contrato: string; salario_base_contrato: number; tipo_jornada: string;
+    68→    68→    fecha_inicio: string; fecha_fin: string | null; activo: boolean; observaciones: string | null;
+    69→    69→    perfil_puesto: { nombre_puesto: string } | null;
+    70→    70→  }>;
+    71→    71→  vacaciones: Array<{
+    72→    72→    id: string; anio: number; dias_derecho: number; dias_tomados: number;
+    73→    73→    dias_pendientes: number; dias_vendidos: number; estado: string;
+    74→    74→  }>;
+    75→    75→  documentos: Array<{
+    76→    76→    id: string; tipo_documento: string; nombre_archivo: string; descripcion: string | null; fecha_creacion: string;
+    77→    77→  }>;
+    78→    78→  incidencias: Array<{
+    79→    79→    id: string; tipo: string; estado: string; fecha_inicio: string; fecha_fin: string | null;
+    80→    80→    cantidad_horas: number | null; monto: number | null; descripcion: string | null;
+    81→    81→  }>;
+    82→    82→  cambios_salariales: Array<{
+    83→    83→    id: string; salario_anterior: number; salario_nuevo: number; tipo_cambio: string;
+    84→    84→    motivo: string | null; fecha_cambio: string;
+    85→    85→  }>;
+    86→    86→  usuario: { id: string; email: string; rol: string } | null;
+    87→    87→}
+    88→    88→
+    89→    89→export default function EmployeeDetail({ empleadoId, onBack, userRole, accessToken }: EmployeeDetailProps) {
+    90→    90→  const [empleado, setEmpleado] = useState<EmpleadoDetail | null>(null);
+    91→    91→  const [loading, setLoading] = useState(true);
+    92→    92→  const [editing, setEditing] = useState(false);
+    93→    93→  const [editData, setEditData] = useState<Record<string, unknown>>({});
+    94→    94→  const [saving, setSaving] = useState(false);
+    95→    95→  const [newContractOpen, setNewContractOpen] = useState(false);
+    96→    96→  const [contractData, setContractData] = useState({ tipo_contrato: 'INDEFINIDO', salario_base_contrato: '', tipo_jornada: 'COMPLETA', fecha_inicio: '', fecha_fin: '', observaciones: '' });
+    97→    97→  const { toast } = useToast();
+    98→    98→
+    99→    99→  const fetchEmpleado = useCallback(async () => {
+   100→   100→    setLoading(true);
+   101→   101→    try {
+   102→   102→      const res = await fetch(`/api/empleados/${empleadoId}`, {
+   103→   103→        headers: { Authorization: `Bearer ${accessToken}` },
+   104→   104→      });
+   105→   105→      const data = await res.json();
+   106→   106→      if (res.ok) {
+   107→   107→        setEmpleado(data.data);
+   108→   108→      }
+   109→   109→    } catch (err) {
+   110→   110→      console.error('Error fetching employee:', err);
+   111→   111→    } finally {
+   112→   112→      setLoading(false);
+   113→   113→    }
+   114→   114→  }, [empleadoId, accessToken]);
+   115→   115→
+   116→   116→  useEffect(() => { fetchEmpleado(); }, [fetchEmpleado]);
+   117→   117→
+   118→   118→  const canEdit = userRole === 'ADMIN' || userRole === 'ANALISTA';
+   119→   119→  const canEditOwn = userRole === 'EMPLEADO';
+   120→   120→
+   121→   121→  const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('es-SV') : '—';
+   122→   122→  const formatSalary = (amount: number) => `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+   123→   123→  const getNombreCompleto = () => {
+   124→   124→    if (!empleado) return '';
+   125→   125→    return `${empleado.primer_nombre}${empleado.segundo_nombre ? ' ' + empleado.segundo_nombre : ''} ${empleado.primer_apellido}${empleado.segundo_apellido ? ' ' + empleado.segundo_apellido : ''}`;
+   126→   126→  };
+   127→   127→
+   128→   128→  const handleEdit = () => {
+   129→   129→    if (!empleado) return;
+   130→   130→    setEditData({
+   131→   131→      primer_nombre: empleado.primer_nombre,
+   132→   132→      segundo_nombre: empleado.segundo_nombre || '',
+   133→   133→      primer_apellido: empleado.primer_apellido,
+   134→   134→      segundo_apellido: empleado.segundo_apellido || '',
+   135→   135→      apellido_casada: empleado.apellido_casada || '',
+   136→   136→      dui: empleado.dui,
+   137→   137→      nit: empleado.nit || '',
+   138→   138→      genero: empleado.genero || '',
+   139→   139→      estado_civil: empleado.estado_civil || '',
+   140→   140→      direccion: empleado.direccion || '',
+   141→   141→      telefono: empleado.telefono || '',
+   142→   142→      email_personal: empleado.email_personal || '',
+   143→   143→      fecha_nacimiento: empleado.fecha_nacimiento ? new Date(empleado.fecha_nacimiento).toISOString().slice(0, 10) : '',
+   144→   144→      numero_isss: empleado.numero_isss || '',
+   145→   145→      numero_afp: empleado.numero_afp || '',
+   146→   146→      afp_administradora: empleado.afp_administradora || '',
+   147→   147→      tipo_sangre: empleado.tipo_sangre || '',
+   148→   148→      contacto_emergencia_nombre: empleado.contacto_emergencia_nombre || '',
+   149→   149→      contacto_emergencia_telefono: empleado.contacto_emergencia_telefono || '',
+   150→   150→      contacto_emergencia_relacion: empleado.contacto_emergencia_relacion || '',
+   151→   151→    });
+   152→   152→    setEditing(true);
+   153→   153→  };
+   154→   154→
+   155→   155→  const handleSave = async () => {
+   156→   156→    setSaving(true);
+   157→   157→    try {
+   158→   158→      const res = await fetch(`/api/empleados/${empleadoId}`, {
+   159→   159→        method: 'PUT',
+   160→   160→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   161→   161→        body: JSON.stringify(editData),
+   162→   162→      });
+   163→   163→      const data = await res.json();
+   164→   164→      if (res.ok) {
+   165→   165→        toast({ title: 'Empleado actualizado', description: 'Los datos han sido guardados correctamente' });
+   166→   166→        setEditing(false);
+   167→   167→        fetchEmpleado();
+   168→   168→      } else {
+   169→   169→        toast({ title: 'Error', description: data.error || 'Error al actualizar', variant: 'destructive' });
+   170→   170→      }
+   171→   171→    } catch {
+   172→   172→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   173→   173→    } finally {
+   174→   174→      setSaving(false);
+   175→   175→    }
+   176→   176→  };
+   177→   177→
+   178→   178→  const handleCreateContract = async () => {
+   179→   179→    setSaving(true);
+   180→   180→    try {
+   181→   181→      const res = await fetch(`/api/empleados/${empleadoId}/contratos`, {
+   182→   182→        method: 'POST',
+   183→   183→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   184→   184→        body: JSON.stringify({
+   185→   185→          ...contractData,
+   186→   186→          salario_base_contrato: parseFloat(contractData.salario_base_contrato),
+   187→   187→          fecha_fin: contractData.fecha_fin || null,
+   188→   188→        }),
+   189→   189→      });
+   190→   190→      const data = await res.json();
+   191→   191→      if (res.ok) {
+   192→   192→        toast({ title: 'Contrato creado', description: 'El nuevo contrato ha sido registrado' });
+   193→   193→        setNewContractOpen(false);
+   194→   194→        setContractData({ tipo_contrato: 'INDEFINIDO', salario_base_contrato: '', tipo_jornada: 'COMPLETA', fecha_inicio: '', fecha_fin: '', observaciones: '' });
+   195→   195→        fetchEmpleado();
+   196→   196→      } else {
+   197→   197→        toast({ title: 'Error', description: data.error || 'Error al crear contrato', variant: 'destructive' });
+   198→   198→      }
+   199→   199→    } catch {
+   200→   200→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   201→   201→    } finally {
+   202→   202→      setSaving(false);
+   203→   203→    }
+   204→   204→  };
+   205→   205→
+   206→   206→  if (loading) {
+   207→   207→    return (
+   208→   208→      <div className="space-y-4">
+   209→   209→        <Skeleton className="h-10 w-48" />
+   210→   210→        <Skeleton className="h-64 w-full" />
+   211→   211→      </div>
+   212→   212→    );
+   213→   213→  }
+   214→   214→
+   215→   215→  if (!empleado) {
+   216→   216→    return (
+   217→   217→      <Card className="shadow-sm">
+   218→   218→        <CardContent className="p-12 text-center">
+   219→   219→          <AlertCircle className="h-10 w-10 text-slate-400 mx-auto mb-2" />
+   220→   220→          <p className="text-slate-600">Empleado no encontrado</p>
+   221→   221→          <Button variant="outline" className="mt-4" onClick={onBack}>
+   222→   222→            <ArrowLeft className="h-4 w-4 mr-1" /> Volver
+   223→   223→          </Button>
+   224→   224→        </CardContent>
+   225→   225→      </Card>
+   226→   226→    );
+   227→   227→  }
+   228→   228→
+   229→   229→  const activeContract = empleado.contratos.find(c => c.activo);
+   230→   230→
+   231→   231→  const InfoField = ({ label, value }: { label: string; value: string | null | undefined }) => (
+   232→   232→    <div>
+   233→   233→      <p className="text-xs text-slate-500 font-medium">{label}</p>
+   234→   234→      <p className="text-sm text-slate-900 mt-0.5">{value || '—'}</p>
+   235→   235→    </div>
+   236→   236→  );
+   237→   237→
+   238→   238→  const EditField = ({ label, field, type = 'text' }: { label: string; field: string; type?: string }) => (
+   239→   239→    <div>
+   240→   240→      <Label className="text-xs">{label}</Label>
+   241→   241→      <Input
+   242→   242→        type={type}
+   243→   243→        value={String(editData[field] || '')}
+   244→   244→        onChange={e => setEditData(prev => ({ ...prev, [field]: e.target.value }))}
+   245→   245→        className="h-8 text-sm"
+   246→   246→      />
+   247→   247→    </div>
+   248→   248→  );
+   249→   249→
+   250→   250→  return (
+   251→   251→    <div className="space-y-4">
+   252→   252→      {/* Header */}
+   253→   253→      <div className="flex items-center gap-3">
+   254→   254→        <Button variant="ghost" size="sm" onClick={onBack}>
+   255→   255→          <ArrowLeft className="h-4 w-4 mr-1" /> Volver
+   256→   256→        </Button>
+   257→   257→        <div className="flex-1">
+   258→   258→          <h2 className="text-xl font-bold text-slate-900">{getNombreCompleto()}</h2>
+   259→   259→          <p className="text-sm text-slate-500">{empleado.codigo_empleado} • {empleado.area?.nombre || 'Sin área'}</p>
+   260→   260→        </div>
+   261→   261→        <Badge className={empleado.estado === 'ACTIVO' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}>
+   262→   262→          {empleado.estado}
+   263→   263→        </Badge>
+   264→   264→        {(canEdit || canEditOwn) && !editing && (
+   265→   265→          <Button variant="outline" size="sm" onClick={handleEdit}>
+   266→   266→            <Edit2 className="h-4 w-4 mr-1" /> Editar
+   267→   267→          </Button>
+   268→   268→        )}
+   269→   269→        {editing && (
+   270→   270→          <div className="flex gap-2">
+   271→   271→            <Button variant="outline" size="sm" onClick={() => setEditing(false)}><X className="h-4 w-4 mr-1" /> Cancelar</Button>
+   272→   272→            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={handleSave} disabled={saving}>
+   273→   273→              {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />} Guardar
+   274→   274→            </Button>
+   275→   275→          </div>
+   276→   276→        )}
+   277→   277→      </div>
+   278→   278→
+   279→   279→      {/* Tabs */}
+   280→   280→      <Tabs defaultValue="personal" className="space-y-4">
+   281→   281→        <TabsList className="grid grid-cols-3 lg:grid-cols-6 w-full h-auto gap-1">
+   282→   282→          <TabsTrigger value="personal" className="text-xs gap-1"><FileText className="h-3.5 w-3.5" /> Personal</TabsTrigger>
+   283→   283→          <TabsTrigger value="contrato" className="text-xs gap-1"><Briefcase className="h-3.5 w-3.5" /> Contrato</TabsTrigger>
+   284→   284→          <TabsTrigger value="previsional" className="text-xs gap-1"><Heart className="h-3.5 w-3.5" /> Previsional</TabsTrigger>
+   285→   285→          <TabsTrigger value="nomina" className="text-xs gap-1"><DollarSign className="h-3.5 w-3.5" /> Nómina</TabsTrigger>
+   286→   286→          <TabsTrigger value="vacaciones" className="text-xs gap-1"><Palmtree className="h-3.5 w-3.5" /> Vacaciones</TabsTrigger>
+   287→   287→          <TabsTrigger value="expediente" className="text-xs gap-1"><FolderOpen className="h-3.5 w-3.5" /> Expediente</TabsTrigger>
+   288→   288→        </TabsList>
+   289→   289→
+   290→   290→        {/* Tab 1: Datos Personales */}
+   291→   291→        <TabsContent value="personal">
+   292→   292→          <Card className="shadow-sm">
+   293→   293→            <CardHeader className="pb-3">
+   294→   294→              <CardTitle className="text-base">Datos Personales</CardTitle>
+   295→   295→            </CardHeader>
+   296→   296→            <CardContent>
+   297→   297→              {editing ? (
+   298→   298→                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   299→   299→                  <EditField label="Primer Nombre" field="primer_nombre" />
+   300→   300→                  <EditField label="Segundo Nombre" field="segundo_nombre" />
+   301→   301→                  <EditField label="Primer Apellido" field="primer_apellido" />
+   302→   302→                  <EditField label="Segundo Apellido" field="segundo_apellido" />
+   303→   303→                  <EditField label="Apellido de Casada" field="apellido_casada" />
+   304→   304→                  <EditField label="DUI" field="dui" />
+   305→   305→                  <EditField label="NIT" field="nit" />
+   306→   306→                  <EditField label="Fecha de Nacimiento" field="fecha_nacimiento" type="date" />
+   307→   307→                  <div>
+   308→   308→                    <Label className="text-xs">Género</Label>
+   309→   309→                    <Select value={String(editData.genero || '')} onValueChange={v => setEditData(p => ({ ...p, genero: v }))}>
+   310→   310→                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+   311→   311→                      <SelectContent>
+   312→   312→                        <SelectItem value="">Seleccionar</SelectItem>
+   313→   313→                        <SelectItem value="MASCULINO">Masculino</SelectItem>
+   314→   314→                        <SelectItem value="FEMENINO">Femenino</SelectItem>
+   315→   315→                      </SelectContent>
+   316→   316→                    </Select>
+   317→   317→                  </div>
+   318→   318→                  <EditField label="Teléfono" field="telefono" />
+   319→   319→                  <EditField label="Email Personal" field="email_personal" type="email" />
+   320→   320→                  <div className="sm:col-span-2 lg:col-span-3">
+   321→   321→                    <EditField label="Dirección" field="direccion" />
+   322→   322→                  </div>
+   323→   323→                  <Separator className="sm:col-span-2 lg:col-span-3" />
+   324→   324→                  <EditField label="Contacto Emergencia Nombre" field="contacto_emergencia_nombre" />
+   325→   325→                  <EditField label="Contacto Emergencia Teléfono" field="contacto_emergencia_telefono" />
+   326→   326→                  <EditField label="Contacto Emergencia Relación" field="contacto_emergencia_relacion" />
+   327→   327→                </div>
+   328→   328→              ) : (
+   329→   329→                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   330→   330→                  <InfoField label="Primer Nombre" value={empleado.primer_nombre} />
+   331→   331→                  <InfoField label="Segundo Nombre" value={empleado.segundo_nombre} />
+   332→   332→                  <InfoField label="Primer Apellido" value={empleado.primer_apellido} />
+   333→   333→                  <InfoField label="Segundo Apellido" value={empleado.segundo_apellido} />
+   334→   334→                  <InfoField label="Apellido de Casada" value={empleado.apellido_casada} />
+   335→   335→                  <InfoField label="DUI" value={empleado.dui} />
+   336→   336→                  <InfoField label="NIT" value={empleado.nit} />
+   337→   337→                  <InfoField label="Fecha de Nacimiento" value={formatDate(empleado.fecha_nacimiento)} />
+   338→   338→                  <InfoField label="Género" value={empleado.genero} />
+   339→   339→                  <InfoField label="Estado Civil" value={empleado.estado_civil} />
+   340→   340→                  <InfoField label="Nacionalidad" value={empleado.nacionalidad} />
+   341→   341→                  <InfoField label="Teléfono" value={empleado.telefono} />
+   342→   342→                  <InfoField label="Email Personal" value={empleado.email_personal} />
+   343→   343→                  <div className="sm:col-span-2 lg:col-span-3"><InfoField label="Dirección" value={empleado.direccion} /></div>
+   344→   344→                  <Separator className="sm:col-span-2 lg:col-span-3" />
+   345→   345→                  <InfoField label="Contacto Emergencia" value={empleado.contacto_emergencia_nombre} />
+   346→   346→                  <InfoField label="Teléfono Emergencia" value={empleado.contacto_emergencia_telefono} />
+   347→   347→                  <InfoField label="Relación Emergencia" value={empleado.contacto_emergencia_relacion} />
+   348→   348→                </div>
+   349→   349→              )}
+   350→   350→            </CardContent>
+   351→   351→          </Card>
+   352→   352→        </TabsContent>
+   353→   353→
+   354→   354→        {/* Tab 2: Contrato */}
+   355→   355→        <TabsContent value="contrato">
+   356→   356→          <div className="space-y-4">
+   357→   357→            {/* Active Contract */}
+   358→   358→            <Card className="shadow-sm">
+   359→   359→              <CardHeader className="pb-3">
+   360→   360→                <div className="flex items-center justify-between">
+   361→   361→                  <CardTitle className="text-base">Contrato Vigente</CardTitle>
+   362→   362→                  {canEdit && (
+   363→   363→                    <Button size="sm" variant="outline" onClick={() => setNewContractOpen(true)}>
+   364→   364→                      <Plus className="h-4 w-4 mr-1" /> Nuevo Contrato
+   365→   365→                    </Button>
+   366→   366→                  )}
+   367→   367→                </div>
+   368→   368→              </CardHeader>
+   369→   369→              <CardContent>
+   370→   370→                {activeContract ? (
+   371→   371→                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   372→   372→                    <InfoField label="Tipo de Contrato" value={activeContract.tipo_contrato} />
+   373→   373→                    <InfoField label="Salario Base" value={formatSalary(activeContract.salario_base_contrato)} />
+   374→   374→                    <InfoField label="Jornada" value={activeContract.tipo_jornada} />
+   375→   375→                    <InfoField label="Fecha Inicio" value={formatDate(activeContract.fecha_inicio)} />
+   376→   376→                    <InfoField label="Fecha Fin" value={activeContract.fecha_fin ? formatDate(activeContract.fecha_fin) : 'Indefinido'} />
+   377→   377→                    <InfoField label="Puesto" value={activeContract.perfil_puesto?.nombre_puesto || '—'} />
+   378→   378→                    <div className="sm:col-span-2 lg:col-span-3"><InfoField label="Observaciones" value={activeContract.observaciones} /></div>
+   379→   379→                  </div>
+   380→   380→                ) : (
+   381→   381→                  <p className="text-sm text-slate-500 text-center py-8">No hay contrato vigente</p>
+   382→   382→                )}
+   383→   383→              </CardContent>
+   384→   384→            </Card>
+   385→   385→
+   386→   386→            {/* Contract History */}
+   387→   387→            <Card className="shadow-sm">
+   388→   388→              <CardHeader className="pb-3">
+   389→   389→                <CardTitle className="text-base">Historial de Contratos</CardTitle>
+   390→   390→              </CardHeader>
+   391→   391→              <CardContent className="p-0">
+   392→   392→                <Table>
+   393→   393→                  <TableHeader>
+   394→   394→                    <TableRow>
+   395→   395→                      <TableHead>Tipo</TableHead>
+   396→   396→                      <TableHead>Salario</TableHead>
+   397→   397→                      <TableHead>Inicio</TableHead>
+   398→   398→                      <TableHead>Fin</TableHead>
+   399→   399→                      <TableHead>Estado</TableHead>
+   400→   400→                    </TableRow>
+   401→   401→                  </TableHeader>
+   402→   402→                  <TableBody>
+   403→   403→                    {empleado.contratos.length === 0 ? (
+   404→   404→                      <TableRow><TableCell colSpan={5} className="text-center py-6 text-slate-500">Sin contratos registrados</TableCell></TableRow>
+   405→   405→                    ) : (
+   406→   406→                      empleado.contratos.map(c => (
+   407→   407→                        <TableRow key={c.id}>
+   408→   408→                          <TableCell className="text-sm">{c.tipo_contrato}</TableCell>
+   409→   409→                          <TableCell className="text-sm font-mono">{formatSalary(c.salario_base_contrato)}</TableCell>
+   410→   410→                          <TableCell className="text-sm">{formatDate(c.fecha_inicio)}</TableCell>
+   411→   411→                          <TableCell className="text-sm">{c.fecha_fin ? formatDate(c.fecha_fin) : 'Indefinido'}</TableCell>
+   412→   412→                          <TableCell>
+   413→   413→                            <Badge variant={c.activo ? 'default' : 'secondary'} className={c.activo ? 'bg-emerald-100 text-emerald-700' : ''}>
+   414→   414→                              {c.activo ? 'Vigente' : 'Finalizado'}
+   415→   415→                            </Badge>
+   416→   416→                          </TableCell>
+   417→   417→                        </TableRow>
+   418→   418→                      ))
+   419→   419→                    )}
+   420→   420→                  </TableBody>
+   421→   421→                </Table>
+   422→   422→              </CardContent>
+   423→   423→            </Card>
+   424→   424→          </div>
+   425→   425→        </TabsContent>
+   426→   426→
+   427→   427→        {/* Tab 3: Datos Previsionales */}
+   428→   428→        <TabsContent value="previsional">
+   429→   429→          <Card className="shadow-sm">
+   430→   430→            <CardHeader className="pb-3">
+   431→   431→              <CardTitle className="text-base">Datos Previsionales</CardTitle>
+   432→   432→            </CardHeader>
+   433→   433→            <CardContent>
+   434→   434→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   435→   435→                <InfoField label="Número ISSS" value={empleado.numero_isss} />
+   436→   436→                <InfoField label="Número AFP (NUP)" value={empleado.numero_afp} />
+   437→   437→                <InfoField label="AFP Administradora" value={empleado.afp_administradora} />
+   438→   438→                <InfoField label="Tipo de Sangre" value={empleado.tipo_sangre} />
+   439→   439→              </div>
+   440→   440→            </CardContent>
+   441→   441→          </Card>
+   442→   442→        </TabsContent>
+   443→   443→
+   444→   444→        {/* Tab 4: Nómina */}
+   445→   445→        <TabsContent value="nomina">
+   446→   446→          <div className="space-y-4">
+   447→   447→            <Card className="shadow-sm">
+   448→   448→              <CardHeader className="pb-3">
+   449→   449→                <CardTitle className="text-base">Salario Actual</CardTitle>
+   450→   450→              </CardHeader>
+   451→   451→              <CardContent>
+   452→   452→                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   453→   453→                  <InfoField label="Salario Base" value={formatSalary(empleado.salario_base)} />
+   454→   454→                  <InfoField label="Puesto" value={empleado.perfil_puesto?.nombre_puesto} />
+   455→   455→                  <InfoField label="Banda Salarial" value={empleado.perfil_puesto?.banda_salarial?.nombre} />
+   456→   456→                </div>
+   457→   457→              </CardContent>
+   458→   458→            </Card>
+   459→   459→
+   460→   460→            <Card className="shadow-sm">
+   461→   461→              <CardHeader className="pb-3">
+   462→   462→                <CardTitle className="text-base">Historial de Cambios Salariales</CardTitle>
+   463→   463→              </CardHeader>
+   464→   464→              <CardContent className="p-0">
+   465→   465→                <Table>
+   466→   466→                  <TableHeader>
+   467→   467→                    <TableRow>
+   468→   468→                      <TableHead>Fecha</TableHead>
+   469→   469→                      <TableHead>Salario Anterior</TableHead>
+   470→   470→                      <TableHead>Salario Nuevo</TableHead>
+   471→   471→                      <TableHead>Tipo</TableHead>
+   472→   472→                      <TableHead>Motivo</TableHead>
+   473→   473→                    </TableRow>
+   474→   474→                  </TableHeader>
+   475→   475→                  <TableBody>
+   476→   476→                    {empleado.cambios_salariales.length === 0 ? (
+   477→   477→                      <TableRow><TableCell colSpan={5} className="text-center py-6 text-slate-500">Sin cambios salariales registrados</TableCell></TableRow>
+   478→   478→                    ) : (
+   479→   479→                      empleado.cambios_salariales.map(cs => (
+   480→   480→                        <TableRow key={cs.id}>
+   481→   481→                          <TableCell className="text-sm">{formatDate(cs.fecha_cambio)}</TableCell>
+   482→   482→                          <TableCell className="text-sm font-mono">{formatSalary(cs.salario_anterior)}</TableCell>
+   483→   483→                          <TableCell className="text-sm font-mono">{formatSalary(cs.salario_nuevo)}</TableCell>
+   484→   484→                          <TableCell className="text-sm">{cs.tipo_cambio}</TableCell>
+   485→   485→                          <TableCell className="text-sm">{cs.motivo || '—'}</TableCell>
+   486→   486→                        </TableRow>
+   487→   487→                      ))
+   488→   488→                    )}
+   489→   489→                  </TableBody>
+   490→   490→                </Table>
+   491→   491→              </CardContent>
+   492→   492→            </Card>
+   493→   493→          </div>
+   494→   494→        </TabsContent>
+   495→   495→
+   496→   496→        {/* Tab 5: Vacaciones */}
+   497→   497→        <TabsContent value="vacaciones">
+   498→   498→          <Card className="shadow-sm">
+   499→   499→            <CardHeader className="pb-3">
+   500→   500→              <CardTitle className="text-base">Saldo de Vacaciones</CardTitle>
+   501→   501→            </CardHeader>
+   502→   502→            <CardContent className="p-0">
+   503→   503→              <Table>
+   504→   504→                <TableHeader>
+   505→   505→                  <TableRow>
+   506→   506→                    <TableHead>Año</TableHead>
+   507→   507→                    <TableHead>Días Derecho</TableHead>
+   508→   508→                    <TableHead>Días Tomados</TableHead>
+   509→   509→                    <TableHead>Días Pendientes</TableHead>
+   510→   510→                    <TableHead>Días Vendidos</TableHead>
+   511→   511→                    <TableHead>Estado</TableHead>
+   512→   512→                  </TableRow>
+   513→   513→                </TableHeader>
+   514→   514→                <TableBody>
+   515→   515→                  {empleado.vacaciones.length === 0 ? (
+   516→   516→                    <TableRow><TableCell colSpan={6} className="text-center py-6 text-slate-500">Sin registros de vacaciones</TableCell></TableRow>
+   517→   517→                  ) : (
+   518→   518→                    empleado.vacaciones.map(v => (
+   519→   519→                      <TableRow key={v.id}>
+   520→   520→                        <TableCell className="text-sm font-medium">{v.anio}</TableCell>
+   521→   521→                        <TableCell className="text-sm">{v.dias_derecho}</TableCell>
+   522→   522→                        <TableCell className="text-sm">{v.dias_tomados}</TableCell>
+   523→   523→                        <TableCell className="text-sm font-semibold text-amber-600">{v.dias_pendientes}</TableCell>
+   524→   524→                        <TableCell className="text-sm">{v.dias_vendidos}</TableCell>
+   525→   525→                        <TableCell>
+   526→   526→                          <Badge variant={v.estado === 'ABIERTO' ? 'default' : 'secondary'} className={v.estado === 'ABIERTO' ? 'bg-emerald-100 text-emerald-700' : ''}>
+   527→   527→                            {v.estado}
+   528→   528→                          </Badge>
+   529→   529→                        </TableCell>
+   530→   530→                      </TableRow>
+   531→   531→                    ))
+   532→   532→                  )}
+   533→   533→                </TableBody>
+   534→   534→              </Table>
+   535→   535→            </CardContent>
+   536→   536→          </Card>
+   537→   537→        </TabsContent>
+   538→   538→
+   539→   539→        {/* Tab 6: Expediente */}
+   540→   540→        <TabsContent value="expediente">
+   541→   541→          <Card className="shadow-sm">
+   542→   542→            <CardHeader className="pb-3">
+   543→   543→              <CardTitle className="text-base">Documentos del Empleado</CardTitle>
+   544→   544→              <CardDescription>Documentos y archivos adjuntos del expediente</CardDescription>
+   545→   545→            </CardHeader>
+   546→   546→            <CardContent>
+   547→   547→              {empleado.documentos.length === 0 ? (
+   548→   548→                <div className="flex flex-col items-center py-12 text-slate-400">
+   549→   549→                  <FolderOpen className="h-10 w-10 mb-2" />
+   550→   550→                  <p className="text-sm font-medium">Sin documentos registrados</p>
+   551→   551→                  <p className="text-xs">Los documentos del empleado aparecerán aquí</p>
+   552→   552→                </div>
+   553→   553→              ) : (
+   554→   554→                <div className="space-y-2">
+   555→   555→                  {empleado.documentos.map(doc => (
+   556→   556→                    <div key={doc.id} className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+   557→   557→                      <FileText className="h-5 w-5 text-slate-400 shrink-0" />
+   558→   558→                      <div className="flex-1 min-w-0">
+   559→   559→                        <p className="text-sm font-medium text-slate-900 truncate">{doc.nombre_archivo}</p>
+   560→   560→                        <p className="text-xs text-slate-500">{doc.tipo_documento} • {formatDate(doc.fecha_creacion)}</p>
+   561→   561→                      </div>
+   562→   562→                      {doc.descripcion && <p className="text-xs text-slate-400 hidden sm:block">{doc.descripcion}</p>}
+   563→   563→                    </div>
+   564→   564→                  ))}
+   565→   565→                </div>
+   566→   566→              )}
+   567→   567→            </CardContent>
+   568→   568→          </Card>
+   569→   569→        </TabsContent>
+   570→   570→      </Tabs>
+   571→   571→
+   572→   572→      {/* New Contract Dialog */}
+   573→   573→      <Dialog open={newContractOpen} onOpenChange={setNewContractOpen}>
+   574→   574→        <DialogContent>
+   575→   575→          <DialogHeader>
+   576→   576→            <DialogTitle>Nuevo Contrato</DialogTitle>
+   577→   577→            <DialogDescription>Crear un nuevo contrato para {getNombreCompleto()}</DialogDescription>
+   578→   578→          </DialogHeader>
+   579→   579→          <div className="space-y-4">
+   580→   580→            <div className="grid grid-cols-2 gap-3">
+   581→   581→              <div>
+   582→   582→                <Label>Tipo de Contrato</Label>
+   583→   583→                <Select value={contractData.tipo_contrato} onValueChange={v => setContractData(p => ({ ...p, tipo_contrato: v }))}>
+   584→   584→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   585→   585→                  <SelectContent>
+   586→   586→                    <SelectItem value="INDEFINIDO">Indefinido</SelectItem>
+   587→   587→                    <SelectItem value="PLAZO_FIJO">Plazo Fijo</SelectItem>
+   588→   588→                    <SelectItem value="OBRA_LABOR">Obra/Labor</SelectItem>
+   589→   589→                    <SelectItem value="TEMPORAL">Temporal</SelectItem>
+   590→   590→                  </SelectContent>
+   591→   591→                </Select>
+   592→   592→              </div>
+   593→   593→              <div>
+   594→   594→                <Label>Tipo Jornada</Label>
+   595→   595→                <Select value={contractData.tipo_jornada} onValueChange={v => setContractData(p => ({ ...p, tipo_jornada: v }))}>
+   596→   596→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   597→   597→                  <SelectContent>
+   598→   598→                    <SelectItem value="COMPLETA">Completa</SelectItem>
+   599→   599→                    <SelectItem value="MEDIA">Media</SelectItem>
+   600→   600→                    <SelectItem value="POR_HORAS">Por Horas</SelectItem>
+   601→   601→                  </SelectContent>
+   602→   602→                </Select>
+   603→   603→              </div>
+   604→   604→            </div>
+   605→   605→            <div>
+   606→   606→              <Label>Salario Base (USD)</Label>
+   607→   607→              <Input type="number" step="0.01" value={contractData.salario_base_contrato} onChange={e => setContractData(p => ({ ...p, salario_base_contrato: e.target.value }))} />
+   608→   608→            </div>
+   609→   609→            <div className="grid grid-cols-2 gap-3">
+   610→   610→              <div>
+   611→   611→                <Label>Fecha Inicio</Label>
+   612→   612→                <Input type="date" value={contractData.fecha_inicio} onChange={e => setContractData(p => ({ ...p, fecha_inicio: e.target.value }))} />
+   613→   613→              </div>
+   614→   614→              <div>
+   615→   615→                <Label>Fecha Fin (opcional)</Label>
+   616→   616→                <Input type="date" value={contractData.fecha_fin} onChange={e => setContractData(p => ({ ...p, fecha_fin: e.target.value }))} />
+   617→   617→              </div>
+   618→   618→            </div>
+   619→   619→            <div>
+   620→   620→              <Label>Observaciones</Label>
+   621→   621→              <Input value={contractData.observaciones} onChange={e => setContractData(p => ({ ...p, observaciones: e.target.value }))} />
+   622→   622→            </div>
+   623→   623→            <div className="flex justify-end gap-2">
+   624→   624→              <Button variant="outline" onClick={() => setNewContractOpen(false)}>Cancelar</Button>
+   625→   625→              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleCreateContract} disabled={saving}>
+   626→   626→                {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Crear Contrato
+   627→   627→              </Button>
+   628→   628→            </div>
+   629→   629→          </div>
+   630→   630→        </DialogContent>
+   631→   631→      </Dialog>
+   632→   632→    </div>
+   633→   633→  );
+   634→   634→}
+   635→   635→

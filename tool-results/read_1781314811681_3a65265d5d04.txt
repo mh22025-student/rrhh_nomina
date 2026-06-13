@@ -1,0 +1,802 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  Send, Building2, Download, Loader2, CheckCircle, XCircle,
+     6→  Clock, AlertTriangle, RefreshCw, Copy, ChevronDown, ChevronRight,
+     7→  FileText, Users, DollarSign, Calendar, ShieldCheck, Info
+     8→} from 'lucide-react';
+     9→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    10→import { Badge } from '@/components/ui/badge';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    13→import { Skeleton } from '@/components/ui/skeleton';
+    14→import { Separator } from '@/components/ui/separator';
+    15→import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+    16→import { Progress } from '@/components/ui/progress';
+    17→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    18→import { useToast } from '@/hooks/use-toast';
+    19→
+    20→interface BankDispersionProps {
+    21→  accessToken: string;
+    22→  userRole: string;
+    23→}
+    24→
+    25→const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    26→
+    27→interface PlanillaOption {
+    28→  id: string;
+    29→  codigo_planilla: string;
+    30→  tipo: string;
+    31→  estado: string;
+    32→  total_neto_a_pagar: number;
+    33→  total_empleados: number;
+    34→  fecha_generacion?: string;
+    35→}
+    36→
+    37→interface DispersionResult {
+    38→  banco_id: string;
+    39→  banco_nombre: string;
+    40→  banco_codigo: string;
+    41→  total_empleados: number;
+    42→  total_monto: number;
+    43→  archivo_nombre: string;
+    44→  retorno_id: string;
+    45→  contenido_csv: string;
+    46→}
+    47→
+    48→interface RetornoBancario {
+    49→  id: string;
+    50→  banco_id: string;
+    51→  archivo_nombre: string | null;
+    52→  fecha_envio: string | null;
+    53→  fecha_retorno: string | null;
+    54→  estado: string;
+    55→  total_registros: number;
+    56→  total_monto: number;
+    57→  errores_detalle: string | null;
+    58→  banco: { nombre: string; codigo: string };
+    59→}
+    60→
+    61→type Step = 1 | 2 | 3;
+    62→
+    63→// Bank color palette for avatars
+    64→const bankColors = [
+    65→  'bg-emerald-600 text-white',
+    66→  'bg-teal-600 text-white',
+    67→  'bg-cyan-600 text-white',
+    68→  'bg-amber-600 text-white',
+    69→  'bg-rose-600 text-white',
+    70→  'bg-violet-600 text-white',
+    71→  'bg-orange-600 text-white',
+    72→  'bg-lime-600 text-white',
+    73→];
+    74→
+    75→function getBankColor(index: number) {
+    76→  return bankColors[index % bankColors.length];
+    77→}
+    78→
+    79→export default function BankDispersion({ accessToken }: BankDispersionProps) {
+    80→  const { toast } = useToast();
+    81→  const [planillas, setPlanillas] = useState<PlanillaOption[]>([]);
+    82→  const [selectedId, setSelectedId] = useState<string>('');
+    83→  const [selectedPlanilla, setSelectedPlanilla] = useState<PlanillaOption | null>(null);
+    84→  const [loading, setLoading] = useState(true);
+    85→  const [generating, setGenerating] = useState(false);
+    86→  const [dispersions, setDispersions] = useState<DispersionResult[]>([]);
+    87→  const [retornos, setRetornos] = useState<RetornoBancario[]>([]);
+    88→  const [loadingDetail, setLoadingDetail] = useState(false);
+    89→  const [expandedBanks, setExpandedBanks] = useState<Set<string>>(new Set());
+    90→  const [previewBank, setPreviewBank] = useState<string | null>(null);
+    91→  const [copied, setCopied] = useState(false);
+    92→  const [confirmed, setConfirmed] = useState(false);
+    93→
+    94→  // Step logic
+    95→  const currentStep: Step = !selectedId ? 1 : dispersions.length === 0 ? 2 : 3;
+    96→
+    97→  const fetchPlanillas = useCallback(async () => {
+    98→    setLoading(true);
+    99→    try {
+   100→      const res = await fetch('/api/nomina/planillas?limit=50', {
+   101→        headers: { Authorization: `Bearer ${accessToken}` },
+   102→      });
+   103→      if (!res.ok) throw new Error('Error');
+   104→      const data = await res.json();
+   105→      setPlanillas(data.planillas?.filter((p: PlanillaOption) => p.estado === 'APROBADA') || []);
+   106→    } catch {
+   107→      toast({ title: 'Error', description: 'No se pudieron cargar planillas', variant: 'destructive' });
+   108→    } finally {
+   109→      setLoading(false);
+   110→    }
+   111→  }, [accessToken, toast]);
+   112→
+   113→  const fetchDetail = useCallback(async (planillaId: string) => {
+   114→    setLoadingDetail(true);
+   115→    try {
+   116→      const res = await fetch(`/api/nomina/planillas/${planillaId}`, {
+   117→        headers: { Authorization: `Bearer ${accessToken}` },
+   118→      });
+   119→      if (!res.ok) throw new Error('Error');
+   120→      const data = await res.json();
+   121→      setRetornos(data.planilla?.retornos_bancarios || []);
+   122→    } catch {
+   123→      // ignore
+   124→    } finally {
+   125→      setLoadingDetail(false);
+   126→    }
+   127→  }, [accessToken]);
+   128→
+   129→  useEffect(() => { fetchPlanillas(); }, [fetchPlanillas]);
+   130→
+   131→  useEffect(() => {
+   132→    if (selectedId) {
+   133→      fetchDetail(selectedId);
+   134→      const p = planillas.find(pl => pl.id === selectedId);
+   135→      setSelectedPlanilla(p || null);
+   136→    } else {
+   137→      setRetornos([]);
+   138→      setSelectedPlanilla(null);
+   139→    }
+   140→  }, [selectedId, fetchDetail, planillas]);
+   141→
+   142→  // Reset state when selection changes
+   143→  useEffect(() => {
+   144→    setDispersions([]);
+   145→    setExpandedBanks(new Set());
+   146→    setPreviewBank(null);
+   147→    setConfirmed(false);
+   148→  }, [selectedId]);
+   149→
+   150→  const handleGenerate = async () => {
+   151→    if (!selectedId) return;
+   152→    setGenerating(true);
+   153→    try {
+   154→      const res = await fetch(`/api/nomina/planillas/${selectedId}/dispersion`, {
+   155→        method: 'POST',
+   156→        headers: { Authorization: `Bearer ${accessToken}` },
+   157→      });
+   158→      const data = await res.json();
+   159→      if (!res.ok) throw new Error(data.error || 'Error al generar dispersión');
+   160→      setDispersions(data.dispersiones || []);
+   161→      toast({ title: 'Dispersión Generada', description: `${data.dispersiones.length} archivo(s) generado(s)` });
+   162→      fetchDetail(selectedId);
+   163→    } catch (err) {
+   164→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al generar dispersión', variant: 'destructive' });
+   165→    } finally {
+   166→      setGenerating(false);
+   167→    }
+   168→  };
+   169→
+   170→  const handleDownload = (disp: DispersionResult) => {
+   171→    const blob = new Blob([disp.contenido_csv], { type: 'text/csv' });
+   172→    const url = URL.createObjectURL(blob);
+   173→    const a = document.createElement('a');
+   174→    a.href = url;
+   175→    a.download = disp.archivo_nombre;
+   176→    a.click();
+   177→    URL.revokeObjectURL(url);
+   178→  };
+   179→
+   180→  const handleCopyToClipboard = async (content: string) => {
+   181→    try {
+   182→      await navigator.clipboard.writeText(content);
+   183→      setCopied(true);
+   184→      toast({ title: 'Copiado', description: 'Contenido copiado al portapapeles' });
+   185→      setTimeout(() => setCopied(false), 2000);
+   186→    } catch {
+   187→      toast({ title: 'Error', description: 'No se pudo copiar', variant: 'destructive' });
+   188→    }
+   189→  };
+   190→
+   191→  const toggleExpanded = (bancoId: string) => {
+   192→    setExpandedBanks(prev => {
+   193→      const next = new Set(prev);
+   194→      if (next.has(bancoId)) next.delete(bancoId);
+   195→      else next.add(bancoId);
+   196→      return next;
+   197→    });
+   198→  };
+   199→
+   200→  const handleConfirm = () => {
+   201→    setConfirmed(true);
+   202→    toast({ title: 'Dispersión Confirmada', description: 'Los archivos han sido confirmados para envío bancario' });
+   203→  };
+   204→
+   205→  // Parse CSV content into rows for display
+   206→  const parseCSV = (csv: string) => {
+   207→    return csv.split('\n').map(line => line.split(','));
+   208→  };
+   209→
+   210→  // Summary calculations
+   211→  const totalAmountDispersed = dispersions.reduce((s, d) => s + d.total_monto, 0);
+   212→  const totalEmployees = dispersions.reduce((s, d) => s + d.total_empleados, 0);
+   213→  const bankCount = dispersions.length;
+   214→  const successRetornos = retornos.filter(r => r.estado === 'PROCESADO').length;
+   215→  const errorRetornos = retornos.filter(r => r.estado === 'CON_ERRORES' || r.estado === 'RECHAZADO').length;
+   216→
+   217→  const retornoEstadoColors: Record<string, string> = {
+   218→    PENDIENTE: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+   219→    ENVIADO: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
+   220→    EN_PROCESO: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300',
+   221→    PROCESADO: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300',
+   222→    CON_ERRORES: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
+   223→    RECHAZADO: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
+   224→  };
+   225→
+   226→  const retornoEstadoIcons: Record<string, React.ReactNode> = {
+   227→    PENDIENTE: <Clock className="h-3 w-3" />,
+   228→    ENVIADO: <Send className="h-3 w-3" />,
+   229→    EN_PROCESO: <Loader2 className="h-3 w-3 animate-spin" />,
+   230→    PROCESADO: <CheckCircle className="h-3 w-3" />,
+   231→    CON_ERRORES: <XCircle className="h-3 w-3" />,
+   232→    RECHAZADO: <XCircle className="h-3 w-3" />,
+   233→  };
+   234→
+   235→  // Step indicator component
+   236→  const steps = [
+   237→    { num: 1, label: 'Seleccionar', icon: Info },
+   238→    { num: 2, label: 'Generar', icon: Send },
+   239→    { num: 3, label: 'Confirmar', icon: ShieldCheck },
+   240→  ];
+   241→
+   242→  return (
+   243→    <div className="space-y-5">
+   244→      {/* ========== STEP INDICATOR ========== */}
+   245→      <Card className="shadow-sm overflow-hidden">
+   246→        <CardContent className="p-4 sm:p-6">
+   247→          <div className="flex items-center justify-center">
+   248→            {steps.map((step, i) => {
+   249→              const isActive = currentStep === step.num;
+   250→              const isCompleted = currentStep > step.num;
+   251→              const Icon = step.icon;
+   252→              return (
+   253→                <React.Fragment key={step.num}>
+   254→                  <div className="flex flex-col items-center gap-1.5">
+   255→                    <div
+   256→                      className={`
+   257→                        flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 transition-all duration-300
+   258→                        ${isCompleted
+   259→                          ? 'bg-teal-600 border-teal-600 text-white dark:bg-teal-700 dark:border-teal-700'
+   260→                          : isActive
+   261→                            ? 'bg-emerald-600 border-emerald-600 text-white dark:bg-emerald-700 dark:border-emerald-700 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/30'
+   262→                            : 'bg-slate-100 border-slate-300 text-slate-400 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-500'
+   263→                        }
+   264→                      `}
+   265→                    >
+   266→                      {isCompleted ? (
+   267→                        <CheckCircle className="h-5 w-5" />
+   268→                      ) : (
+   269→                        <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+   270→                      )}
+   271→                    </div>
+   272→                    <span
+   273→                      className={`text-xs sm:text-sm font-medium transition-colors ${
+   274→                        isCompleted
+   275→                          ? 'text-teal-700 dark:text-teal-400'
+   276→                          : isActive
+   277→                            ? 'text-emerald-700 dark:text-emerald-400'
+   278→                            : 'text-slate-400 dark:text-slate-500'
+   279→                      }`}
+   280→                    >
+   281→                      {step.label}
+   282→                    </span>
+   283→                  </div>
+   284→                  {i < steps.length - 1 && (
+   285→                    <div
+   286→                      className={`
+   287→                        flex-1 h-0.5 mx-2 sm:mx-4 mb-5 transition-colors duration-300 rounded-full
+   288→                        ${currentStep > step.num
+   289→                          ? 'bg-teal-500 dark:bg-teal-600'
+   290→                          : 'bg-slate-200 dark:bg-slate-700'
+   291→                        }
+   292→                      `}
+   293→                    />
+   294→                  )}
+   295→                </React.Fragment>
+   296→              );
+   297→            })}
+   298→          </div>
+   299→        </CardContent>
+   300→      </Card>
+   301→
+   302→      {/* ========== PLANILLA SELECTOR ========== */}
+   303→      <Card className="shadow-sm">
+   304→        <CardHeader className="pb-3">
+   305→          <CardTitle className="text-base flex items-center gap-2">
+   306→            <Send className="h-4 w-4" /> Dispersión Bancaria
+   307→          </CardTitle>
+   308→          <CardDescription>Genere archivos de dispersión para planillas aprobadas</CardDescription>
+   309→        </CardHeader>
+   310→        <CardContent className="space-y-4">
+   311→          {loading ? (
+   312→            <div className="space-y-3">
+   313→              <Skeleton className="h-10 w-full" />
+   314→              <Skeleton className="h-20 w-full" />
+   315→            </div>
+   316→          ) : planillas.length === 0 ? (
+   317→            <div className="text-center py-8">
+   318→              <Building2 className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+   319→              <p className="text-sm text-slate-400 dark:text-slate-500">No hay planillas aprobadas para dispersión</p>
+   320→            </div>
+   321→          ) : (
+   322→            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+   323→              <div className="flex-1">
+   324→                <Select value={selectedId} onValueChange={setSelectedId}>
+   325→                  <SelectTrigger><SelectValue placeholder="Seleccione una planilla aprobada..." /></SelectTrigger>
+   326→                  <SelectContent>
+   327→                    {planillas.map(p => (
+   328→                      <SelectItem key={p.id} value={p.id}>
+   329→                        {p.codigo_planilla} — {p.tipo} — {fmt(p.total_neto_a_pagar)}
+   330→                      </SelectItem>
+   331→                    ))}
+   332→                  </SelectContent>
+   333→                </Select>
+   334→              </div>
+   335→              <Button
+   336→                onClick={handleGenerate}
+   337→                disabled={!selectedId || generating}
+   338→                className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800 min-w-[180px]"
+   339→              >
+   340→                {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+   341→                Generar Dispersión
+   342→              </Button>
+   343→            </div>
+   344→          )}
+   345→        </CardContent>
+   346→      </Card>
+   347→
+   348→      {/* ========== PLANILLA INFO CARD ========== */}
+   349→      {selectedPlanilla && (
+   350→        <Card className="shadow-sm border-l-4 border-l-emerald-500 dark:border-l-emerald-600">
+   351→          <CardContent className="p-4 sm:p-6">
+   352→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+   353→              {/* Planilla Code & Type */}
+   354→              <div className="space-y-2">
+   355→                <div className="flex items-center gap-2">
+   356→                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
+   357→                    <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   358→                  </div>
+   359→                  <div>
+   360→                    <p className="text-xs text-slate-500 dark:text-slate-400">Planilla</p>
+   361→                    <p className="font-semibold text-sm dark:text-slate-100">{selectedPlanilla.codigo_planilla}</p>
+   362→                  </div>
+   363→                </div>
+   364→                <div className="flex gap-1.5 ml-10">
+   365→                  <Badge variant="secondary" className="text-[10px] bg-slate-100 dark:bg-slate-700 dark:text-slate-300">
+   366→                    {selectedPlanilla.tipo}
+   367→                  </Badge>
+   368→                  <Badge className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
+   369→                    {selectedPlanilla.estado}
+   370→                  </Badge>
+   371→                </div>
+   372→              </div>
+   373→
+   374→              {/* Total Neto */}
+   375→              <div className="space-y-1">
+   376→                <div className="flex items-center gap-2">
+   377→                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/40">
+   378→                    <DollarSign className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+   379→                  </div>
+   380→                  <p className="text-xs text-slate-500 dark:text-slate-400">Total Neto</p>
+   381→                </div>
+   382→                <p className="text-2xl font-bold text-teal-700 dark:text-teal-400 ml-10">
+   383→                  {fmt(selectedPlanilla.total_neto_a_pagar)}
+   384→                </p>
+   385→              </div>
+   386→
+   387→              {/* Total Employees */}
+   388→              <div className="space-y-1">
+   389→                <div className="flex items-center gap-2">
+   390→                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-900/40">
+   391→                    <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+   392→                  </div>
+   393→                  <p className="text-xs text-slate-500 dark:text-slate-400">Empleados</p>
+   394→                </div>
+   395→                <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-400 ml-10">
+   396→                  {selectedPlanilla.total_empleados}
+   397→                </p>
+   398→              </div>
+   399→
+   400→              {/* Generation Date & Status */}
+   401→              <div className="space-y-1">
+   402→                <div className="flex items-center gap-2">
+   403→                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40">
+   404→                    <Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+   405→                  </div>
+   406→                  <p className="text-xs text-slate-500 dark:text-slate-400">Estado</p>
+   407→                </div>
+   408→                <div className="flex items-center gap-2 ml-10">
+   409→                  <span className="relative flex h-2.5 w-2.5">
+   410→                    <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+   411→                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+   412→                  </span>
+   413→                  <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Aprobada</span>
+   414→                </div>
+   415→              </div>
+   416→            </div>
+   417→          </CardContent>
+   418→        </Card>
+   419→      )}
+   420→
+   421→      {/* ========== ENHANCED DISPERSIONS TABLE ========== */}
+   422→      {dispersions.length > 0 && (
+   423→        <Card className="shadow-sm">
+   424→          <CardHeader className="pb-3">
+   425→            <CardTitle className="text-base flex items-center gap-2">
+   426→              <Building2 className="h-4 w-4" /> Resumen por Banco
+   427→            </CardTitle>
+   428→            <CardDescription>
+   429→              {bankCount} banco{bankCount !== 1 ? 's' : ''} — {totalEmployees} empleado{totalEmployees !== 1 ? 's' : ''} — {fmt(totalAmountDispersed)} total
+   430→            </CardDescription>
+   431→          </CardHeader>
+   432→          <CardContent className="p-0">
+   433→            <div className="space-y-0">
+   434→              {dispersions.map((d, idx) => {
+   435→                const isExpanded = expandedBanks.has(d.banco_id);
+   436→                const isPreview = previewBank === d.banco_id;
+   437→                const csvRows = parseCSV(d.contenido_csv);
+   438→                const headerRow = csvRows[0] || [];
+   439→                const dataRows = csvRows.slice(1);
+   440→                const lines = d.contenido_csv.split('\n');
+   441→                const previewLines = lines.slice(0, 8);
+   442→                const fileSize = new Blob([d.contenido_csv]).size;
+   443→                const fileSizeStr = fileSize > 1024 ? `${(fileSize / 1024).toFixed(1)} KB` : `${fileSize} B`;
+   444→
+   445→                // Find matching retorno for status
+   446→                const matchingRetorno = retornos.find(r => r.banco_id === d.banco_id);
+   447→                const status = matchingRetorno?.estado || 'ENVIADO';
+   448→
+   449→                // Progress based on status
+   450→                const progressValue = status === 'PROCESADO' ? 100 : status === 'EN_PROCESO' ? 60 : status === 'ENVIADO' ? 30 : status === 'PENDIENTE' ? 10 : 0;
+   451→
+   452→                return (
+   453→                  <div key={d.banco_id} className="border-b last:border-b-0">
+   454→                    {/* Bank row */}
+   455→                    <div
+   456→                      className="flex items-center gap-3 sm:gap-4 p-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+   457→                      onClick={() => toggleExpanded(d.banco_id)}
+   458→                    >
+   459→                      {/* Bank avatar */}
+   460→                      <Avatar className="h-10 w-10 shrink-0">
+   461→                        <AvatarFallback className={getBankColor(idx)}>
+   462→                          <span className="text-sm font-bold">{d.banco_nombre.charAt(0)}</span>
+   463→                        </AvatarFallback>
+   464→                      </Avatar>
+   465→
+   466→                      {/* Bank info */}
+   467→                      <div className="flex-1 min-w-0">
+   468→                        <div className="flex items-center gap-2 mb-1">
+   469→                          <p className="font-medium text-sm dark:text-slate-100 truncate">{d.banco_nombre}</p>
+   470→                          <Badge
+   471→                            className={`text-[10px] ${retornoEstadoColors[status] || 'bg-slate-100 dark:bg-slate-700'} flex items-center gap-1`}
+   472→                            variant="secondary"
+   473→                          >
+   474→                            {retornoEstadoIcons[status]}
+   475→                            {status}
+   476→                          </Badge>
+   477→                          {status === 'EN_PROCESO' && (
+   478→                            <span className="relative flex h-2 w-2">
+   479→                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+   480→                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+   481→                            </span>
+   482→                          )}
+   483→                        </div>
+   484→                        <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+   485→                          <span>Código: {d.banco_codigo}</span>
+   486→                          <span className="hidden sm:inline">•</span>
+   487→                          <span className="hidden sm:inline">{d.archivo_nombre}</span>
+   488→                        </div>
+   489→                        {/* Progress bar */}
+   490→                        <div className="mt-2 flex items-center gap-2">
+   491→                          <Progress value={progressValue} className="h-1.5 flex-1" />
+   492→                          <span className="text-[10px] text-slate-400 dark:text-slate-500 w-8 text-right">{progressValue}%</span>
+   493→                        </div>
+   494→                      </div>
+   495→
+   496→                      {/* Stats */}
+   497→                      <div className="text-right shrink-0">
+   498→                        <p className="font-semibold text-sm dark:text-slate-100">{fmt(d.total_monto)}</p>
+   499→                        <p className="text-xs text-slate-500 dark:text-slate-400">{d.total_empleados} emp.</p>
+   500→                      </div>
+   501→
+   502→                      {/* Expand icon */}
+   503→                      <div className="shrink-0 text-slate-400 dark:text-slate-500">
+   504→                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+   505→                      </div>
+   506→                    </div>
+   507→
+   508→                    {/* Expandable content */}
+   509→                    <Collapsible open={isExpanded} onOpenChange={() => toggleExpanded(d.banco_id)}>
+   510→                      <CollapsibleContent>
+   511→                        <div className="px-4 pb-4 space-y-3">
+   512→                          {/* Action buttons */}
+   513→                          <div className="flex flex-wrap gap-2">
+   514→                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleDownload(d); }}>
+   515→                              <Download className="h-3.5 w-3.5 mr-1.5" /> Descargar CSV
+   516→                            </Button>
+   517→                            <Button
+   518→                              variant="outline"
+   519→                              size="sm"
+   520→                              onClick={(e) => { e.stopPropagation(); setPreviewBank(isPreview ? null : d.banco_id); }}
+   521→                            >
+   522→                              <FileText className="h-3.5 w-3.5 mr-1.5" /> {isPreview ? 'Ocultar Vista' : 'Vista ACH'}
+   523→                            </Button>
+   524→                          </div>
+   525→
+   526→                          {/* ACH File Preview */}
+   527→                          {isPreview && (
+   528→                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+   529→                              <div className="flex items-center justify-between px-3 py-2 bg-slate-800 dark:bg-slate-900 border-b border-slate-700">
+   530→                                <div className="flex items-center gap-2">
+   531→                                  <FileText className="h-3.5 w-3.5 text-slate-400" />
+   532→                                  <span className="text-xs font-mono text-slate-300">{d.archivo_nombre}</span>
+   533→                                </div>
+   534→                                <div className="flex items-center gap-2">
+   535→                                  <span className="text-[10px] text-slate-500">{lines.length} líneas • {fileSizeStr}</span>
+   536→                                  <Button
+   537→                                    variant="ghost"
+   538→                                    size="sm"
+   539→                                    className="h-6 px-2 text-slate-400 hover:text-white hover:bg-slate-700"
+   540→                                    onClick={(e) => { e.stopPropagation(); handleCopyToClipboard(d.contenido_csv); }}
+   541→                                  >
+   542→                                    <Copy className="h-3 w-3 mr-1" />
+   543→                                    {copied ? 'Copiado' : 'Copiar'}
+   544→                                  </Button>
+   545→                                </div>
+   546→                              </div>
+   547→                              <div className="bg-slate-900 dark:bg-slate-950 p-3 overflow-x-auto max-h-64">
+   548→                                <pre className="text-xs font-mono leading-5">
+   549→                                  {previewLines.map((line, lineIdx) => (
+   550→                                    <div key={lineIdx} className="flex">
+   551→                                      <span className="text-slate-600 dark:text-slate-700 w-8 text-right mr-3 select-none shrink-0">
+   552→                                        {lineIdx + 1}
+   553→                                      </span>
+   554→                                      <span className={`${
+   555→                                        lineIdx === 0
+   556→                                          ? 'text-emerald-400 dark:text-emerald-500'
+   557→                                          : 'text-slate-300 dark:text-slate-400'
+   558→                                      }`}>
+   559→                                        {line}
+   560→                                      </span>
+   561→                                    </div>
+   562→                                  ))}
+   563→                                  {lines.length > 8 && (
+   564→                                    <div className="flex">
+   565→                                      <span className="text-slate-600 dark:text-slate-700 w-8 text-right mr-3 select-none shrink-0">
+   566→                                        ...
+   567→                                      </span>
+   568→                                      <span className="text-slate-500 dark:text-slate-600 italic">
+   569→                                        +{lines.length - 8} líneas más
+   570→                                      </span>
+   571→                                    </div>
+   572→                                  )}
+   573→                                </pre>
+   574→                              </div>
+   575→                              <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center gap-4 text-[10px] text-slate-500 dark:text-slate-400">
+   576→                                <span>Banco: {d.banco_nombre} ({d.banco_codigo})</span>
+   577→                                <span>•</span>
+   578→                                <span>Registros: {d.total_empleados}</span>
+   579→                                <span>•</span>
+   580→                                <span>Total: {fmt(d.total_monto)}</span>
+   581→                              </div>
+   582→                            </div>
+   583→                          )}
+   584→
+   585→                          {/* Individual employee payments */}
+   586→                          <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+   587→                            <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+   588→                              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
+   589→                                Pagos individuales ({dataRows.length})
+   590→                              </p>
+   591→                            </div>
+   592→                            <div className="max-h-48 overflow-y-auto custom-scrollbar">
+   593→                              <table className="w-full text-xs">
+   594→                                <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800">
+   595→                                  <tr>
+   596→                                    {headerRow.map((h, hi) => (
+   597→                                      <th key={hi} className="text-left font-medium text-slate-500 dark:text-slate-400 p-2 whitespace-nowrap">
+   598→                                        {h.replace(/_/g, ' ')}
+   599→                                      </th>
+   600→                                    ))}
+   601→                                  </tr>
+   602→                                </thead>
+   603→                                <tbody>
+   604→                                  {dataRows.map((row, ri) => (
+   605→                                    <tr key={ri} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+   606→                                      {row.map((cell, ci) => (
+   607→                                        <td key={ci} className={`p-2 whitespace-nowrap ${ci === row.length - 1 ? 'text-right font-medium text-teal-700 dark:text-teal-400' : 'text-slate-700 dark:text-slate-300'}`}>
+   608→                                          {ci === row.length - 1 ? fmt(parseFloat(cell) || 0) : cell}
+   609→                                        </td>
+   610→                                      ))}
+   611→                                    </tr>
+   612→                                  ))}
+   613→                                </tbody>
+   614→                              </table>
+   615→                            </div>
+   616→                          </div>
+   617→                        </div>
+   618→                      </CollapsibleContent>
+   619→                    </Collapsible>
+   620→                  </div>
+   621→                );
+   622→              })}
+   623→            </div>
+   624→          </CardContent>
+   625→        </Card>
+   626→      )}
+   627→
+   628→      {/* ========== ACH FILE PREVIEW (Standalone when no dispersions expanded) ========== */}
+   629→      {dispersions.length > 0 && !previewBank && (
+   630→        <Card className="shadow-sm">
+   631→          <CardHeader className="pb-3">
+   632→            <CardTitle className="text-base flex items-center gap-2">
+   633→              <FileText className="h-4 w-4" /> Vista Previa Archivos ACH
+   634→            </CardTitle>
+   635→            <CardDescription>Seleccione un banco arriba para ver la vista previa detallada, o vea un resumen abajo</CardDescription>
+   636→          </CardHeader>
+   637→          <CardContent>
+   638→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+   639→              {dispersions.map((d, idx) => {
+   640→                const lines = d.contenido_csv.split('\n');
+   641→                const fileSize = new Blob([d.contenido_csv]).size;
+   642→                const fileSizeStr = fileSize > 1024 ? `${(fileSize / 1024).toFixed(1)} KB` : `${fileSize} B`;
+   643→                return (
+   644→                  <div
+   645→                    key={d.banco_id}
+   646→                    className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 hover:border-emerald-300 dark:hover:border-emerald-700 cursor-pointer transition-colors group"
+   647→                    onClick={() => { setPreviewBank(d.banco_id); setExpandedBanks(prev => new Set(prev).add(d.banco_id)); }}
+   648→                  >
+   649→                    <div className="flex items-center gap-2 mb-2">
+   650→                      <Avatar className="h-7 w-7">
+   651→                        <AvatarFallback className={`${getBankColor(idx)} text-xs`}>
+   652→                          {d.banco_nombre.charAt(0)}
+   653→                        </AvatarFallback>
+   654→                      </Avatar>
+   655→                      <div className="min-w-0">
+   656→                        <p className="text-sm font-medium dark:text-slate-100 truncate">{d.banco_nombre}</p>
+   657→                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{d.banco_codigo}</p>
+   658→                      </div>
+   659→                    </div>
+   660→                    {/* Mini code preview */}
+   661→                    <div className="rounded bg-slate-900 dark:bg-slate-950 p-2 mb-2">
+   662→                      <pre className="text-[10px] font-mono leading-4 text-slate-400 dark:text-slate-500 overflow-hidden max-h-12">
+   663→                        {lines.slice(0, 3).join('\n')}
+   664→                      </pre>
+   665→                    </div>
+   666→                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+   667→                      <span>{lines.length} líneas</span>
+   668→                      <span>{fileSizeStr}</span>
+   669→                    </div>
+   670→                  </div>
+   671→                );
+   672→              })}
+   673→            </div>
+   674→          </CardContent>
+   675→        </Card>
+   676→      )}
+   677→
+   678→      {/* ========== RETURN STATUS TRACKING ========== */}
+   679→      {retornos.length > 0 && (
+   680→        <Card className="shadow-sm">
+   681→          <CardHeader className="pb-3">
+   682→            <CardTitle className="text-base flex items-center gap-2">
+   683→              <RefreshCw className="h-4 w-4" /> Estado de Retornos Bancarios
+   684→            </CardTitle>
+   685→          </CardHeader>
+   686→          <CardContent className="p-0">
+   687→            <div className="overflow-x-auto">
+   688→              <table className="w-full text-sm">
+   689→                <thead>
+   690→                  <tr className="border-t border-b bg-slate-50/80 dark:bg-slate-800/50">
+   691→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Banco</th>
+   692→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Archivo</th>
+   693→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Estado</th>
+   694→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Registros</th>
+   695→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Monto</th>
+   696→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Fecha Envío</th>
+   697→                  </tr>
+   698→                </thead>
+   699→                <tbody>
+   700→                  {retornos.map(r => (
+   701→                    <tr key={r.id} className="border-b hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+   702→                      <td className="p-3">
+   703→                        <div className="flex items-center gap-2">
+   704→                          <Building2 className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+   705→                          <span className="dark:text-slate-200">{r.banco?.nombre || 'N/A'}</span>
+   706→                        </div>
+   707→                      </td>
+   708→                      <td className="p-3 font-mono text-xs dark:text-slate-300">{r.archivo_nombre || '-'}</td>
+   709→                      <td className="p-3">
+   710→                        <Badge
+   711→                          className={`text-[10px] ${retornoEstadoColors[r.estado] || 'bg-slate-100 dark:bg-slate-700'} flex items-center gap-1 w-fit`}
+   712→                          variant="secondary"
+   713→                        >
+   714→                          {retornoEstadoIcons[r.estado]}
+   715→                          {r.estado}
+   716→                        </Badge>
+   717→                      </td>
+   718→                      <td className="p-3 text-right dark:text-slate-200">{r.total_registros}</td>
+   719→                      <td className="p-3 text-right font-medium dark:text-slate-200">{fmt(r.total_monto)}</td>
+   720→                      <td className="p-3 text-xs dark:text-slate-300">{r.fecha_envio ? new Date(r.fecha_envio).toLocaleDateString('es-SV') : '-'}</td>
+   721→                    </tr>
+   722→                  ))}
+   723→                </tbody>
+   724→              </table>
+   725→            </div>
+   726→            {retornos.some(r => r.estado === 'CON_ERRORES' || r.estado === 'RECHAZADO') && (
+   727→              <div className="p-3 bg-red-50 dark:bg-red-900/20 text-xs text-red-700 dark:text-red-400 flex items-center gap-2">
+   728→                <AlertTriangle className="h-3.5 w-3.5" />
+   729→                Algunos retornos tienen errores. Revise los detalles con el banco.
+   730→              </div>
+   731→            )}
+   732→          </CardContent>
+   733→        </Card>
+   734→      )}
+   735→
+   736→      {/* ========== SUMMARY FOOTER ========== */}
+   737→      {dispersions.length > 0 && (
+   738→        <Card className={`shadow-sm overflow-hidden ${confirmed ? 'border-teal-300 dark:border-teal-700' : ''}`}>
+   739→          <CardContent className="p-4 sm:p-6">
+   740→            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+   741→              {/* Summary stats */}
+   742→              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 w-full lg:w-auto">
+   743→                <div className="text-center sm:text-left">
+   744→                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Total Dispersado</p>
+   745→                  <p className="text-xl font-bold text-teal-700 dark:text-teal-400">{fmt(totalAmountDispersed)}</p>
+   746→                </div>
+   747→                <div className="text-center sm:text-left">
+   748→                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Empleados Pagados</p>
+   749→                  <p className="text-xl font-bold text-cyan-700 dark:text-cyan-400">{totalEmployees}</p>
+   750→                </div>
+   751→                <div className="text-center sm:text-left">
+   752→                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Bancos</p>
+   753→                  <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">{bankCount}</p>
+   754→                </div>
+   755→                <div className="text-center sm:text-left">
+   756→                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Estado Retornos</p>
+   757→                  <div className="flex items-center gap-2 justify-center sm:justify-start">
+   758→                    {successRetornos > 0 && (
+   759→                      <span className="flex items-center gap-1 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+   760→                        <CheckCircle className="h-3.5 w-3.5" /> {successRetornos}
+   761→                      </span>
+   762→                    )}
+   763→                    {errorRetornos > 0 && (
+   764→                      <span className="flex items-center gap-1 text-sm font-medium text-red-700 dark:text-red-400">
+   765→                        <XCircle className="h-3.5 w-3.5" /> {errorRetornos}
+   766→                      </span>
+   767→                    )}
+   768→                    {successRetornos === 0 && errorRetornos === 0 && (
+   769→                      <span className="flex items-center gap-1 text-sm font-medium text-amber-700 dark:text-amber-400">
+   770→                        <Clock className="h-3.5 w-3.5" /> Pendiente
+   771→                      </span>
+   772→                    )}
+   773→                  </div>
+   774→                </div>
+   775→              </div>
+   776→
+   777→              {/* Confirm button */}
+   778→              <div className="w-full lg:w-auto">
+   779→                {confirmed ? (
+   780→                  <div className="flex items-center gap-2 justify-center lg:justify-end text-teal-700 dark:text-teal-400 font-medium">
+   781→                    <CheckCircle className="h-5 w-5" />
+   782→                    <span>Dispersión Confirmada</span>
+   783→                  </div>
+   784→                ) : (
+   785→                  <Button
+   786→                    onClick={handleConfirm}
+   787→                    className="w-full lg:w-auto bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-800 min-w-[200px]"
+   788→                    size="lg"
+   789→                  >
+   790→                    <ShieldCheck className="h-4 w-4 mr-2" />
+   791→                    Confirmar Dispersión
+   792→                  </Button>
+   793→                )}
+   794→              </div>
+   795→            </div>
+   796→          </CardContent>
+   797→        </Card>
+   798→      )}
+   799→    </div>
+   800→  );
+   801→}
+   802→

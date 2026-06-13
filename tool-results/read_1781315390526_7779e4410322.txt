@@ -1,0 +1,933 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import {
+     5→  FileText, Save, Plus, Trash2, Loader2, AlertCircle, ChevronDown, ChevronRight,
+     6→  BookOpen, Target, Award, Shield, Settings2, History, RotateCcw, Sparkles,
+     7→} from 'lucide-react';
+     8→import { Button } from '@/components/ui/button';
+     9→import { Input } from '@/components/ui/input';
+    10→import { Label } from '@/components/ui/label';
+    11→import { Badge } from '@/components/ui/badge';
+    12→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    13→import { Separator } from '@/components/ui/separator';
+    14→import { Textarea } from '@/components/ui/textarea';
+    15→import {
+    16→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    17→} from '@/components/ui/select';
+    18→import {
+    19→  Collapsible, CollapsibleContent, CollapsibleTrigger,
+    20→} from '@/components/ui/collapsible';
+    21→import { Skeleton } from '@/components/ui/skeleton';
+    22→import { useToast } from '@/hooks/use-toast';
+    23→
+    24→interface ProfileDescriptiveFormProps {
+    25→  accessToken: string;
+    26→  userRole: string;
+    27→}
+    28→
+    29→interface Area {
+    30→  id: string;
+    31→  nombre: string;
+    32→  codigo: string;
+    33→}
+    34→interface Banda {
+    35→  id: string;
+    36→  nombre: string;
+    37→  grado: number;
+    38→  salario_minimo: number;
+    39→  salario_maximo: number;
+    40→}
+    41→interface PerfilListItem {
+    42→  id: string;
+    43→  codigo: string;
+    44→  nombre_puesto: string;
+    45→  estado: string;
+    46→  version: number;
+    47→  puntos_total: number;
+    48→  area: Area;
+    49→  banda_salarial: Banda | null;
+    50→}
+    51→interface VersionHistory {
+    52→  id: string;
+    53→  version: number;
+    54→  cambio_descripcion: string;
+    55→  fecha_creacion: string;
+    56→  creado_por: { nombre: string; apellido: string } | null;
+    57→}
+    58→
+    59→interface PointFactor {
+    60→  label: string;
+    61→  value: number;
+    62→}
+    63→
+    64→interface PointGroup {
+    65→  key: string;
+    66→  label: string;
+    67→  icon: React.ReactNode;
+    68→  color: string;
+    69→  factors: PointFactor[];
+    70→}
+    71→
+    72→const SECTORES = ['COMERCIO', 'INDUSTRIA', 'SERVICIOS', 'AGROPECUARIO', 'MAQUILA', 'TRANSPORTE'];
+    73→const ESTADOS = ['BORRADOR', 'VIGENTE', 'EN_REVISION', 'OBSOLETO'];
+    74→
+    75→const estadoColors: Record<string, string> = {
+    76→  BORRADOR: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    77→  VIGENTE: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    78→  EN_REVISION: 'bg-blue-100 text-blue-800 border-blue-200',
+    79→  OBSOLETO: 'bg-slate-100 text-slate-600 border-slate-200',
+    80→};
+    81→
+    82→const defaultPointGroups: PointGroup[] = [
+    83→  {
+    84→    key: 'habilidades',
+    85→    label: 'Habilidades',
+    86→    icon: <BookOpen className="h-4 w-4" />,
+    87→    color: 'emerald',
+    88→    factors: [
+    89→      { label: 'Educación', value: 0 },
+    90→      { label: 'Experiencia', value: 0 },
+    91→      { label: 'Habilidades técnicas', value: 0 },
+    92→    ],
+    93→  },
+    94→  {
+    95→    key: 'esfuerzo',
+    96→    label: 'Esfuerzo',
+    97→    icon: <Target className="h-4 w-4" />,
+    98→    color: 'amber',
+    99→    factors: [
+   100→      { label: 'Esfuerzo físico', value: 0 },
+   101→      { label: 'Esfuerzo mental', value: 0 },
+   102→      { label: 'Concentración', value: 0 },
+   103→    ],
+   104→  },
+   105→  {
+   106→    key: 'responsabilidad',
+   107→    label: 'Responsabilidad',
+   108→    icon: <Shield className="h-4 w-4" />,
+   109→    color: 'blue',
+   110→    factors: [
+   111→      { label: 'Supervisión', value: 0 },
+   112→      { label: 'Fondos', value: 0 },
+   113→      { label: 'Confidencialidad', value: 0 },
+   114→      { label: 'Equipos', value: 0 },
+   115→    ],
+   116→  },
+   117→  {
+   118→    key: 'condiciones',
+   119→    label: 'Condiciones',
+   120→    icon: <Settings2 className="h-4 w-4" />,
+   121→    color: 'purple',
+   122→    factors: [
+   123→      { label: 'Ambiente', value: 0 },
+   124→      { label: 'Riesgos', value: 0 },
+   125→      { label: 'Exposición', value: 0 },
+   126→    ],
+   127→  },
+   128→];
+   129→
+   130→const colorMap: Record<string, { bg: string; border: string; text: string; accent: string }> = {
+   131→  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', accent: 'bg-emerald-500' },
+   132→  amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', accent: 'bg-amber-500' },
+   133→  blue: { bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-700', accent: 'bg-sky-500' },
+   134→  purple: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', accent: 'bg-purple-500' },
+   135→};
+   136→
+   137→export default function ProfileDescriptiveForm({ accessToken, userRole }: ProfileDescriptiveFormProps) {
+   138→  const { toast } = useToast();
+   139→
+   140→  // Data
+   141→  const [perfiles, setPerfiles] = useState<PerfilListItem[]>([]);
+   142→  const [areas, setAreas] = useState<Area[]>([]);
+   143→  const [bandas, setBandas] = useState<Banda[]>([]);
+   144→  const [versionHistory, setVersionHistory] = useState<VersionHistory[]>([]);
+   145→  const [loading, setLoading] = useState(true);
+   146→  const [saving, setSaving] = useState(false);
+   147→
+   148→  // Form mode
+   149→  const [selectedPerfilId, setSelectedPerfilId] = useState<string>('');
+   150→  const [isNewMode, setIsNewMode] = useState(true);
+   151→
+   152→  // Section collapse state
+   153→  const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({
+   154→    A: true, B: true, C: false, D: false, valuation: false,
+   155→  });
+   156→
+   157→  // Form state
+   158→  const [form, setForm] = useState({
+   159→    codigo: '',
+   160→    nombre_puesto: '',
+   161→    area_id: '',
+   162→    banda_salarial_id: '',
+   163→    sector_laboral: 'COMERCIO',
+   164→    estado: 'BORRADOR',
+   165→    proposito: '',
+   166→    funciones_esenciales: [] as string[],
+   167→    requisitos_educacion: '',
+   168→    requisitos_experiencia: '',
+   169→    requisitos_habilidades: [] as string[],
+   170→    responsabilidades: [] as string[],
+   171→    condiciones_trabajo: '',
+   172→  });
+   173→
+   174→  const [pointGroups, setPointGroups] = useState<PointGroup[]>(
+   175→    defaultPointGroups.map(g => ({ ...g, factors: g.factors.map(f => ({ ...f })) }))
+   176→  );
+   177→
+   178→  // Dynamic list input states
+   179→  const [newFuncion, setNewFuncion] = useState('');
+   180→  const [newHabilidad, setNewHabilidad] = useState('');
+   181→  const [newResponsabilidad, setNewResponsabilidad] = useState('');
+   182→
+   183→  const canEdit = userRole === 'ADMIN' || userRole === 'ANALISTA';
+   184→
+   185→  // Calculated total points
+   186→  const totalPoints = useMemo(() => {
+   187→    return pointGroups.reduce((sum, group) => {
+   188→      return sum + group.factors.reduce((s, f) => s + f.value, 0);
+   189→    }, 0);
+   190→  }, [pointGroups]);
+   191→
+   192→  // Group subtotals
+   193→  const groupSubtotals = useMemo(() => {
+   194→    const map: Record<string, number> = {};
+   195→    pointGroups.forEach(g => {
+   196→      map[g.key] = g.factors.reduce((s, f) => s + f.value, 0);
+   197→    });
+   198→    return map;
+   199→  }, [pointGroups]);
+   200→
+   201→  // Fetch initial data
+   202→  const fetchInitialData = useCallback(async () => {
+   203→    setLoading(true);
+   204→    try {
+   205→      const [perfilesRes, areasRes, bandasRes] = await Promise.all([
+   206→        fetch('/api/perfiles', { headers: { Authorization: `Bearer ${accessToken}` } }),
+   207→        fetch('/api/areas', { headers: { Authorization: `Bearer ${accessToken}` } }),
+   208→        fetch('/api/bandas', { headers: { Authorization: `Bearer ${accessToken}` } }),
+   209→      ]);
+   210→
+   211→      if (perfilesRes.ok) {
+   212→        const data = await perfilesRes.json();
+   213→        setPerfiles(Array.isArray(data) ? data : data.data || []);
+   214→      }
+   215→      if (areasRes.ok) {
+   216→        const data = await areasRes.json();
+   217→        setAreas(data.data || data || []);
+   218→      }
+   219→      if (bandasRes.ok) {
+   220→        const data = await bandasRes.json();
+   221→        setBandas(Array.isArray(data) ? data : data.data || []);
+   222→      }
+   223→    } catch (err) {
+   224→      console.error('Error loading initial data:', err);
+   225→    } finally {
+   226→      setLoading(false);
+   227→    }
+   228→  }, [accessToken]);
+   229→
+   230→  useEffect(() => { fetchInitialData(); }, [fetchInitialData]);
+   231→
+   232→  // Fetch existing perfil when selected
+   233→  const handleSelectPerfil = useCallback(async (perfilId: string) => {
+   234→    if (!perfilId) {
+   235→      setIsNewMode(true);
+   236→      setSelectedPerfilId('');
+   237→      resetForm();
+   238→      return;
+   239→    }
+   240→
+   241→    setIsNewMode(false);
+   242→    setSelectedPerfilId(perfilId);
+   243→
+   244→    try {
+   245→      const res = await fetch(`/api/perfiles/${perfilId}`, {
+   246→        headers: { Authorization: `Bearer ${accessToken}` },
+   247→      });
+   248→      if (res.ok) {
+   249→        const perfil = await res.json();
+   250→
+   251→        // Parse JSON arrays
+   252→        let funciones: string[] = [];
+   253→        try { funciones = perfil.funciones_esenciales ? JSON.parse(perfil.funciones_esenciales) : []; } catch { funciones = perfil.funciones_esenciales ? [perfil.funciones_esenciales] : []; }
+   254→
+   255→        let habilidades: string[] = [];
+   256→        try { habilidades = perfil.requisitos_habilidades ? JSON.parse(perfil.requisitos_habilidades) : []; } catch { habilidades = perfil.requisitos_habilidades ? [perfil.requisitos_habilidades] : []; }
+   257→
+   258→        let responsabilidadesArr: string[] = [];
+   259→        try { responsabilidadesArr = perfil.responsabilidades ? JSON.parse(perfil.responsabilidades) : []; } catch { responsabilidadesArr = perfil.responsabilidades ? [perfil.responsabilidades] : []; }
+   260→
+   261→        setForm({
+   262→          codigo: perfil.codigo || '',
+   263→          nombre_puesto: perfil.nombre_puesto || '',
+   264→          area_id: perfil.area_id || '',
+   265→          banda_salarial_id: perfil.banda_salarial_id || '',
+   266→          sector_laboral: perfil.sector_laboral || 'COMERCIO',
+   267→          estado: perfil.estado || 'BORRADOR',
+   268→          proposito: perfil.proposito || '',
+   269→          funciones_esenciales: Array.isArray(funciones) ? funciones : [],
+   270→          requisitos_educacion: perfil.requisitos_educacion || '',
+   271→          requisitos_experiencia: perfil.requisitos_experiencia || '',
+   272→          requisitos_habilidades: Array.isArray(habilidades) ? habilidades : [],
+   273→          responsabilidades: Array.isArray(responsabilidadesArr) ? responsabilidadesArr : [],
+   274→          condiciones_trabajo: perfil.condiciones_trabajo || '',
+   275→        });
+   276→
+   277→        // Restore point groups from puntos_total if available
+   278→        if (perfil.puntos_total > 0) {
+   279→          // Distribute points equally across factors as a reasonable default
+   280→          const totalFactors = pointGroups.reduce((s, g) => s + g.factors.length, 0);
+   281→          const pointsPerFactor = Math.floor(perfil.puntos_total / totalFactors);
+   282→          const remainder = perfil.puntos_total - (pointsPerFactor * totalFactors);
+   283→          let remainderIdx = 0;
+   284→          setPointGroups(prev => prev.map(g => ({
+   285→            ...g,
+   286→            factors: g.factors.map(f => {
+   287→              const extra = remainderIdx < remainder ? 1 : 0;
+   288→              remainderIdx++;
+   289→              return { ...f, value: pointsPerFactor + extra };
+   290→            }),
+   291→          })));
+   292→        }
+   293→
+   294→        // Set version history
+   295→        setVersionHistory(perfil.versiones || []);
+   296→      }
+   297→    } catch (err) {
+   298→      console.error('Error fetching perfil:', err);
+   299→      toast({ title: 'Error', description: 'No se pudo cargar el perfil', variant: 'destructive' });
+   300→    }
+   301→  }, [accessToken, toast, pointGroups]);
+   302→
+   303→  const resetForm = () => {
+   304→    setForm({
+   305→      codigo: '',
+   306→      nombre_puesto: '',
+   307→      area_id: '',
+   308→      banda_salarial_id: '',
+   309→      sector_laboral: 'COMERCIO',
+   310→      estado: 'BORRADOR',
+   311→      proposito: '',
+   312→      funciones_esenciales: [],
+   313→      requisitos_educacion: '',
+   314→      requisitos_experiencia: '',
+   315→      requisitos_habilidades: [],
+   316→      responsabilidades: [],
+   317→      condiciones_trabajo: '',
+   318→    });
+   319→    setPointGroups(defaultPointGroups.map(g => ({ ...g, factors: g.factors.map(f => ({ ...f })) })));
+   320→    setVersionHistory([]);
+   321→  };
+   322→
+   323→  const handleNew = () => {
+   324→    setSelectedPerfilId('');
+   325→    setIsNewMode(true);
+   326→    resetForm();
+   327→    // Auto-generate codigo
+   328→    const nextNum = perfiles.length + 1;
+   329→    setForm(prev => ({ ...prev, codigo: `CARGO-${String(nextNum).padStart(3, '0')}` }));
+   330→  };
+   331→
+   332→  // Dynamic list operations
+   333→  const addItem = (field: 'funciones_esenciales' | 'requisitos_habilidades' | 'responsabilidades', value: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
+   334→    if (!value.trim()) return;
+   335→    setForm(prev => ({ ...prev, [field]: [...prev[field], value.trim()] }));
+   336→    setter('');
+   337→  };
+   338→
+   339→  const removeItem = (field: 'funciones_esenciales' | 'requisitos_habilidades' | 'responsabilidades', index: number) => {
+   340→    setForm(prev => ({ ...prev, [field]: prev[field].filter((_, i) => i !== index) }));
+   341→  };
+   342→
+   343→  // Point factor change
+   344→  const updatePointFactor = (groupKey: string, factorIndex: number, value: number) => {
+   345→    const clamped = Math.min(100, Math.max(0, value));
+   346→    setPointGroups(prev => prev.map(g =>
+   347→      g.key === groupKey
+   348→        ? { ...g, factors: g.factors.map((f, i) => i === factorIndex ? { ...f, value: clamped } : f) }
+   349→        : g
+   350→    ));
+   351→  };
+   352→
+   353→  // Save handler
+   354→  const handleSave = async () => {
+   355→    if (!canEdit) {
+   356→      toast({ title: 'Sin permisos', description: 'No tiene permisos para guardar', variant: 'destructive' });
+   357→      return;
+   358→    }
+   359→
+   360→    if (!form.nombre_puesto.trim()) {
+   361→      toast({ title: 'Campo requerido', description: 'El nombre del puesto es obligatorio', variant: 'destructive' });
+   362→      return;
+   363→    }
+   364→    if (!form.area_id) {
+   365→      toast({ title: 'Campo requerido', description: 'El área es obligatoria', variant: 'destructive' });
+   366→      return;
+   367→    }
+   368→
+   369→    setSaving(true);
+   370→    try {
+   371→      const payload = {
+   372→        codigo: form.codigo,
+   373→        nombre_puesto: form.nombre_puesto,
+   374→        area_id: form.area_id,
+   375→        banda_salarial_id: form.banda_salarial_id || null,
+   376→        sector_laboral: form.sector_laboral,
+   377→        estado: form.estado,
+   378→        proposito: form.proposito || null,
+   379→        funciones_esenciales: JSON.stringify(form.funciones_esenciales),
+   380→        requisitos_educacion: form.requisitos_educacion || null,
+   381→        requisitos_experiencia: form.requisitos_experiencia || null,
+   382→        requisitos_habilidades: JSON.stringify(form.requisitos_habilidades),
+   383→        responsabilidades: JSON.stringify(form.responsabilidades),
+   384→        condiciones_trabajo: form.condiciones_trabajo || null,
+   385→        puntos_total: totalPoints,
+   386→        cambio_descripcion: isNewMode ? 'Creación inicial del perfil' : `Actualización versión - ${form.nombre_puesto}`,
+   387→      };
+   388→
+   389→      let res: Response;
+   390→      if (isNewMode) {
+   391→        if (!form.codigo) {
+   392→          const nextNum = perfiles.length + 1;
+   393→          payload.codigo = `CARGO-${String(nextNum).padStart(3, '0')}`;
+   394→        }
+   395→        res = await fetch('/api/perfiles', {
+   396→          method: 'POST',
+   397→          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   398→          body: JSON.stringify(payload),
+   399→        });
+   400→      } else {
+   401→        res = await fetch(`/api/perfiles/${selectedPerfilId}`, {
+   402→          method: 'PUT',
+   403→          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   404→          body: JSON.stringify(payload),
+   405→        });
+   406→      }
+   407→
+   408→      const data = await res.json();
+   409→      if (res.ok) {
+   410→        toast({
+   411→          title: isNewMode ? 'Perfil creado' : 'Perfil actualizado',
+   412→          description: `${form.nombre_puesto} - ${isNewMode ? 'Versión 1' : `Actualizado exitosamente`}`,
+   413→        });
+   414→        // Refresh list
+   415→        fetchInitialData();
+   416→        if (!isNewMode && selectedPerfilId) {
+   417→          handleSelectPerfil(selectedPerfilId);
+   418→        }
+   419→      } else {
+   420→        toast({ title: 'Error', description: data.error || 'Error al guardar perfil', variant: 'destructive' });
+   421→      }
+   422→    } catch {
+   423→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   424→    } finally {
+   425→      setSaving(false);
+   426→    }
+   427→  };
+   428→
+   429→  if (loading) {
+   430→    return (
+   431→      <div className="space-y-4">
+   432→        <Skeleton className="h-10 w-64" />
+   433→        <Skeleton className="h-8 w-full" />
+   434→        <Skeleton className="h-64 w-full" />
+   435→        <Skeleton className="h-64 w-full" />
+   436→      </div>
+   437→    );
+   438→  }
+   439→
+   440→  return (
+   441→    <div className="space-y-4">
+   442→      {/* Header */}
+   443→      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+   444→        <div>
+   445→          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+   446→            <FileText className="h-5 w-5 text-emerald-600" />
+   447→            Perfil Descriptivo de Puesto
+   448→          </h2>
+   449→          <p className="text-sm text-slate-500">Formulario de valuación por puntos según metodología vigente</p>
+   450→        </div>
+   451→        <div className="flex items-center gap-2">
+   452→          <Select value={selectedPerfilId} onValueChange={handleSelectPerfil}>
+   453→            <SelectTrigger className="w-[260px] h-9 text-sm">
+   454→              <SelectValue placeholder="Seleccionar perfil existente..." />
+   455→            </SelectTrigger>
+   456→            <SelectContent>
+   457→              {perfiles.map(p => (
+   458→                <SelectItem key={p.id} value={p.id}>
+   459→                  <span className="font-mono text-xs mr-2">{p.codigo}</span>
+   460→                  {p.nombre_puesto}
+   461→                  <Badge variant="outline" className={`ml-2 text-[10px] px-1.5 py-0 ${estadoColors[p.estado] || ''}`}>
+   462→                    {p.estado}
+   463→                  </Badge>
+   464→                </SelectItem>
+   465→              ))}
+   466→            </SelectContent>
+   467→          </Select>
+   468→          <Button size="sm" variant="outline" onClick={handleNew} className="shrink-0">
+   469→            <Plus className="h-4 w-4 mr-1" /> Nuevo
+   470→          </Button>
+   471→        </div>
+   472→      </div>
+   473→
+   474→      {/* Mode indicator */}
+   475→      <div className="flex items-center gap-2">
+   476→        <Badge variant={isNewMode ? 'default' : 'secondary'} className={isNewMode ? 'bg-emerald-600' : 'bg-amber-600'}>
+   477→          {isNewMode ? 'Creando nuevo perfil' : `Editando: ${form.codigo}`}
+   478→        </Badge>
+   479→        {!isNewMode && (
+   480→          <Badge variant="outline" className={estadoColors[form.estado] || ''}>
+   481→            {form.estado} • v{versionHistory.length || 1}
+   482→          </Badge>
+   483→        )}
+   484→      </div>
+   485→
+   486→      {/* Section A - Identificación del Puesto */}
+   487→      <Collapsible open={sectionOpen.A} onOpenChange={(v) => setSectionOpen(p => ({ ...p, A: v }))}>
+   488→        <Card className="shadow-sm">
+   489→          <CollapsibleTrigger asChild>
+   490→            <CardHeader className="pb-3 cursor-pointer hover:bg-slate-50 transition-colors rounded-t-lg">
+   491→              <div className="flex items-center justify-between">
+   492→                <CardTitle className="text-base flex items-center gap-2">
+   493→                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">A</span>
+   494→                  Identificación del Puesto
+   495→                </CardTitle>
+   496→                {sectionOpen.A ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+   497→              </div>
+   498→            </CardHeader>
+   499→          </CollapsibleTrigger>
+   500→          <CollapsibleContent>
+   501→            <CardContent className="pt-0">
+   502→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   503→                <div>
+   504→                  <Label className="text-xs font-medium text-slate-600">Código</Label>
+   505→                  <Input
+   506→                    value={form.codigo}
+   507→                    readOnly
+   508→                    className="h-9 text-sm bg-slate-50 font-mono"
+   509→                    placeholder="Auto-generado"
+   510→                  />
+   511→                </div>
+   512→                <div>
+   513→                  <Label className="text-xs font-medium text-slate-600">Nombre del Puesto *</Label>
+   514→                  <Input
+   515→                    value={form.nombre_puesto}
+   516→                    onChange={e => setForm(p => ({ ...p, nombre_puesto: e.target.value }))}
+   517→                    className="h-9 text-sm"
+   518→                    placeholder="Ej: Analista de Nómina"
+   519→                    disabled={!canEdit}
+   520→                  />
+   521→                </div>
+   522→                <div>
+   523→                  <Label className="text-xs font-medium text-slate-600">Área *</Label>
+   524→                  <Select value={form.area_id} onValueChange={v => setForm(p => ({ ...p, area_id: v }))} disabled={!canEdit}>
+   525→                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Seleccionar área" /></SelectTrigger>
+   526→                    <SelectContent>
+   527→                      {areas.map(a => (
+   528→                        <SelectItem key={a.id} value={a.id}>{a.nombre} ({a.codigo})</SelectItem>
+   529→                      ))}
+   530→                    </SelectContent>
+   531→                  </Select>
+   532→                </div>
+   533→                <div>
+   534→                  <Label className="text-xs font-medium text-slate-600">Banda Salarial</Label>
+   535→                  <Select value={form.banda_salarial_id} onValueChange={v => setForm(p => ({ ...p, banda_salarial_id: v }))} disabled={!canEdit}>
+   536→                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Seleccionar banda" /></SelectTrigger>
+   537→                    <SelectContent>
+   538→                      {bandas.map(b => (
+   539→                        <SelectItem key={b.id} value={b.id}>
+   540→                          G{b.grado} - {b.nombre} (${b.salario_minimo.toLocaleString()}-${b.salario_maximo.toLocaleString()})
+   541→                        </SelectItem>
+   542→                      ))}
+   543→                    </SelectContent>
+   544→                  </Select>
+   545→                </div>
+   546→                <div>
+   547→                  <Label className="text-xs font-medium text-slate-600">Sector Laboral</Label>
+   548→                  <Select value={form.sector_laboral} onValueChange={v => setForm(p => ({ ...p, sector_laboral: v }))} disabled={!canEdit}>
+   549→                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+   550→                    <SelectContent>
+   551→                      {SECTORES.map(s => (
+   552→                        <SelectItem key={s} value={s}>{s}</SelectItem>
+   553→                      ))}
+   554→                    </SelectContent>
+   555→                  </Select>
+   556→                </div>
+   557→                <div>
+   558→                  <Label className="text-xs font-medium text-slate-600">Estado</Label>
+   559→                  <Select value={form.estado} onValueChange={v => setForm(p => ({ ...p, estado: v }))} disabled={!canEdit}>
+   560→                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+   561→                    <SelectContent>
+   562→                      {ESTADOS.map(e => (
+   563→                        <SelectItem key={e} value={e}>{e}</SelectItem>
+   564→                      ))}
+   565→                    </SelectContent>
+   566→                  </Select>
+   567→                </div>
+   568→              </div>
+   569→            </CardContent>
+   570→          </CollapsibleContent>
+   571→        </Card>
+   572→      </Collapsible>
+   573→
+   574→      {/* Section B - Propósito y Funciones */}
+   575→      <Collapsible open={sectionOpen.B} onOpenChange={(v) => setSectionOpen(p => ({ ...p, B: v }))}>
+   576→        <Card className="shadow-sm">
+   577→          <CollapsibleTrigger asChild>
+   578→            <CardHeader className="pb-3 cursor-pointer hover:bg-slate-50 transition-colors rounded-t-lg">
+   579→              <div className="flex items-center justify-between">
+   580→                <CardTitle className="text-base flex items-center gap-2">
+   581→                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">B</span>
+   582→                  Propósito y Funciones
+   583→                </CardTitle>
+   584→                {sectionOpen.B ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+   585→              </div>
+   586→            </CardHeader>
+   587→          </CollapsibleTrigger>
+   588→          <CollapsibleContent>
+   589→            <CardContent className="pt-0 space-y-4">
+   590→              <div>
+   591→                <Label className="text-xs font-medium text-slate-600">Propósito del Puesto</Label>
+   592→                <Textarea
+   593→                  value={form.proposito}
+   594→                  onChange={e => setForm(p => ({ ...p, proposito: e.target.value }))}
+   595→                  className="text-sm min-h-[80px]"
+   596→                  placeholder="Describa el propósito general del puesto..."
+   597→                  disabled={!canEdit}
+   598→                />
+   599→              </div>
+   600→
+   601→              <div>
+   602→                <Label className="text-xs font-medium text-slate-600">Funciones Esenciales</Label>
+   603→                <div className="space-y-2 mt-1">
+   604→                  {form.funciones_esenciales.map((f, i) => (
+   605→                    <div key={i} className="flex items-center gap-2 p-2 rounded-md bg-slate-50 border border-slate-100">
+   606→                      <span className="text-xs font-mono text-slate-400 shrink-0">{i + 1}.</span>
+   607→                      <span className="text-sm flex-1">{f}</span>
+   608→                      {canEdit && (
+   609→                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-slate-400 hover:text-red-500" onClick={() => removeItem('funciones_esenciales', i)}>
+   610→                          <Trash2 className="h-3 w-3" />
+   611→                        </Button>
+   612→                      )}
+   613→                    </div>
+   614→                  ))}
+   615→                  {canEdit && (
+   616→                    <div className="flex gap-2">
+   617→                      <Input
+   618→                        value={newFuncion}
+   619→                        onChange={e => setNewFuncion(e.target.value)}
+   620→                        className="h-8 text-sm flex-1"
+   621→                        placeholder="Agregar función esencial..."
+   622→                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem('funciones_esenciales', newFuncion, setNewFuncion); } }}
+   623→                      />
+   624→                      <Button size="sm" variant="outline" onClick={() => addItem('funciones_esenciales', newFuncion, setNewFuncion)} className="shrink-0">
+   625→                        <Plus className="h-3.5 w-3.5 mr-1" /> Agregar
+   626→                      </Button>
+   627→                    </div>
+   628→                  )}
+   629→                  {form.funciones_esenciales.length === 0 && (
+   630→                    <p className="text-xs text-slate-400 italic">No hay funciones registradas</p>
+   631→                  )}
+   632→                </div>
+   633→              </div>
+   634→            </CardContent>
+   635→          </CollapsibleContent>
+   636→        </Card>
+   637→      </Collapsible>
+   638→
+   639→      {/* Section C - Requisitos del Cargo */}
+   640→      <Collapsible open={sectionOpen.C} onOpenChange={(v) => setSectionOpen(p => ({ ...p, C: v }))}>
+   641→        <Card className="shadow-sm">
+   642→          <CollapsibleTrigger asChild>
+   643→            <CardHeader className="pb-3 cursor-pointer hover:bg-slate-50 transition-colors rounded-t-lg">
+   644→              <div className="flex items-center justify-between">
+   645→                <CardTitle className="text-base flex items-center gap-2">
+   646→                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-sky-100 text-sky-700 text-xs font-bold">C</span>
+   647→                  Requisitos del Cargo
+   648→                </CardTitle>
+   649→                {sectionOpen.C ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+   650→              </div>
+   651→            </CardHeader>
+   652→          </CollapsibleTrigger>
+   653→          <CollapsibleContent>
+   654→            <CardContent className="pt-0 space-y-4">
+   655→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   656→                <div>
+   657→                  <Label className="text-xs font-medium text-slate-600">Requisitos de Educación</Label>
+   658→                  <Textarea
+   659→                    value={form.requisitos_educacion}
+   660→                    onChange={e => setForm(p => ({ ...p, requisitos_educacion: e.target.value }))}
+   661→                    className="text-sm min-h-[80px]"
+   662→                    placeholder="Ej: Licenciatura en Administración de Empresas..."
+   663→                    disabled={!canEdit}
+   664→                  />
+   665→                </div>
+   666→                <div>
+   667→                  <Label className="text-xs font-medium text-slate-600">Requisitos de Experiencia</Label>
+   668→                  <Textarea
+   669→                    value={form.requisitos_experiencia}
+   670→                    onChange={e => setForm(p => ({ ...p, requisitos_experiencia: e.target.value }))}
+   671→                    className="text-sm min-h-[80px]"
+   672→                    placeholder="Ej: Mínimo 3 años en posiciones similares..."
+   673→                    disabled={!canEdit}
+   674→                  />
+   675→                </div>
+   676→              </div>
+   677→
+   678→              <div>
+   679→                <Label className="text-xs font-medium text-slate-600">Requisitos de Habilidades</Label>
+   680→                <div className="space-y-2 mt-1">
+   681→                  {form.requisitos_habilidades.map((h, i) => (
+   682→                    <div key={i} className="flex items-center gap-2 p-2 rounded-md bg-slate-50 border border-slate-100">
+   683→                      <span className="text-xs font-mono text-slate-400 shrink-0">{i + 1}.</span>
+   684→                      <span className="text-sm flex-1">{h}</span>
+   685→                      {canEdit && (
+   686→                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-slate-400 hover:text-red-500" onClick={() => removeItem('requisitos_habilidades', i)}>
+   687→                          <Trash2 className="h-3 w-3" />
+   688→                        </Button>
+   689→                      )}
+   690→                    </div>
+   691→                  ))}
+   692→                  {canEdit && (
+   693→                    <div className="flex gap-2">
+   694→                      <Input
+   695→                        value={newHabilidad}
+   696→                        onChange={e => setNewHabilidad(e.target.value)}
+   697→                        className="h-8 text-sm flex-1"
+   698→                        placeholder="Agregar habilidad..."
+   699→                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem('requisitos_habilidades', newHabilidad, setNewHabilidad); } }}
+   700→                      />
+   701→                      <Button size="sm" variant="outline" onClick={() => addItem('requisitos_habilidades', newHabilidad, setNewHabilidad)} className="shrink-0">
+   702→                        <Plus className="h-3.5 w-3.5 mr-1" /> Agregar
+   703→                      </Button>
+   704→                    </div>
+   705→                  )}
+   706→                  {form.requisitos_habilidades.length === 0 && (
+   707→                    <p className="text-xs text-slate-400 italic">No hay habilidades registradas</p>
+   708→                  )}
+   709→                </div>
+   710→              </div>
+   711→            </CardContent>
+   712→          </CollapsibleContent>
+   713→        </Card>
+   714→      </Collapsible>
+   715→
+   716→      {/* Section D - Responsabilidades y Condiciones */}
+   717→      <Collapsible open={sectionOpen.D} onOpenChange={(v) => setSectionOpen(p => ({ ...p, D: v }))}>
+   718→        <Card className="shadow-sm">
+   719→          <CollapsibleTrigger asChild>
+   720→            <CardHeader className="pb-3 cursor-pointer hover:bg-slate-50 transition-colors rounded-t-lg">
+   721→              <div className="flex items-center justify-between">
+   722→                <CardTitle className="text-base flex items-center gap-2">
+   723→                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold">D</span>
+   724→                  Responsabilidades y Condiciones
+   725→                </CardTitle>
+   726→                {sectionOpen.D ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+   727→              </div>
+   728→            </CardHeader>
+   729→          </CollapsibleTrigger>
+   730→          <CollapsibleContent>
+   731→            <CardContent className="pt-0 space-y-4">
+   732→              <div>
+   733→                <Label className="text-xs font-medium text-slate-600">Responsabilidades</Label>
+   734→                <div className="space-y-2 mt-1">
+   735→                  {form.responsabilidades.map((r, i) => (
+   736→                    <div key={i} className="flex items-center gap-2 p-2 rounded-md bg-slate-50 border border-slate-100">
+   737→                      <span className="text-xs font-mono text-slate-400 shrink-0">{i + 1}.</span>
+   738→                      <span className="text-sm flex-1">{r}</span>
+   739→                      {canEdit && (
+   740→                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-slate-400 hover:text-red-500" onClick={() => removeItem('responsabilidades', i)}>
+   741→                          <Trash2 className="h-3 w-3" />
+   742→                        </Button>
+   743→                      )}
+   744→                    </div>
+   745→                  ))}
+   746→                  {canEdit && (
+   747→                    <div className="flex gap-2">
+   748→                      <Input
+   749→                        value={newResponsabilidad}
+   750→                        onChange={e => setNewResponsabilidad(e.target.value)}
+   751→                        className="h-8 text-sm flex-1"
+   752→                        placeholder="Agregar responsabilidad..."
+   753→                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem('responsabilidades', newResponsabilidad, setNewResponsabilidad); } }}
+   754→                      />
+   755→                      <Button size="sm" variant="outline" onClick={() => addItem('responsabilidades', newResponsabilidad, setNewResponsabilidad)} className="shrink-0">
+   756→                        <Plus className="h-3.5 w-3.5 mr-1" /> Agregar
+   757→                      </Button>
+   758→                    </div>
+   759→                  )}
+   760→                  {form.responsabilidades.length === 0 && (
+   761→                    <p className="text-xs text-slate-400 italic">No hay responsabilidades registradas</p>
+   762→                  )}
+   763→                </div>
+   764→              </div>
+   765→
+   766→              <div>
+   767→                <Label className="text-xs font-medium text-slate-600">Condiciones de Trabajo</Label>
+   768→                <Textarea
+   769→                  value={form.condiciones_trabajo}
+   770→                  onChange={e => setForm(p => ({ ...p, condiciones_trabajo: e.target.value }))}
+   771→                  className="text-sm min-h-[80px]"
+   772→                  placeholder="Describa las condiciones de trabajo del puesto..."
+   773→                  disabled={!canEdit}
+   774→                />
+   775→              </div>
+   776→            </CardContent>
+   777→          </CollapsibleContent>
+   778→        </Card>
+   779→      </Collapsible>
+   780→
+   781→      {/* Valuación por Puntos */}
+   782→      <Collapsible open={sectionOpen.valuation} onOpenChange={(v) => setSectionOpen(p => ({ ...p, valuation: v }))}>
+   783→        <Card className="shadow-sm border-2 border-dashed border-emerald-200">
+   784→          <CollapsibleTrigger asChild>
+   785→            <CardHeader className="pb-3 cursor-pointer hover:bg-emerald-50/50 transition-colors rounded-t-lg">
+   786→              <div className="flex items-center justify-between">
+   787→                <CardTitle className="text-base flex items-center gap-2">
+   788→                  <Award className="h-5 w-5 text-emerald-600" />
+   789→                  Valuación por Puntos
+   790→                </CardTitle>
+   791→                <div className="flex items-center gap-3">
+   792→                  <Badge className="bg-emerald-600 text-white text-sm px-3 py-1">
+   793→                    Total: {totalPoints} pts
+   794→                  </Badge>
+   795→                  {sectionOpen.valuation ? <ChevronDown className="h-4 w-4 text-slate-400" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+   796→                </div>
+   797→              </div>
+   798→            </CardHeader>
+   799→          </CollapsibleTrigger>
+   800→          <CollapsibleContent>
+   801→            <CardContent className="pt-0">
+   802→              <CardDescription className="mb-4">
+   803→                Asigne puntos (0-100) para cada factor de valuación. El total se calcula automáticamente.
+   804→              </CardDescription>
+   805→
+   806→              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   807→                {pointGroups.map(group => {
+   808→                  const colors = colorMap[group.color] || colorMap.emerald;
+   809→                  const subtotal = groupSubtotals[group.key] || 0;
+   810→                  return (
+   811→                    <div key={group.key} className={`rounded-lg border ${colors.border} ${colors.bg} p-4`}>
+   812→                      <div className="flex items-center justify-between mb-3">
+   813→                        <div className="flex items-center gap-2">
+   814→                          <span className={colors.text}>{group.icon}</span>
+   815→                          <h4 className={`font-semibold text-sm ${colors.text}`}>{group.label}</h4>
+   816→                        </div>
+   817→                        <Badge variant="outline" className={`${colors.border} ${colors.text}`}>
+   818→                          {subtotal} pts
+   819→                        </Badge>
+   820→                      </div>
+   821→                      <div className="space-y-3">
+   822→                        {group.factors.map((factor, fIdx) => (
+   823→                          <div key={fIdx} className="flex items-center gap-3">
+   824→                            <Label className="text-xs text-slate-600 w-32 shrink-0">{factor.label}</Label>
+   825→                            <div className="flex-1 flex items-center gap-2">
+   826→                              <input
+   827→                                type="range"
+   828→                                min={0}
+   829→                                max={100}
+   830→                                value={factor.value}
+   831→                                onChange={e => updatePointFactor(group.key, fIdx, parseInt(e.target.value))}
+   832→                                className="flex-1 h-2 rounded-full appearance-none cursor-pointer accent-emerald-500"
+   833→                                disabled={!canEdit}
+   834→                              />
+   835→                              <Input
+   836→                                type="number"
+   837→                                min={0}
+   838→                                max={100}
+   839→                                value={factor.value}
+   840→                                onChange={e => updatePointFactor(group.key, fIdx, parseInt(e.target.value) || 0)}
+   841→                                className="h-7 w-16 text-sm text-center font-mono"
+   842→                                disabled={!canEdit}
+   843→                              />
+   844→                            </div>
+   845→                          </div>
+   846→                        ))}
+   847→                      </div>
+   848→                      {/* Subtotal progress bar */}
+   849→                      <div className="mt-3">
+   850→                        <div className="h-2 bg-white/60 rounded-full overflow-hidden">
+   851→                          <div
+   852→                            className={`h-full ${colors.accent} rounded-full transition-all duration-300`}
+   853→                            style={{ width: `${Math.min(100, (subtotal / (group.factors.length * 100)) * 100)}%` }}
+   854→                          />
+   855→                        </div>
+   856→                      </div>
+   857→                    </div>
+   858→                  );
+   859→                })}
+   860→              </div>
+   861→
+   862→              {/* Total */}
+   863→              <Separator className="my-4" />
+   864→              <div className="flex items-center justify-between p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+   865→                <div className="flex items-center gap-2">
+   866→                  <Sparkles className="h-5 w-5 text-emerald-600" />
+   867→                  <span className="font-semibold text-emerald-800">Total de Puntos de Valuación</span>
+   868→                </div>
+   869→                <span className="text-2xl font-bold font-mono text-emerald-700">{totalPoints}</span>
+   870→              </div>
+   871→            </CardContent>
+   872→          </CollapsibleContent>
+   873→        </Card>
+   874→      </Collapsible>
+   875→
+   876→      {/* Version History */}
+   877→      {!isNewMode && versionHistory.length > 0 && (
+   878→        <Card className="shadow-sm">
+   879→          <CardHeader className="pb-3">
+   880→            <CardTitle className="text-base flex items-center gap-2">
+   881→              <History className="h-4 w-4 text-slate-500" />
+   882→              Historial de Versiones
+   883→            </CardTitle>
+   884→          </CardHeader>
+   885→          <CardContent className="pt-0">
+   886→            <div className="space-y-2 max-h-48 overflow-y-auto">
+   887→              {versionHistory.map(v => (
+   888→                <div key={v.id} className="flex items-center gap-3 p-2.5 rounded-md bg-slate-50 border border-slate-100 text-sm">
+   889→                  <Badge variant="outline" className="text-xs shrink-0">v{v.version}</Badge>
+   890→                  <div className="flex-1 min-w-0">
+   891→                    <p className="text-slate-700 truncate">{v.cambio_descripcion}</p>
+   892→                    <p className="text-xs text-slate-400">
+   893→                      {v.creado_por ? `${v.creado_por.nombre} ${v.creado_por.apellido} • ` : ''}
+   894→                      {v.fecha_creacion ? new Date(v.fecha_creacion).toLocaleDateString('es-SV') : ''}
+   895→                    </p>
+   896→                  </div>
+   897→                </div>
+   898→              ))}
+   899→            </div>
+   900→          </CardContent>
+   901→        </Card>
+   902→      )}
+   903→
+   904→      {/* Actions */}
+   905→      <div className="flex items-center justify-between pt-2">
+   906→        <Button variant="outline" size="sm" onClick={() => { resetForm(); setIsNewMode(true); setSelectedPerfilId(''); }}>
+   907→          <RotateCcw className="h-4 w-4 mr-1" /> Limpiar Formulario
+   908→        </Button>
+   909→        {canEdit && (
+   910→          <Button
+   911→            className="bg-emerald-600 hover:bg-emerald-700"
+   912→            onClick={handleSave}
+   913→            disabled={saving || !form.nombre_puesto || !form.area_id}
+   914→          >
+   915→            {saving ? (
+   916→              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+   917→            ) : (
+   918→              <Save className="h-4 w-4 mr-1" />
+   919→            )}
+   920→            {isNewMode ? 'Crear Perfil' : 'Guardar Cambios'}
+   921→          </Button>
+   922→        )}
+   923→        {!canEdit && (
+   924→          <div className="flex items-center gap-2 text-sm text-slate-500">
+   925→            <AlertCircle className="h-4 w-4" />
+   926→            Solo lectura — sin permisos de edición
+   927→          </div>
+   928→        )}
+   929→      </div>
+   930→    </div>
+   931→  );
+   932→}
+   933→

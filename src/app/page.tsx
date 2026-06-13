@@ -5,7 +5,7 @@ import {
   Users, Briefcase, Calculator, FileText, Settings, User, Shield,
   ChevronDown, ChevronRight, LogOut, Lock, Menu, X, LayoutDashboard,
   DollarSign, CheckCircle, Send, Gift, ClipboardList, ListChecks,
-  BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye,
+  BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye, EyeOff, Mail,
   AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle,
   Sun, Moon, TrendingUp, TrendingDown, Bell, Info, AlertTriangle,
   PieChart, CalendarDays, Megaphone
@@ -288,193 +288,364 @@ const VIEW_LABELS: Record<ViewId, string> = {
 };
 
 // ============================================================
-// LOGIN SCREEN
+// LOGIN PAGE
 // ============================================================
-interface LoginScreenProps {
-  onLogin: (email: string, password: string) => Promise<void>;
-  isLoading: boolean;
-  error: string | null;
-}
-
-function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
+function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: string) => Promise<void>; isLoading: boolean }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [lockoutCountdown, setLockoutCountdown] = useState('');
+
+  // Lockout timer effect
+  useEffect(() => {
+    if (!lockoutUntil) return;
+    const interval = setInterval(() => {
+      const remaining = lockoutUntil - Date.now();
+      if (remaining <= 0) {
+        setLockoutUntil(null);
+        setFailedAttempts(0);
+        setLockoutCountdown('');
+        clearInterval(interval);
+        return;
+      }
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      setLockoutCountdown(`${mins}:${secs.toString().padStart(2, '0')}`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutUntil]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onLogin(email, password);
+    if (lockoutUntil && Date.now() < lockoutUntil) return;
+
+    setLoginError(null);
+    try {
+      await onLogin(email, password);
+    } catch (err) {
+      const newAttempts = failedAttempts + 1;
+      setFailedAttempts(newAttempts);
+      const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
+      setLoginError(errorMsg);
+      // Lockout after 5 failed attempts
+      if (newAttempts >= 5) {
+        setLockoutUntil(Date.now() + 5 * 60 * 1000); // 5 minute lockout
+        setLoginError('Cuenta bloqueada por múltiples intentos fallidos. Intente nuevamente en 5 minutos.');
+      }
+    }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20 p-4">
-      {/* Background decorative elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-100/40 dark:bg-emerald-900/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '0s' }} />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-100/30 dark:bg-teal-900/15 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
-        <div className="absolute top-1/4 right-1/4 w-2 h-2 bg-emerald-400/30 dark:bg-emerald-500/20 rounded-full" />
-        <div className="absolute top-1/3 left-1/3 w-1.5 h-1.5 bg-teal-400/20 dark:bg-teal-500/15 rounded-full" />
-        <div className="absolute bottom-1/4 right-1/3 w-1 h-1 bg-emerald-300/30 dark:bg-emerald-500/10 rounded-full" />
-        {/* Animated floating shapes */}
-        <div className="absolute top-20 left-20 w-12 h-12 border border-emerald-200/30 dark:border-emerald-700/20 rounded-lg rotate-12 animate-float" style={{ animationDelay: '1s' }} />
-        <div className="absolute bottom-32 right-32 w-8 h-8 border border-teal-200/30 dark:border-teal-700/20 rounded-full animate-float" style={{ animationDelay: '3s' }} />
-        {/* Subtle grid pattern */}
-        <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.03]" style={{
-          backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)',
-          backgroundSize: '24px 24px'
-        }} />
-      </div>
+  const isLocked = lockoutUntil !== null && Date.now() < lockoutUntil;
+  const maxAttempts = 5;
+  const remainingAttempts = maxAttempts - failedAttempts;
 
-      <div className="w-full max-w-md relative z-10 animate-fade-in">
-        {/* Logo & Title */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20 dark:shadow-emerald-800/30 mb-4 relative animate-float">
-            <svg viewBox="0 0 40 40" className="w-10 h-10 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
+  const roleConfig: Record<string, { label: string; color: string; bg: string; border: string; hoverBg: string }> = {
+    ADMIN: { label: 'ADMIN', color: 'text-red-700 dark:text-red-300', bg: 'bg-red-100 dark:bg-red-950/50', border: 'border-red-200 dark:border-red-800/60', hoverBg: 'hover:bg-red-50 dark:hover:bg-red-950/30' },
+    ANALISTA: { label: 'ANALISTA', color: 'text-teal-700 dark:text-teal-300', bg: 'bg-teal-100 dark:bg-teal-950/50', border: 'border-teal-200 dark:border-teal-800/60', hoverBg: 'hover:bg-teal-50 dark:hover:bg-teal-950/30' },
+    APROBADOR: { label: 'APROBADOR', color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-100 dark:bg-emerald-950/50', border: 'border-emerald-200 dark:border-emerald-800/60', hoverBg: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/30' },
+    GERENCIA: { label: 'GERENCIA', color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-100 dark:bg-amber-950/50', border: 'border-amber-200 dark:border-amber-800/60', hoverBg: 'hover:bg-amber-50 dark:hover:bg-amber-950/30' },
+    AUDITOR: { label: 'AUDITOR', color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-100 dark:bg-violet-950/50', border: 'border-violet-200 dark:border-violet-800/60', hoverBg: 'hover:bg-violet-50 dark:hover:bg-violet-950/30' },
+    EMPLEADO: { label: 'EMPLEADO', color: 'text-cyan-700 dark:text-cyan-300', bg: 'bg-cyan-100 dark:bg-cyan-950/50', border: 'border-cyan-200 dark:border-cyan-800/60', hoverBg: 'hover:bg-cyan-50 dark:hover:bg-cyan-950/30' },
+  };
+
+  const quickLoginCreds = [
+    { email: 'admin@nomina.gob.sv', pass: 'Admin2026!', role: 'ADMIN' },
+    { email: 'analista@nomina.gob.sv', pass: 'Analista2026!', role: 'ANALISTA' },
+    { email: 'aprobador@nomina.gob.sv', pass: 'Aprobador2026!', role: 'APROBADOR' },
+    { email: 'gerencia@nomina.gob.sv', pass: 'Gerencia2026!', role: 'GERENCIA' },
+    { email: 'auditor@nomina.gob.sv', pass: 'Auditor2026!', role: 'AUDITOR' },
+    { email: 'empleado@nomina.gob.sv', pass: 'Empleado2026!', role: 'EMPLEADO' },
+  ];
+
+  return (
+    <div className="min-h-screen flex flex-col lg:flex-row">
+      {/* Left Decorative Panel - hidden on mobile, visible on lg */}
+      <div className="hidden lg:flex lg:w-[45%] xl:w-[50%] relative overflow-hidden bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 flex-col justify-between p-10 xl:p-16">
+        {/* Decorative SVG patterns */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {/* Large hexagon pattern */}
+          <svg className="absolute top-0 right-0 w-[500px] h-[500px] opacity-[0.07]" viewBox="0 0 200 200" fill="none">
+            <path d="M100 10L180 50V130L100 170L20 130V50L100 10Z" stroke="white" strokeWidth="1"/>
+            <path d="M100 30L160 60V120L100 150L40 120V60L100 30Z" stroke="white" strokeWidth="0.5"/>
+            <path d="M100 50L140 70V110L100 130L60 110V70L100 50Z" stroke="white" strokeWidth="0.5"/>
+          </svg>
+          {/* Floating circles */}
+          <div className="absolute top-[15%] left-[10%] w-64 h-64 bg-white/5 rounded-full blur-xl" />
+          <div className="absolute bottom-[20%] right-[15%] w-80 h-80 bg-teal-400/10 rounded-full blur-2xl" />
+          <div className="absolute top-[60%] left-[5%] w-40 h-40 bg-emerald-300/8 rounded-full blur-lg" />
+          {/* Dot grid */}
+          <div className="absolute inset-0 opacity-[0.04]" style={{
+            backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
+            backgroundSize: '32px 32px'
+          }} />
+          {/* Decorative lines */}
+          <svg className="absolute bottom-0 left-0 w-full h-48 opacity-[0.06]" viewBox="0 0 400 100" fill="none" preserveAspectRatio="none">
+            <path d="M0 80 Q100 20 200 60 T400 40" stroke="white" strokeWidth="1.5" fill="none"/>
+            <path d="M0 90 Q100 40 200 70 T400 55" stroke="white" strokeWidth="1" fill="none"/>
+            <path d="M0 100 Q100 55 200 80 T400 70" stroke="white" strokeWidth="0.5" fill="none"/>
+          </svg>
+        </div>
+
+        {/* Logo & Brand */}
+        <div className="relative z-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 mb-6">
+            <svg viewBox="0 0 40 40" className="w-9 h-9 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
               <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
               <path d="M4 12V28L20 36V20L4 12Z" stroke="currentColor" strokeWidth="2"/>
               <path d="M36 12V28L20 36V20L36 12Z" stroke="currentColor" strokeWidth="2"/>
             </svg>
-            {/* Decorative ring */}
-            <div className="absolute inset-0 rounded-2xl border-2 border-emerald-400/30 scale-110" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-            Sistema de Nómina y Perfiles de Puestos
+          <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight">
+            Sistema de Nómina<br />y Perfiles de Puestos
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm flex items-center justify-center gap-1.5">
-            <span className="inline-block w-4 h-[1px] bg-slate-300 dark:bg-slate-600" />
-            República de El Salvador
-            <span className="inline-block w-4 h-[1px] bg-slate-300 dark:bg-slate-600" />
+          <p className="text-emerald-100/80 mt-3 text-base leading-relaxed max-w-md">
+            Plataforma integral de gestión salarial conforme a la legislación laboral de la República de El Salvador
           </p>
         </div>
 
-        {/* Login Card */}
-        <Card className="shadow-xl border-0 shadow-slate-200/60 dark:shadow-slate-900/40 dark:bg-slate-900 animate-scale-in">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg flex items-center gap-2 dark:text-slate-100">
-              <div className="w-1.5 h-5 rounded-full bg-emerald-500" />
-              Iniciar Sesión
-            </CardTitle>
-            <CardDescription className="dark:text-slate-400">Ingrese sus credenciales para acceder al sistema</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="flex items-center gap-1.5">
-                  <svg className="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                  Correo Electrónico
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="usuario@nomina.gob.sv"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  className="h-11 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password" className="flex items-center gap-1.5 dark:text-slate-300">
-                  <svg className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                  Contraseña
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  className="h-11 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 dark:bg-slate-800 dark:border-slate-700"
-                />
-              </div>
-
-              {/* Remember me checkbox */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="remember"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 focus:ring-2"
-                />
-                <Label htmlFor="remember" className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer select-none">Recordarme</Label>
-              </div>
-
-              {error && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100 animate-fade-in">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                className="w-full h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20 hover:shadow-lg hover:shadow-emerald-600/30 transition-all active:scale-[0.98]"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Verificando...
-                  </>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    Iniciar Sesión
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                  </span>
-                )}
-              </Button>
-
-              <button
-                type="button"
-                onClick={() => setShowRecovery(true)}
-                className="w-full text-sm text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:underline transition-colors flex items-center justify-center gap-1"
-              >
-                <Lock className="h-3 w-3" />
-                ¿Olvidó su contraseña?
-              </button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Demo Credentials */}
-        <Card className="mt-4 bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/60 dark:border-amber-800/40 shadow-sm animate-fade-in" style={{ animationDelay: '200ms' }}>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-2.5 flex items-center gap-1.5">
-              <KeyRound className="h-3.5 w-3.5" />
-              Credenciales de Demostración
-            </p>
-            <div className="grid grid-cols-2 gap-1.5 text-xs">
-              {[
-                { email: 'admin@nomina.gob.sv', pass: 'Admin2026!', role: 'ADMIN' },
-                { email: 'analista@nomina.gob.sv', pass: 'Analista2026!', role: 'ANALISTA' },
-                { email: 'aprobador@nomina.gob.sv', pass: 'Aprobador2026!', role: 'APROBADOR' },
-                { email: 'gerencia@nomina.gob.sv', pass: 'Gerencia2026!', role: 'GERENCIA' },
-                { email: 'auditor@nomina.gob.sv', pass: 'Auditor2026!', role: 'AUDITOR' },
-                { email: 'empleado@nomina.gob.sv', pass: 'Empleado2026!', role: 'EMPLEADO' },
-              ].map((cred) => (
-                <button
-                  key={cred.email}
-                  type="button"
-                  onClick={() => { setEmail(cred.email); setPassword(cred.pass); }}
-                  className="flex items-center gap-1.5 p-1.5 rounded-md hover:bg-amber-100/60 dark:hover:bg-amber-900/30 transition-colors text-left group"
-                >
-                  <span className="text-amber-700 dark:text-amber-400 group-hover:text-amber-900 dark:group-hover:text-amber-300 truncate">{cred.email}</span>
-                  <span className="text-amber-400 dark:text-amber-500 ml-auto shrink-0 tabular-nums">{cred.pass}</span>
-                </button>
-              ))}
+        {/* Feature highlights */}
+        <div className="relative z-10 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
+              <Shield className="w-4 h-4 text-emerald-200" />
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <p className="text-white/90 font-medium text-sm">Cumplimiento Legal</p>
+              <p className="text-emerald-200/60 text-xs">Cálculos de ISSS, AFP, ISR según normativa vigente</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
+              <Lock className="w-4 h-4 text-emerald-200" />
+            </div>
+            <div>
+              <p className="text-white/90 font-medium text-sm">Seguridad y Auditoría</p>
+              <p className="text-emerald-200/60 text-xs">Control de acceso basado en roles con trazabilidad completa</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
+              <CheckCircle className="w-4 h-4 text-emerald-200" />
+            </div>
+            <div>
+              <p className="text-white/90 font-medium text-sm">Aprobación y Dispersión</p>
+              <p className="text-emerald-200/60 text-xs">Flujo de trabajo completo desde el cálculo hasta el pago</p>
+            </div>
+          </div>
+        </div>
 
-        {/* Password Recovery Dialog */}
-        <PasswordRecoveryDialog open={showRecovery} onOpenChange={setShowRecovery} />
+        {/* Footer */}
+        <div className="relative z-10">
+          <div className="h-[1px] bg-white/10 mb-4" />
+          <p className="text-emerald-200/40 text-xs">© 2026 Ministerio de Hacienda — República de El Salvador</p>
+        </div>
       </div>
+
+      {/* Mobile Header - visible only on mobile/tablet */}
+      <div className="lg:hidden bg-gradient-to-br from-emerald-600 to-teal-700 p-6 pt-10 pb-8 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute -top-20 -right-20 w-48 h-48 bg-white/5 rounded-full blur-xl" />
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-teal-400/10 rounded-full blur-lg" />
+          <div className="absolute inset-0 opacity-[0.04]" style={{
+            backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
+            backgroundSize: '24px 24px'
+          }} />
+        </div>
+        <div className="relative z-10 text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 mb-3">
+            <svg viewBox="0 0 40 40" className="w-8 h-8 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
+              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
+              <path d="M4 12V28L20 36V20L4 12Z" stroke="currentColor" strokeWidth="2"/>
+              <path d="M36 12V28L20 36V20L36 12Z" stroke="currentColor" strokeWidth="2"/>
+            </svg>
+          </div>
+          <h1 className="text-xl font-bold text-white">Sistema de Nómina</h1>
+          <p className="text-emerald-100/70 text-sm mt-1">República de El Salvador</p>
+        </div>
+      </div>
+
+      {/* Right Side - Login Form */}
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-10 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20 relative overflow-y-auto">
+        {/* Background decorative elements (right side only) */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-20 -right-20 w-64 h-64 bg-emerald-100/30 dark:bg-emerald-900/15 rounded-full blur-3xl" />
+          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-teal-100/20 dark:bg-teal-900/10 rounded-full blur-3xl" />
+        </div>
+
+        <div className="w-full max-w-md relative z-10 animate-fade-in">
+          {/* Login Card */}
+          <Card className="shadow-xl shadow-slate-200/50 dark:shadow-slate-900/40 border border-slate-200/80 dark:border-slate-800 dark:bg-slate-900/95 animate-scale-in">
+            <CardHeader className="pb-2 pt-6 px-6">
+              <div className="flex items-center justify-center mb-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-emerald-800/30">
+                  <Shield className="w-6 h-6 text-white" />
+                </div>
+              </div>
+              <CardTitle className="text-xl text-center dark:text-slate-100">Iniciar Sesión</CardTitle>
+              <CardDescription className="text-center dark:text-slate-400">Ingrese sus credenciales para acceder al sistema</CardDescription>
+            </CardHeader>
+            <CardContent className="px-6 pb-6">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Email field with Mail icon prefix */}
+                <div className="space-y-2">
+                  <Label htmlFor="login-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">Correo Electrónico</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
+                    <Input
+                      id="login-email"
+                      type="email"
+                      placeholder="usuario@nomina.gob.sv"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      disabled={isLoading || isLocked}
+                      className="h-11 pl-10 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 dark:bg-slate-800 dark:border-slate-700"
+                    />
+                  </div>
+                </div>
+
+                {/* Password field with Lock icon prefix and show/hide toggle */}
+                <div className="space-y-2">
+                  <Label htmlFor="login-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">Contraseña</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
+                    <Input
+                      id="login-password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      disabled={isLoading || isLocked}
+                      className="h-11 pl-10 pr-10 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 dark:bg-slate-800 dark:border-slate-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Remember me + Forgot password */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="remember"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 focus:ring-2"
+                    />
+                    <Label htmlFor="remember" className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer select-none">Recordarme</Label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRecovery(true)}
+                    className="text-sm text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:underline transition-colors"
+                  >
+                    ¿Olvidó su contraseña?
+                  </button>
+                </div>
+
+                {/* Security warnings */}
+                {isLocked && lockoutCountdown && (
+                  <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/40 p-3 rounded-lg border border-red-200 dark:border-red-800/60 animate-fade-in">
+                    <Lock className="h-4 w-4 shrink-0" />
+                    <span>Cuenta bloqueada. Intente en <strong>{lockoutCountdown}</strong></span>
+                  </div>
+                )}
+
+                {!isLocked && failedAttempts >= 3 && remainingAttempts > 0 && (
+                  <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-lg border border-amber-200 dark:border-amber-800/60 animate-fade-in">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>Quedan <strong>{remainingAttempts}</strong> intento{remainingAttempts !== 1 ? 's' : ''} antes del bloqueo</span>
+                  </div>
+                )}
+
+                {loginError && !isLocked && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 p-3 rounded-lg border border-red-200 dark:border-red-800/60 animate-fade-in">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{loginError}</span>
+                  </div>
+                )}
+
+                {failedAttempts >= 2 && !isLocked && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 animate-fade-in">
+                    <Info className="h-3.5 w-3.5 shrink-0" />
+                    <span>Múltiples intentos fallidos pueden bloquear su cuenta temporalmente</span>
+                  </div>
+                )}
+
+                {/* Login button */}
+                <Button
+                  type="submit"
+                  className="w-full h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20 hover:shadow-lg hover:shadow-emerald-600/30 transition-all duration-200 active:scale-[0.98] disabled:opacity-60"
+                  disabled={isLoading || isLocked}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Verificando...
+                    </>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      Iniciar Sesión
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                    </span>
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Quick Login Section */}
+          <div className="mt-5 animate-fade-in" style={{ animationDelay: '150ms' }}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-[1px] flex-1 bg-slate-200 dark:bg-slate-700" />
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <KeyRound className="h-3.5 w-3.5" />
+                Acceso Rápido (Demo)
+              </span>
+              <div className="h-[1px] flex-1 bg-slate-200 dark:bg-slate-700" />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {quickLoginCreds.map((cred) => {
+                const config = roleConfig[cred.role];
+                return (
+                  <button
+                    key={cred.email}
+                    type="button"
+                    onClick={() => { setEmail(cred.email); setPassword(cred.pass); }}
+                    disabled={isLoading || isLocked}
+                    className={`flex flex-col items-start p-2.5 rounded-lg border ${config.border} ${config.hoverBg} transition-all duration-200 text-left group active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none bg-white dark:bg-slate-900/80`}
+                  >
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${config.bg} ${config.color} mb-1.5`}>
+                      {config.label}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate w-full leading-tight">
+                      {cred.email}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Password Recovery Dialog */}
+      <PasswordRecoveryDialog open={showRecovery} onOpenChange={setShowRecovery} />
     </div>
   );
 }
@@ -2184,7 +2355,9 @@ function AuthGate({
     try {
       await login(email, password);
     } catch (err) {
-      setLoginError(err instanceof Error ? err.message : 'Error desconocido');
+      const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
+      setLoginError(errorMsg);
+      throw err;
     } finally {
       setIsLoginLoading(false);
     }
@@ -2202,7 +2375,7 @@ function AuthGate({
   }
 
   if (!user) {
-    return <LoginScreen onLogin={handleLogin} isLoading={isLoginLoading} error={loginError} />;
+    return <LoginPage onLogin={handleLogin} isLoading={isLoginLoading} />;
   }
 
   return <AppLayout user={user} accessToken={accessToken} onLogout={logout} />;
