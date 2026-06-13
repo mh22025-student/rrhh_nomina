@@ -1,0 +1,780 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import {
+     5→  Search, Plus, Users, Loader2, ChevronLeft, ChevronRight,
+     6→  User, SearchX, FileDown, FileSpreadsheet, ChevronDown,
+     7→  UserCheck, DollarSign, Building2, UserX, Eye, Pencil,
+     8→  Calendar, X, Filter, UserPlus, TrendingUp
+     9→} from 'lucide-react';
+    10→import { Button } from '@/components/ui/button';
+    11→import { Input } from '@/components/ui/input';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Card, CardContent } from '@/components/ui/card';
+    14→import {
+    15→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    16→} from '@/components/ui/table';
+    17→import {
+    18→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    19→} from '@/components/ui/select';
+    20→import { Skeleton } from '@/components/ui/skeleton';
+    21→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    22→import { Progress } from '@/components/ui/progress';
+    23→import {
+    24→  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+    25→} from '@/components/ui/dropdown-menu';
+    26→import {
+    27→  Tooltip, TooltipTrigger, TooltipContent,
+    28→} from '@/components/ui/tooltip';
+    29→
+    30→type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+    31→
+    32→interface EmployeeDirectoryProps {
+    33→  accessToken: string | null;
+    34→  userRole: UserRole;
+    35→  onNavigateToDetail: (empleadoId: string) => void;
+    36→  onNavigateToNew: () => void;
+    37→}
+    38→
+    39→interface Area {
+    40→  id: string;
+    41→  nombre: string;
+    42→  codigo: string;
+    43→}
+    44→
+    45→interface PerfilPuesto {
+    46→  id: string;
+    47→  nombre_puesto: string;
+    48→  codigo: string;
+    49→}
+    50→
+    51→interface Empleado {
+    52→  id: string;
+    53→  codigo_empleado: string;
+    54→  primer_nombre: string;
+    55→  segundo_nombre: string | null;
+    56→  primer_apellido: string;
+    57→  segundo_apellido: string | null;
+    58→  dui: string;
+    59→  estado: string;
+    60→  salario_base: number;
+    61→  fecha_ingreso: string;
+    62→  area: Area | null;
+    63→  perfil_puesto: PerfilPuesto | null;
+    64→}
+    65→
+    66→const AVATAR_GRADIENTS = [
+    67→  'from-emerald-400 to-teal-500',
+    68→  'from-teal-400 to-cyan-500',
+    69→  'from-amber-400 to-orange-500',
+    70→  'from-rose-400 to-pink-500',
+    71→  'from-violet-400 to-purple-500',
+    72→  'from-cyan-400 to-emerald-500',
+    73→];
+    74→
+    75→function getAvatarGradient(name: string): string {
+    76→  let hash = 0;
+    77→  for (let i = 0; i < name.length; i++) {
+    78→    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    79→  }
+    80→  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+    81→}
+    82→
+    83→function getInitials(emp: Empleado): string {
+    84→  return (emp.primer_nombre?.[0] || '') + (emp.primer_apellido?.[0] || '');
+    85→}
+    86→
+    87→export default function EmployeeDirectory({ accessToken, userRole, onNavigateToDetail, onNavigateToNew }: EmployeeDirectoryProps) {
+    88→  const [employees, setEmployees] = useState<Empleado[]>([]);
+    89→  const [areas, setAreas] = useState<Area[]>([]);
+    90→  const [perfiles, setPerfiles] = useState<PerfilPuesto[]>([]);
+    91→  const [loading, setLoading] = useState(true);
+    92→  const [search, setSearch] = useState('');
+    93→  const [areaFilter, setAreaFilter] = useState('all');
+    94→  const [estadoFilter, setEstadoFilter] = useState('all');
+    95→  const [perfilFilter, setPerfilFilter] = useState('all');
+    96→  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: 10, totalPages: 0 });
+    97→
+    98→  const fetchEmployees = useCallback(async () => {
+    99→    setLoading(true);
+   100→    try {
+   101→      const params = new URLSearchParams();
+   102→      params.set('page', String(pagination.page));
+   103→      params.set('pageSize', String(pagination.pageSize));
+   104→      if (search) params.set('search', search);
+   105→      if (areaFilter && areaFilter !== 'all') params.set('area_id', areaFilter);
+   106→      if (estadoFilter && estadoFilter !== 'all') params.set('estado', estadoFilter);
+   107→      if (perfilFilter && perfilFilter !== 'all') params.set('perfil_puesto_id', perfilFilter);
+   108→
+   109→      const res = await fetch(`/api/empleados?${params.toString()}`, {
+   110→        headers: { Authorization: `Bearer ${accessToken}` },
+   111→      });
+   112→      const data = await res.json();
+   113→      if (res.ok) {
+   114→        setEmployees(data.data);
+   115→        setPagination(prev => ({
+   116→          ...data.pagination,
+   117→          pageSize: prev.pageSize,
+   118→        }));
+   119→      }
+   120→    } catch (err) {
+   121→      console.error('Error fetching employees:', err);
+   122→    } finally {
+   123→      setLoading(false);
+   124→    }
+   125→  }, [accessToken, pagination.page, pagination.pageSize, search, areaFilter, estadoFilter, perfilFilter]);
+   126→
+   127→  useEffect(() => {
+   128→    fetchEmployees();
+   129→  }, [fetchEmployees]);
+   130→
+   131→  // Fetch areas and perfiles for filters
+   132→  useEffect(() => {
+   133→    const fetchFilters = async () => {
+   134→      try {
+   135→        const [areasRes, perfilesRes] = await Promise.all([
+   136→          fetch('/api/areas', { headers: { Authorization: `Bearer ${accessToken}` } }),
+   137→          fetch('/api/perfiles-puesto', { headers: { Authorization: `Bearer ${accessToken}` } }),
+   138→        ]);
+   139→        if (areasRes.ok) {
+   140→          const areasData = await areasRes.json();
+   141→          setAreas(areasData.data || areasData || []);
+   142→        }
+   143→        if (perfilesRes.ok) {
+   144→          const perfilesData = await perfilesRes.json();
+   145→          setPerfiles(perfilesData.data || perfilesData || []);
+   146→        }
+   147→      } catch {
+   148→        // Filters may fail silently
+   149→      }
+   150→    };
+   151→    fetchFilters();
+   152→  }, [accessToken]);
+   153→
+   154→  // Summary stats computed from current data
+   155→  const stats = useMemo(() => {
+   156→    const total = pagination.total;
+   157→    const activos = employees.filter(e => e.estado === 'ACTIVO').length;
+   158→    const now = new Date();
+   159→    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+   160→    const nuevos = employees.filter(e => {
+   161→      if (!e.fecha_ingreso) return false;
+   162→      const fecha = new Date(e.fecha_ingreso);
+   163→      return fecha >= startOfMonth;
+   164→    }).length;
+   165→    const avgSalary = employees.length > 0
+   166→      ? employees.reduce((sum, e) => sum + e.salario_base, 0) / employees.length
+   167→      : 0;
+   168→    return { total, activos, nuevos, avgSalary };
+   169→  }, [employees, pagination.total]);
+   170→
+   171→  const formatSalary = (amount: number) => `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+   172→
+   173→  const getNombreCompleto = (emp: Empleado) =>
+   174→    `${emp.primer_nombre}${emp.segundo_nombre ? ' ' + emp.segundo_nombre : ''} ${emp.primer_apellido}${emp.segundo_apellido ? ' ' + emp.segundo_apellido : ''}`;
+   175→
+   176→  const formatDate = (dateStr: string | null | undefined) => {
+   177→    if (!dateStr) return '—';
+   178→    const d = new Date(dateStr);
+   179→    return d.toLocaleDateString('es-SV', { year: 'numeric', month: 'short', day: 'numeric' });
+   180→  };
+   181→
+   182→  const exportCSV = () => {
+   183→    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Salario (USD)', 'Estado', 'Fecha de Ingreso'];
+   184→    const rows = employees.map(emp => [
+   185→      emp.codigo_empleado,
+   186→      `"${getNombreCompleto(emp)}"`,
+   187→      emp.dui,
+   188→      emp.area?.nombre || '',
+   189→      emp.perfil_puesto?.nombre_puesto || '',
+   190→      emp.salario_base.toFixed(2),
+   191→      emp.estado,
+   192→      emp.fecha_ingreso ? new Date(emp.fecha_ingreso).toLocaleDateString('es-SV') : '',
+   193→    ]);
+   194→    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+   195→    const BOM = '\uFEFF';
+   196→    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+   197→    const url = URL.createObjectURL(blob);
+   198→    const link = document.createElement('a');
+   199→    link.href = url;
+   200→    const dateStr = new Date().toISOString().slice(0, 10);
+   201→    link.download = `directorio_empleados_${dateStr}.csv`;
+   202→    link.click();
+   203→    URL.revokeObjectURL(url);
+   204→  };
+   205→
+   206→  const exportExcel = () => {
+   207→    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Salario (USD)', 'Estado', 'Fecha de Ingreso'];
+   208→    const rows = employees.map(emp => [
+   209→      emp.codigo_empleado,
+   210→      `"${getNombreCompleto(emp)}"`,
+   211→      emp.dui,
+   212→      emp.area?.nombre || '',
+   213→      emp.perfil_puesto?.nombre_puesto || '',
+   214→      emp.salario_base.toFixed(2),
+   215→      emp.estado,
+   216→      emp.fecha_ingreso ? new Date(emp.fecha_ingreso).toLocaleDateString('es-SV') : '',
+   217→    ]);
+   218→    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+   219→    const BOM = '\uFEFF';
+   220→    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+   221→    const url = URL.createObjectURL(blob);
+   222→    const link = document.createElement('a');
+   223→    link.href = url;
+   224→    const dateStr = new Date().toISOString().slice(0, 10);
+   225→    link.download = `directorio_empleados_${dateStr}.csv`;
+   226→    link.click();
+   227→    URL.revokeObjectURL(url);
+   228→  };
+   229→
+   230→  const clearFilters = () => {
+   231→    setSearch('');
+   232→    setAreaFilter('all');
+   233→    setEstadoFilter('all');
+   234→    setPerfilFilter('all');
+   235→    setPagination(p => ({ ...p, page: 1 }));
+   236→  };
+   237→
+   238→  const activeFilterCount = useMemo(() => {
+   239→    let count = 0;
+   240→    if (search) count++;
+   241→    if (areaFilter !== 'all') count++;
+   242→    if (estadoFilter !== 'all') count++;
+   243→    if (perfilFilter !== 'all') count++;
+   244→    return count;
+   245→  }, [search, areaFilter, estadoFilter, perfilFilter]);
+   246→
+   247→  const canCreate = userRole === 'ADMIN' || userRole === 'ANALISTA';
+   248→  const canEdit = userRole === 'ADMIN' || userRole === 'ANALISTA';
+   249→
+   250→  const getEstadoBadge = (estado: string) => {
+   251→    if (estado === 'ACTIVO') return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800';
+   252→    if (estado === 'INACTIVO') return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800';
+   253→    return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
+   254→  };
+   255→
+   256→  // Salary range max for progress bar
+   257→  const SALARY_MAX = 5000;
+   258→
+   259→  // Compute pagination display
+   260→  const pageStart = ((pagination.page - 1) * pagination.pageSize) + 1;
+   261→  const pageEnd = Math.min(pagination.page * pagination.pageSize, pagination.total);
+   262→
+   263→  // Empty state component
+   264→  const EmptyState = () => (
+   265→    <div className="flex flex-col items-center justify-center py-16 text-slate-400 dark:text-slate-500">
+   266→      <div className="relative mb-6">
+   267→        <div className="p-5 rounded-full bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700">
+   268→          <SearchX className="h-16 w-16 text-slate-300 dark:text-slate-500" />
+   269→        </div>
+   270→        <div className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-white dark:bg-slate-800 shadow-md">
+   271→          <Filter className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+   272→        </div>
+   273→      </div>
+   274→      <p className="text-lg font-semibold text-slate-600 dark:text-slate-300">No se encontraron empleados</p>
+   275→      <p className="text-sm text-slate-400 dark:text-slate-500 mt-1.5 max-w-xs text-center">
+   276→        No hay resultados para los filtros actuales. Pruebe ajustando la búsqueda o los filtros.
+   277→      </p>
+   278→      {activeFilterCount > 0 && (
+   279→        <Button
+   280→          variant="outline"
+   281→          size="sm"
+   282→          className="mt-5 text-sm border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/30 transition-all duration-200"
+   283→          onClick={clearFilters}
+   284→        >
+   285→          <X className="h-3.5 w-3.5 mr-1.5" />
+   286→          Limpiar Filtros
+   287→        </Button>
+   288→      )}
+   289→    </div>
+   290→  );
+   291→
+   292→  return (
+   293→    <div className="space-y-4">
+   294→      {/* Enhanced Header Banner */}
+   295→      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 dark:from-emerald-800 dark:via-emerald-900 dark:to-teal-900 p-6 text-white">
+   296→        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iZ3JpZCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNIDQwIDAgTCAwIDAgMCA0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDUpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-50" />
+   297→        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-teal-400/20 to-transparent rounded-full -translate-y-1/2 translate-x-1/4" />
+   298→        <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-emerald-400/20 to-transparent rounded-full translate-y-1/2 -translate-x-1/4" />
+   299→        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   300→          <div>
+   301→            <h2 className="text-2xl font-bold flex items-center gap-3">
+   302→              <Users className="h-7 w-7" />
+   303→              Directorio de Empleados
+   304→            </h2>
+   305→            <p className="text-emerald-100/80 mt-1 text-sm">
+   306→              {pagination.total} empleado{pagination.total !== 1 ? 's' : ''} registrado{pagination.total !== 1 ? 's' : ''} en el sistema
+   307→            </p>
+   308→          </div>
+   309→          <div className="flex items-center gap-2">
+   310→            {/* Export Dropdown */}
+   311→            <DropdownMenu>
+   312→              <DropdownMenuTrigger asChild>
+   313→                <Button variant="secondary" size="sm" disabled={employees.length === 0} className="bg-white/15 hover:bg-white/25 text-white border-white/20 backdrop-blur-sm">
+   314→                  <FileDown className="h-4 w-4 mr-1.5" /> Exportar <ChevronDown className="h-3 w-3 ml-1" />
+   315→                </Button>
+   316→              </DropdownMenuTrigger>
+   317→              <DropdownMenuContent align="end">
+   318→                <DropdownMenuItem onClick={exportCSV}>
+   319→                  <FileDown className="h-4 w-4 mr-2 text-slate-500" />
+   320→                  Exportar CSV
+   321→                </DropdownMenuItem>
+   322→                <DropdownMenuItem onClick={exportExcel}>
+   323→                  <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
+   324→                  Exportar Excel
+   325→                </DropdownMenuItem>
+   326→              </DropdownMenuContent>
+   327→            </DropdownMenu>
+   328→            {canCreate && (
+   329→              <Button size="sm" className="bg-white text-emerald-700 hover:bg-emerald-50 font-semibold shadow-lg shadow-emerald-900/20" onClick={onNavigateToNew}>
+   330→                <Plus className="h-4 w-4 mr-1.5" /> Nuevo Empleado
+   331→              </Button>
+   332→            )}
+   333→          </div>
+   334→        </div>
+   335→      </div>
+   336→
+   337→      {/* Summary Stats Row */}
+   338→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   339→        <Card className="shadow-sm border-0 bg-gradient-to-br from-emerald-50 to-emerald-100/60 dark:from-emerald-900/20 dark:to-emerald-800/10 hover:shadow-md transition-all duration-200">
+   340→          <CardContent className="p-4 flex items-center gap-3">
+   341→            <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 shadow-sm">
+   342→              <Users className="h-5 w-5 text-white" />
+   343→            </div>
+   344→            <div>
+   345→              <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70 font-medium">Total Empleados</p>
+   346→              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 leading-tight">{stats.total}</p>
+   347→            </div>
+   348→          </CardContent>
+   349→        </Card>
+   350→        <Card className="shadow-sm border-0 bg-gradient-to-br from-teal-50 to-teal-100/60 dark:from-teal-900/20 dark:to-teal-800/10 hover:shadow-md transition-all duration-200">
+   351→          <CardContent className="p-4 flex items-center gap-3">
+   352→            <div className="p-2.5 rounded-xl bg-gradient-to-br from-teal-400 to-teal-500 shadow-sm">
+   353→              <UserCheck className="h-5 w-5 text-white" />
+   354→            </div>
+   355→            <div>
+   356→              <p className="text-xs text-teal-700/70 dark:text-teal-400/70 font-medium">Activos</p>
+   357→              <p className="text-2xl font-bold text-teal-700 dark:text-teal-300 leading-tight">{stats.activos}</p>
+   358→            </div>
+   359→          </CardContent>
+   360→        </Card>
+   361→        <Card className="shadow-sm border-0 bg-gradient-to-br from-cyan-50 to-cyan-100/60 dark:from-cyan-900/20 dark:to-cyan-800/10 hover:shadow-md transition-all duration-200">
+   362→          <CardContent className="p-4 flex items-center gap-3">
+   363→            <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-400 to-cyan-500 shadow-sm">
+   364→              <UserPlus className="h-5 w-5 text-white" />
+   365→            </div>
+   366→            <div>
+   367→              <p className="text-xs text-cyan-700/70 dark:text-cyan-400/70 font-medium">Nuevos este mes</p>
+   368→              <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-300 leading-tight">{stats.nuevos}</p>
+   369→            </div>
+   370→          </CardContent>
+   371→        </Card>
+   372→        <Card className="shadow-sm border-0 bg-gradient-to-br from-amber-50 to-amber-100/60 dark:from-amber-900/20 dark:to-amber-800/10 hover:shadow-md transition-all duration-200">
+   373→          <CardContent className="p-4 flex items-center gap-3">
+   374→            <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 shadow-sm">
+   375→              <TrendingUp className="h-5 w-5 text-white" />
+   376→            </div>
+   377→            <div>
+   378→              <p className="text-xs text-amber-700/70 dark:text-amber-400/70 font-medium">Salario Promedio</p>
+   379→              <p className="text-2xl font-bold text-amber-700 dark:text-amber-300 leading-tight">${stats.avgSalary.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
+   380→            </div>
+   381→          </CardContent>
+   382→        </Card>
+   383→      </div>
+   384→
+   385→      {/* Search and Filters */}
+   386→      <Card className="shadow-sm">
+   387→        <CardContent className="p-4">
+   388→          <div className="space-y-3">
+   389→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+   390→              <div className="sm:col-span-2 lg:col-span-1 xl:col-span-1 relative">
+   391→                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   392→                <Input
+   393→                  placeholder="Buscar por nombre, DUI, código..."
+   394→                  value={search}
+   395→                  onChange={(e) => { setSearch(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+   396→                  className="pl-9 h-9 border-slate-200 dark:border-slate-700 focus:border-emerald-400 focus:ring-emerald-400 bg-white dark:bg-slate-800"
+   397→                />
+   398→              </div>
+   399→              <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+   400→                <SelectTrigger className="h-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+   401→                  <Building2 className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+   402→                  <SelectValue placeholder="Área" />
+   403→                </SelectTrigger>
+   404→                <SelectContent>
+   405→                  <SelectItem value="all">Todas las áreas</SelectItem>
+   406→                  {areas.map(a => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
+   407→                </SelectContent>
+   408→              </Select>
+   409→              <Select value={estadoFilter} onValueChange={(v) => { setEstadoFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+   410→                <SelectTrigger className="h-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+   411→                  <UserCheck className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+   412→                  <SelectValue placeholder="Estado" />
+   413→                </SelectTrigger>
+   414→                <SelectContent>
+   415→                  <SelectItem value="all">Todos los estados</SelectItem>
+   416→                  <SelectItem value="ACTIVO">Activo</SelectItem>
+   417→                  <SelectItem value="INACTIVO">Inactivo</SelectItem>
+   418→                </SelectContent>
+   419→              </Select>
+   420→              <Select value={perfilFilter} onValueChange={(v) => { setPerfilFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+   421→                <SelectTrigger className="h-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+   422→                  <User className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+   423→                  <SelectValue placeholder="Puesto" />
+   424→                </SelectTrigger>
+   425→                <SelectContent>
+   426→                  <SelectItem value="all">Todos los puestos</SelectItem>
+   427→                  {perfiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre_puesto}</SelectItem>)}
+   428→                </SelectContent>
+   429→              </Select>
+   430→            </div>
+   431→
+   432→            {/* Active Filter Chips */}
+   433→            {activeFilterCount > 0 && (
+   434→              <div className="flex items-center gap-2 flex-wrap">
+   435→                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+   436→                  <Filter className="h-3 w-3" />
+   437→                  Filtros activos:
+   438→                </span>
+   439→                {search && (
+   440→                  <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 gap-1 pr-1.5">
+   441→                    &quot;{search}&quot;
+   442→                    <button onClick={() => { setSearch(''); setPagination(p => ({ ...p, page: 1 })); }} className="ml-0.5 p-0.5 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors">
+   443→                      <X className="h-3 w-3" />
+   444→                    </button>
+   445→                  </Badge>
+   446→                )}
+   447→                {areaFilter !== 'all' && (
+   448→                  <Badge variant="secondary" className="bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-800 gap-1 pr-1.5">
+   449→                    {areas.find(a => a.id === areaFilter)?.nombre || 'Área'}
+   450→                    <button onClick={() => { setAreaFilter('all'); setPagination(p => ({ ...p, page: 1 })); }} className="ml-0.5 p-0.5 rounded-full hover:bg-teal-200 dark:hover:bg-teal-800 transition-colors">
+   451→                      <X className="h-3 w-3" />
+   452→                    </button>
+   453→                  </Badge>
+   454→                )}
+   455→                {estadoFilter !== 'all' && (
+   456→                  <Badge variant="secondary" className="bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400 dark:border-cyan-800 gap-1 pr-1.5">
+   457→                    {estadoFilter}
+   458→                    <button onClick={() => { setEstadoFilter('all'); setPagination(p => ({ ...p, page: 1 })); }} className="ml-0.5 p-0.5 rounded-full hover:bg-cyan-200 dark:hover:bg-cyan-800 transition-colors">
+   459→                      <X className="h-3 w-3" />
+   460→                    </button>
+   461→                  </Badge>
+   462→                )}
+   463→                {perfilFilter !== 'all' && (
+   464→                  <Badge variant="secondary" className="bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 gap-1 pr-1.5">
+   465→                    {perfiles.find(p => p.id === perfilFilter)?.nombre_puesto || 'Puesto'}
+   466→                    <button onClick={() => { setPerfilFilter('all'); setPagination(p => ({ ...p, page: 1 })); }} className="ml-0.5 p-0.5 rounded-full hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors">
+   467→                      <X className="h-3 w-3" />
+   468→                    </button>
+   469→                  </Badge>
+   470→                )}
+   471→                <Button
+   472→                  variant="ghost"
+   473→                  size="sm"
+   474→                  className="h-6 text-xs text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 transition-colors duration-200"
+   475→                  onClick={clearFilters}
+   476→                >
+   477→                  <X className="h-3 w-3 mr-1" />
+   478→                  Limpiar todo
+   479→                </Button>
+   480→              </div>
+   481→            )}
+   482→          </div>
+   483→        </CardContent>
+   484→      </Card>
+   485→
+   486→      {/* Desktop Table */}
+   487→      <Card className="shadow-sm hidden lg:block overflow-hidden">
+   488→        <CardContent className="p-0">
+   489→          <Table>
+   490→            <TableHeader>
+   491→              <TableRow className="bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-800 dark:to-teal-800 hover:from-emerald-600 hover:to-teal-600 dark:hover:from-emerald-800 dark:hover:to-teal-800">
+   492→                <TableHead className="text-white/90 font-semibold">Código</TableHead>
+   493→                <TableHead className="text-white/90 font-semibold">Nombre Completo</TableHead>
+   494→                <TableHead className="text-white/90 font-semibold">Área</TableHead>
+   495→                <TableHead className="text-white/90 font-semibold">Puesto</TableHead>
+   496→                <TableHead className="text-white/90 font-semibold text-right">Salario</TableHead>
+   497→                <TableHead className="text-white/90 font-semibold">Estado</TableHead>
+   498→                <TableHead className="text-white/90 font-semibold">Ingreso</TableHead>
+   499→                <TableHead className="text-white/90 font-semibold text-center">Acciones</TableHead>
+   500→              </TableRow>
+   501→            </TableHeader>
+   502→            <TableBody>
+   503→              {loading ? (
+   504→                Array.from({ length: 5 }).map((_, i) => (
+   505→                  <TableRow key={i}>
+   506→                    {Array.from({ length: 8 }).map((_, j) => (
+   507→                      <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
+   508→                    ))}
+   509→                  </TableRow>
+   510→                ))
+   511→              ) : employees.length === 0 ? (
+   512→                <TableRow>
+   513→                  <TableCell colSpan={8} className="border-b-0">
+   514→                    <EmptyState />
+   515→                  </TableCell>
+   516→                </TableRow>
+   517→              ) : (
+   518→                employees.map((emp, idx) => {
+   519→                  const fullName = getNombreCompleto(emp);
+   520→                  const gradient = getAvatarGradient(fullName);
+   521→                  const salaryPercent = Math.min((emp.salario_base / SALARY_MAX) * 100, 100);
+   522→                  return (
+   523→                    <TableRow
+   524→                      key={emp.id}
+   525→                      className={`cursor-pointer group transition-all duration-200 border-l-4 border-l-transparent hover:border-l-emerald-500 hover:bg-emerald-50/60 dark:hover:bg-emerald-900/20 hover:shadow-sm ${idx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50/50 dark:bg-slate-800/30'}`}
+   526→                      onClick={() => onNavigateToDetail(emp.id)}
+   527→                    >
+   528→                      <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">{emp.codigo_empleado}</TableCell>
+   529→                      <TableCell>
+   530→                        <div className="flex items-center gap-2.5">
+   531→                          <Avatar className="h-8 w-8 shadow-sm">
+   532→                            <AvatarFallback className={`bg-gradient-to-br ${gradient} text-white text-xs font-semibold`}>
+   533→                              {getInitials(emp)}
+   534→                            </AvatarFallback>
+   535→                          </Avatar>
+   536→                          <span className="font-medium text-slate-900 dark:text-slate-100">{fullName}</span>
+   537→                        </div>
+   538→                      </TableCell>
+   539→                      <TableCell>
+   540→                        {emp.area ? (
+   541→                          <Badge variant="secondary" className="text-[11px] bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-800">
+   542→                            {emp.area.nombre}
+   543→                          </Badge>
+   544→                        ) : (
+   545→                          <span className="text-sm text-slate-400">—</span>
+   546→                        )}
+   547→                      </TableCell>
+   548→                      <TableCell className="text-sm text-slate-600 dark:text-slate-400">{emp.perfil_puesto?.nombre_puesto || '—'}</TableCell>
+   549→                      <TableCell className="text-right">
+   550→                        <div className="flex flex-col items-end gap-1">
+   551→                          <div className="flex items-baseline gap-1">
+   552→                            <span className="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100">{formatSalary(emp.salario_base)}</span>
+   553→                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">USD</span>
+   554→                          </div>
+   555→                          <Progress
+   556→                            value={salaryPercent}
+   557→                            className="h-1 w-16 bg-slate-100 dark:bg-slate-700 [&>[data-slot=progress-indicator]]:bg-emerald-500"
+   558→                          />
+   559→                        </div>
+   560→                      </TableCell>
+   561→                      <TableCell>
+   562→                        {emp.estado === 'ACTIVO' ? (
+   563→                          <Badge className="text-[10px] border bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800" variant="secondary">
+   564→                            <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 bg-emerald-500 animate-pulse" />
+   565→                            ACTIVO
+   566→                          </Badge>
+   567→                        ) : emp.estado === 'INACTIVO' ? (
+   568→                          <Badge className="text-[10px] border bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800 font-semibold" variant="secondary">
+   569→                            <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 bg-red-500" />
+   570→                            INACTIVO
+   571→                          </Badge>
+   572→                        ) : (
+   573→                          <Badge className={`text-[10px] border ${getEstadoBadge(emp.estado)}`} variant="secondary">
+   574→                            <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 bg-slate-400" />
+   575→                            {emp.estado}
+   576→                          </Badge>
+   577→                        )}
+   578→                      </TableCell>
+   579→                      <TableCell className="text-sm text-slate-500 dark:text-slate-400">
+   580→                        <div className="flex items-center gap-1">
+   581→                          <Calendar className="h-3 w-3 text-slate-400" />
+   582→                          {formatDate(emp.fecha_ingreso)}
+   583→                        </div>
+   584→                      </TableCell>
+   585→                      <TableCell>
+   586→                        <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+   587→                          <Tooltip>
+   588→                            <TooltipTrigger asChild>
+   589→                              <Button variant="ghost" size="sm" onClick={() => onNavigateToDetail(emp.id)} className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30 transition-all duration-200">
+   590→                                <Eye className="h-4 w-4" />
+   591→                              </Button>
+   592→                            </TooltipTrigger>
+   593→                            <TooltipContent>Ver detalle</TooltipContent>
+   594→                          </Tooltip>
+   595→                          {canEdit && (
+   596→                            <Tooltip>
+   597→                              <TooltipTrigger asChild>
+   598→                                <Button variant="ghost" size="sm" onClick={() => onNavigateToDetail(emp.id)} className="h-8 w-8 p-0 text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-900/30 transition-all duration-200">
+   599→                                  <Pencil className="h-3.5 w-3.5" />
+   600→                                </Button>
+   601→                              </TooltipTrigger>
+   602→                              <TooltipContent>Editar</TooltipContent>
+   603→                            </Tooltip>
+   604→                          )}
+   605→                        </div>
+   606→                      </TableCell>
+   607→                    </TableRow>
+   608→                  );
+   609→                })
+   610→              )}
+   611→            </TableBody>
+   612→          </Table>
+   613→        </CardContent>
+   614→      </Card>
+   615→
+   616→      {/* Mobile Card Layout */}
+   617→      <div className="lg:hidden space-y-3">
+   618→        {loading ? (
+   619→          Array.from({ length: 3 }).map((_, i) => (
+   620→            <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>
+   621→          ))
+   622→        ) : employees.length === 0 ? (
+   623→          <Card className="shadow-sm">
+   624→            <CardContent className="p-0">
+   625→              <EmptyState />
+   626→            </CardContent>
+   627→          </Card>
+   628→        ) : (
+   629→          employees.map(emp => {
+   630→            const fullName = getNombreCompleto(emp);
+   631→            const gradient = getAvatarGradient(fullName);
+   632→            const salaryPercent = Math.min((emp.salario_base / SALARY_MAX) * 100, 100);
+   633→            return (
+   634→              <Card
+   635→                key={emp.id}
+   636→                className="shadow-sm cursor-pointer hover:shadow-md active:scale-[0.99] transition-all duration-200 border border-slate-200 dark:border-slate-700 dark:bg-slate-800/50 overflow-hidden"
+   637→                onClick={() => onNavigateToDetail(emp.id)}
+   638→              >
+   639→                <CardContent className="p-4">
+   640→                  <div className="flex items-start justify-between">
+   641→                    <div className="flex items-center gap-3 min-w-0">
+   642→                      <Avatar className="h-10 w-10 shrink-0 shadow-sm">
+   643→                        <AvatarFallback className={`bg-gradient-to-br ${gradient} text-white text-sm font-semibold`}>
+   644→                          {getInitials(emp)}
+   645→                        </AvatarFallback>
+   646→                      </Avatar>
+   647→                      <div className="min-w-0">
+   648→                        <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">{fullName}</p>
+   649→                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{emp.codigo_empleado} · DUI: {emp.dui}</p>
+   650→                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+   651→                          {emp.area && (
+   652→                            <Badge variant="secondary" className="text-[10px] bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-800">
+   653→                              {emp.area.nombre}
+   654→                            </Badge>
+   655→                          )}
+   656→                          {emp.perfil_puesto && (
+   657→                            <span className="text-xs text-slate-500 dark:text-slate-400">{emp.perfil_puesto.nombre_puesto}</span>
+   658→                          )}
+   659→                        </div>
+   660→                      </div>
+   661→                    </div>
+   662→                    {emp.estado === 'ACTIVO' ? (
+   663→                      <Badge className="text-[10px] border shrink-0 ml-2 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800" variant="secondary">
+   664→                        <span className="inline-block w-1.5 h-1.5 rounded-full mr-1 bg-emerald-500 animate-pulse" />
+   665→                        ACTIVO
+   666→                      </Badge>
+   667→                    ) : (
+   668→                      <Badge className="text-[10px] border shrink-0 ml-2 bg-red-100 text-red-700 border-red-200 font-semibold dark:bg-red-900/30 dark:text-red-400 dark:border-red-800" variant="secondary">
+   669→                        <span className="inline-block w-1.5 h-1.5 rounded-full mr-1 bg-red-500" />
+   670→                        INACTIVO
+   671→                      </Badge>
+   672→                    )}
+   673→                  </div>
+   674→                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+   675→                    <div className="flex flex-col">
+   676→                      <div className="flex items-baseline gap-1">
+   677→                        <span className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">{formatSalary(emp.salario_base)}</span>
+   678→                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">USD</span>
+   679→                      </div>
+   680→                      <Progress
+   681→                        value={salaryPercent}
+   682→                        className="h-1 w-14 mt-1 bg-slate-100 dark:bg-slate-700 [&>[data-slot=progress-indicator]]:bg-emerald-500"
+   683→                      />
+   684→                    </div>
+   685→                    <div className="flex items-center gap-3">
+   686→                      {emp.fecha_ingreso && (
+   687→                        <span className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
+   688→                          <Calendar className="h-3 w-3" />
+   689→                          {formatDate(emp.fecha_ingreso)}
+   690→                        </span>
+   691→                      )}
+   692→                      <Button variant="ghost" size="sm" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 h-7 text-xs transition-all duration-200">
+   693→                        Ver detalle →
+   694→                      </Button>
+   695→                    </div>
+   696→                  </div>
+   697→                </CardContent>
+   698→              </Card>
+   699→            );
+   700→          })
+   701→        )}
+   702→      </div>
+   703→
+   704→      {/* Enhanced Pagination */}
+   705→      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1 py-2">
+   706→        <div className="flex items-center gap-3">
+   707→          <p className="text-sm text-slate-500 dark:text-slate-400">
+   708→            {pagination.total > 0
+   709→              ? `Mostrando ${pageStart}–${pageEnd} de ${pagination.total} empleados`
+   710→              : 'No hay empleados'
+   711→            }
+   712→          </p>
+   713→          <div className="flex items-center gap-1.5">
+   714→            <span className="text-xs text-slate-400 dark:text-slate-500">Filas:</span>
+   715→            <Select
+   716→              value={String(pagination.pageSize)}
+   717→              onValueChange={(v) => setPagination(p => ({ ...p, pageSize: Number(v), page: 1 }))}
+   718→            >
+   719→              <SelectTrigger className="h-7 w-[65px] text-xs border-slate-200 dark:border-slate-700">
+   720→                <SelectValue />
+   721→              </SelectTrigger>
+   722→              <SelectContent>
+   723→                <SelectItem value="10">10</SelectItem>
+   724→                <SelectItem value="25">25</SelectItem>
+   725→                <SelectItem value="50">50</SelectItem>
+   726→              </SelectContent>
+   727→            </Select>
+   728→          </div>
+   729→        </div>
+   730→        {pagination.totalPages > 1 && (
+   731→          <div className="flex items-center gap-1">
+   732→            <Button
+   733→              variant="outline" size="sm"
+   734→              disabled={pagination.page <= 1}
+   735→              onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
+   736→              className="h-8 w-8 p-0 dark:border-slate-700 transition-all duration-200"
+   737→            >
+   738→              <ChevronLeft className="h-4 w-4" />
+   739→            </Button>
+   740→            <div className="flex items-center gap-1">
+   741→              {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
+   742→                let pageNum: number;
+   743→                if (pagination.totalPages <= 5) {
+   744→                  pageNum = i + 1;
+   745→                } else if (pagination.page <= 3) {
+   746→                  pageNum = i + 1;
+   747→                } else if (pagination.page >= pagination.totalPages - 2) {
+   748→                  pageNum = pagination.totalPages - 4 + i;
+   749→                } else {
+   750→                  pageNum = pagination.page - 2 + i;
+   751→                }
+   752→                const isCurrent = pagination.page === pageNum;
+   753→                return (
+   754→                  <Button
+   755→                    key={pageNum}
+   756→                    variant={isCurrent ? 'default' : 'outline'}
+   757→                    size="sm"
+   758→                    className={`h-8 w-8 p-0 font-medium transition-all duration-200 ${isCurrent ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm' : 'dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
+   759→                    onClick={() => setPagination(p => ({ ...p, page: pageNum }))}
+   760→                  >
+   761→                    {pageNum}
+   762→                  </Button>
+   763→                );
+   764→              })}
+   765→            </div>
+   766→            <Button
+   767→              variant="outline" size="sm"
+   768→              disabled={pagination.page >= pagination.totalPages}
+   769→              onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+   770→              className="h-8 w-8 p-0 dark:border-slate-700 transition-all duration-200"
+   771→            >
+   772→              <ChevronRight className="h-4 w-4" />
+   773→            </Button>
+   774→          </div>
+   775→        )}
+   776→      </div>
+   777→    </div>
+   778→  );
+   779→}
+   780→

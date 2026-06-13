@@ -5,7 +5,7 @@ import {
   Search, Plus, Users, Loader2, ChevronLeft, ChevronRight,
   User, SearchX, FileDown, FileSpreadsheet, ChevronDown,
   UserCheck, DollarSign, Building2, UserX, Eye, Pencil,
-  Calendar, X, Filter, UserPlus, TrendingUp
+  Calendar, X, Filter, UserPlus, TrendingUp, Printer
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -179,19 +179,34 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
     return d.toLocaleDateString('es-SV', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  const formatDateCSV = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
   const exportCSV = () => {
-    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Salario (USD)', 'Estado', 'Fecha de Ingreso'];
+    const reportTitle = 'Directorio de Empleados — Ministerio de Hacienda';
+    const reportDate = `Fecha de generación: ${new Date().toLocaleDateString('es-SV', { year: 'numeric', month: 'long', day: 'numeric' })}`;
+    const titleRow = [reportTitle];
+    const dateRow = [reportDate];
+    const emptyRow = [''];
+    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Tipo de Contrato', 'Salario (USD)', 'Estado', 'Fecha de Ingreso'];
     const rows = employees.map(emp => [
       emp.codigo_empleado,
       `"${getNombreCompleto(emp)}"`,
       emp.dui,
       emp.area?.nombre || '',
       emp.perfil_puesto?.nombre_puesto || '',
+      '', // Contract type not available in current API
       emp.salario_base.toFixed(2),
       emp.estado,
-      emp.fecha_ingreso ? new Date(emp.fecha_ingreso).toLocaleDateString('es-SV') : '',
+      formatDateCSV(emp.fecha_ingreso),
     ]);
-    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const csv = [titleRow, dateRow, emptyRow, headers, ...rows].map(row => row.join(',')).join('\n');
     const BOM = '\uFEFF';
     const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -204,27 +219,165 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
   };
 
   const exportExcel = () => {
-    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Salario (USD)', 'Estado', 'Fecha de Ingreso'];
-    const rows = employees.map(emp => [
-      emp.codigo_empleado,
-      `"${getNombreCompleto(emp)}"`,
-      emp.dui,
-      emp.area?.nombre || '',
-      emp.perfil_puesto?.nombre_puesto || '',
-      emp.salario_base.toFixed(2),
-      emp.estado,
-      emp.fecha_ingreso ? new Date(emp.fecha_ingreso).toLocaleDateString('es-SV') : '',
-    ]);
-    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
-    const BOM = '\uFEFF';
-    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    const dateStr = new Date().toISOString().slice(0, 10);
-    link.download = `directorio_empleados_${dateStr}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    exportCSV(); // Same enhanced CSV for now
+  };
+
+  const exportPDF = () => {
+    const printContainer = document.getElementById('employee-print-container');
+    if (!printContainer) return;
+
+    // Group employees by department
+    const deptGroups: Record<string, Empleado[]> = {};
+    employees.forEach(emp => {
+      const dept = emp.area?.nombre || 'Sin Área';
+      if (!deptGroups[dept]) deptGroups[dept] = [];
+      deptGroups[dept].push(emp);
+    });
+
+    const deptEntries = Object.entries(deptGroups);
+
+    printContainer.innerHTML = `
+      <div style="font-family: 'Inter', Arial, sans-serif; color: #1a1a1a; max-width: 100%; padding: 20px;">
+        <!-- Header -->
+        <div style="text-align: center; margin-bottom: 24px; border-bottom: 3px solid #059669; padding-bottom: 16px;">
+          <h1 style="font-size: 16pt; margin: 0 0 4px 0; color: #065f46; letter-spacing: 0.5px;">Ministerio de Hacienda — República de El Salvador</h1>
+          <h2 style="font-size: 13pt; margin: 0 0 8px 0; color: #047857;">Directorio de Empleados</h2>
+          <p style="font-size: 9pt; color: #6b7280; margin: 0;">Generado: ${new Date().toLocaleDateString('es-SV', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+          <p style="font-size: 9pt; color: #6b7280; margin: 4px 0 0 0;">Total: ${employees.length} empleado${employees.length !== 1 ? 's' : ''}</p>
+        </div>
+
+        <!-- Employee Table -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt;">
+          <thead>
+            <tr style="background-color: #059669 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+              <th style="padding: 8px 6px; border: 1px solid #047857; text-align: center; width: 30px; color: white !important;">#</th>
+              <th style="padding: 8px 6px; border: 1px solid #047857; text-align: left; color: white !important;">Nombre Completo</th>
+              <th style="padding: 8px 6px; border: 1px solid #047857; text-align: left; color: white !important;">Puesto</th>
+              <th style="padding: 8px 6px; border: 1px solid #047857; text-align: left; color: white !important;">Área</th>
+              <th style="padding: 8px 6px; border: 1px solid #047857; text-align: left; color: white !important;">Email</th>
+              <th style="padding: 8px 6px; border: 1px solid #047857; text-align: center; color: white !important;">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${employees.map((emp, i) => {
+              const fullName = getNombreCompleto(emp);
+              return `<tr style="background-color: ${i % 2 === 0 ? '#ffffff' : '#f0fdf4'} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <td style="padding: 5px 6px; border: 1px solid #d1d5db; text-align: center;">${i + 1}</td>
+                <td style="padding: 5px 6px; border: 1px solid #d1d5db;">${fullName}</td>
+                <td style="padding: 5px 6px; border: 1px solid #d1d5db;">${emp.perfil_puesto?.nombre_puesto || '—'}</td>
+                <td style="padding: 5px 6px; border: 1px solid #d1d5db;">${emp.area?.nombre || '—'}</td>
+                <td style="padding: 5px 6px; border: 1px solid #d1d5db;">—</td>
+                <td style="padding: 5px 6px; border: 1px solid #d1d5db; text-align: center;">
+                  <span style="color: ${emp.estado === 'ACTIVO' ? '#059669' : '#dc2626'}; font-weight: 600;">${emp.estado}</span>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+
+        <!-- Legal Footer -->
+        <div style="text-align: center; margin-top: 24px; padding-top: 12px; border-top: 1px solid #d1d5db; font-size: 8pt; color: #6b7280;">
+          <p style="margin: 0;">Documento generado conforme a la legislación laboral de El Salvador</p>
+          <p style="margin: 2px 0 0 0;">Ministerio de Hacienda — Dirección de Recursos Humanos</p>
+        </div>
+      </div>
+    `;
+
+    printContainer.style.display = 'block';
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        printContainer.style.display = 'none';
+      }, 500);
+    }, 300);
+  };
+
+  const printDirectory = () => {
+    const printContainer = document.getElementById('employee-print-container');
+    if (!printContainer) return;
+
+    // Group employees by department
+    const deptGroups: Record<string, Empleado[]> = {};
+    employees.forEach(emp => {
+      const dept = emp.area?.nombre || 'Sin Área';
+      if (!deptGroups[dept]) deptGroups[dept] = [];
+      deptGroups[dept].push(emp);
+    });
+
+    const deptEntries = Object.entries(deptGroups);
+
+    // Build two-column layout with department grouping
+    const buildDeptSection = (dept: string, emps: Empleado[]) => `
+      <div style="margin-bottom: 16px; page-break-inside: avoid;">
+        <h3 style="font-size: 11pt; color: #065f46; margin: 0 0 6px 0; padding: 4px 8px; background-color: #ecfdf5 !important; border-left: 4px solid #059669; -webkit-print-color-adjust: exact; print-color-adjust: exact;">${dept} (${emps.length})</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+          <thead>
+            <tr style="background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+              <th style="padding: 4px 6px; border: 1px solid #d1d5db; text-align: left; width: 30px;">#</th>
+              <th style="padding: 4px 6px; border: 1px solid #d1d5db; text-align: left;">Nombre</th>
+              <th style="padding: 4px 6px; border: 1px solid #d1d5db; text-align: left;">Puesto</th>
+              <th style="padding: 4px 6px; border: 1px solid #d1d5db; text-align: left;">Email</th>
+              <th style="padding: 4px 6px; border: 1px solid #d1d5db; text-align: center;">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${emps.map((emp, i) => {
+              const fullName = getNombreCompleto(emp);
+              return `<tr style="background-color: ${i % 2 === 0 ? '#ffffff' : '#f9fafb'} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <td style="padding: 3px 6px; border: 1px solid #e5e7eb;">${i + 1}</td>
+                <td style="padding: 3px 6px; border: 1px solid #e5e7eb;">${fullName}</td>
+                <td style="padding: 3px 6px; border: 1px solid #e5e7eb;">${emp.perfil_puesto?.nombre_puesto || '—'}</td>
+                <td style="padding: 3px 6px; border: 1px solid #e5e7eb;">—</td>
+                <td style="padding: 3px 6px; border: 1px solid #e5e7eb; text-align: center;">
+                  <span style="color: ${emp.estado === 'ACTIVO' ? '#059669' : '#dc2626'}; font-weight: 600;">${emp.estado}</span>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    // Split departments into two columns
+    const midPoint = Math.ceil(deptEntries.length / 2);
+    const leftDepts = deptEntries.slice(0, midPoint);
+    const rightDepts = deptEntries.slice(midPoint);
+
+    printContainer.innerHTML = `
+      <div style="font-family: 'Inter', Arial, sans-serif; color: #1a1a1a; max-width: 100%; padding: 20px;">
+        <!-- Header -->
+        <div style="text-align: center; margin-bottom: 24px; border-bottom: 3px solid #059669; padding-bottom: 16px;">
+          <h1 style="font-size: 16pt; margin: 0 0 4px 0; color: #065f46; letter-spacing: 0.5px;">Ministerio de Hacienda — República de El Salvador</h1>
+          <h2 style="font-size: 13pt; margin: 0 0 8px 0; color: #047857;">Directorio de Empleados</h2>
+          <p style="font-size: 9pt; color: #6b7280; margin: 0;">Generado: ${new Date().toLocaleDateString('es-SV', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+          <p style="font-size: 9pt; color: #6b7280; margin: 4px 0 0 0;">Total: ${employees.length} empleado${employees.length !== 1 ? 's' : ''} | ${deptEntries.length} departamentos</p>
+        </div>
+
+        <!-- Two-column layout -->
+        <div style="display: flex; gap: 20px;">
+          <div style="flex: 1;">
+            ${leftDepts.map(([dept, emps]) => buildDeptSection(dept, emps)).join('')}
+          </div>
+          <div style="flex: 1;">
+            ${rightDepts.map(([dept, emps]) => buildDeptSection(dept, emps)).join('')}
+          </div>
+        </div>
+
+        <!-- Legal Footer -->
+        <div style="text-align: center; margin-top: 24px; padding-top: 12px; border-top: 1px solid #d1d5db; font-size: 8pt; color: #6b7280;">
+          <p style="margin: 0;">Documento generado conforme a la legislación laboral de El Salvador</p>
+          <p style="margin: 2px 0 0 0;">Ministerio de Hacienda — Dirección de Recursos Humanos</p>
+        </div>
+      </div>
+    `;
+
+    printContainer.style.display = 'block';
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        printContainer.style.display = 'none';
+      }, 500);
+    }, 300);
   };
 
   const clearFilters = () => {
@@ -322,6 +475,14 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
                 <DropdownMenuItem onClick={exportExcel}>
                   <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
                   Exportar Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportPDF}>
+                  <FileDown className="h-4 w-4 mr-2 text-rose-500" />
+                  Exportar PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={printDirectory}>
+                  <Printer className="h-4 w-4 mr-2 text-emerald-600" />
+                  Imprimir Directorio
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -774,6 +935,11 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
           </div>
         )}
       </div>
+      {/* Hidden Print Container */}
+      <div
+        id="employee-print-container"
+        style={{ display: 'none', position: 'fixed', top: 0, left: 0, width: '100%', background: 'white', zIndex: 9999, padding: '20px' }}
+      />
     </div>
   );
 }

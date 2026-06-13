@@ -1,0 +1,1213 @@
+     1→@import "tailwindcss";
+     2→@import "tw-animate-css";
+     3→
+     4→@custom-variant dark (&:is(.dark *));
+     5→
+     6→@theme inline {
+     7→  --color-background: var(--background);
+     8→  --color-foreground: var(--foreground);
+     9→  --font-sans: var(--font-geist-sans);
+    10→  --font-mono: var(--font-geist-mono);
+    11→  --color-sidebar-ring: var(--sidebar-ring);
+    12→  --color-sidebar-border: var(--sidebar-border);
+    13→  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    14→  --color-sidebar-accent: var(--sidebar-accent);
+    15→  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    16→  --color-sidebar-primary: var(--sidebar-primary);
+    17→  --color-sidebar-foreground: var(--sidebar-foreground);
+    18→  --color-sidebar: var(--sidebar);
+    19→  --color-chart-5: var(--chart-5);
+    20→  --color-chart-4: var(--chart-4);
+    21→  --color-chart-3: var(--chart-3);
+    22→  --color-chart-2: var(--chart-2);
+    23→  --color-chart-1: var(--chart-1);
+    24→  --color-ring: var(--ring);
+    25→  --color-input: var(--input);
+    26→  --color-border: var(--border);
+    27→  --color-destructive: var(--destructive);
+    28→  --color-accent-foreground: var(--accent-foreground);
+    29→  --color-accent: var(--accent);
+    30→  --color-muted-foreground: var(--muted-foreground);
+    31→  --color-muted: var(--muted);
+    32→  --color-secondary-foreground: var(--secondary-foreground);
+    33→  --color-secondary: var(--secondary);
+    34→  --color-primary-foreground: var(--primary-foreground);
+    35→  --color-primary: var(--primary);
+    36→  --color-popover-foreground: var(--popover-foreground);
+    37→  --color-popover: var(--popover);
+    38→  --color-card-foreground: var(--card-foreground);
+    39→  --color-card: var(--card);
+    40→  --radius-sm: calc(var(--radius) - 4px);
+    41→  --radius-md: calc(var(--radius) - 2px);
+    42→  --radius-lg: var(--radius);
+    43→  --radius-xl: calc(var(--radius) + 4px);
+    44→}
+    45→
+    46→:root {
+    47→  --radius: 0.625rem;
+    48→  --background: oklch(1 0 0);
+    49→  --foreground: oklch(0.145 0 0);
+    50→  --card: oklch(1 0 0);
+    51→  --card-foreground: oklch(0.145 0 0);
+    52→  --popover: oklch(1 0 0);
+    53→  --popover-foreground: oklch(0.145 0 0);
+    54→  --primary: oklch(0.205 0 0);
+    55→  --primary-foreground: oklch(0.985 0 0);
+    56→  --secondary: oklch(0.97 0 0);
+    57→  --secondary-foreground: oklch(0.205 0 0);
+    58→  --muted: oklch(0.97 0 0);
+    59→  --muted-foreground: oklch(0.556 0 0);
+    60→  --accent: oklch(0.97 0 0);
+    61→  --accent-foreground: oklch(0.205 0 0);
+    62→  --destructive: oklch(0.577 0.245 27.325);
+    63→  --border: oklch(0.922 0 0);
+    64→  --input: oklch(0.922 0 0);
+    65→  --ring: oklch(0.708 0 0);
+    66→  --chart-1: oklch(0.646 0.222 41.116);
+    67→  --chart-2: oklch(0.6 0.118 184.704);
+    68→  --chart-3: oklch(0.398 0.07 227.392);
+    69→  --chart-4: oklch(0.828 0.189 84.429);
+    70→  --chart-5: oklch(0.769 0.188 70.08);
+    71→  --sidebar: oklch(0.985 0 0);
+    72→  --sidebar-foreground: oklch(0.145 0 0);
+    73→  --sidebar-primary: oklch(0.205 0 0);
+    74→  --sidebar-primary-foreground: oklch(0.985 0 0);
+    75→  --sidebar-accent: oklch(0.97 0 0);
+    76→  --sidebar-accent-foreground: oklch(0.205 0 0);
+    77→  --sidebar-border: oklch(0.922 0 0);
+    78→  --sidebar-ring: oklch(0.708 0 0);
+    79→}
+    80→
+    81→.dark {
+    82→  --background: oklch(0.145 0 0);
+    83→  --foreground: oklch(0.985 0 0);
+    84→  --card: oklch(0.205 0 0);
+    85→  --card-foreground: oklch(0.985 0 0);
+    86→  --popover: oklch(0.205 0 0);
+    87→  --popover-foreground: oklch(0.985 0 0);
+    88→  --primary: oklch(0.922 0 0);
+    89→  --primary-foreground: oklch(0.205 0 0);
+    90→  --secondary: oklch(0.269 0 0);
+    91→  --secondary-foreground: oklch(0.985 0 0);
+    92→  --muted: oklch(0.269 0 0);
+    93→  --muted-foreground: oklch(0.708 0 0);
+    94→  --accent: oklch(0.269 0 0);
+    95→  --accent-foreground: oklch(0.985 0 0);
+    96→  --destructive: oklch(0.704 0.191 22.216);
+    97→  --border: oklch(1 0 0 / 10%);
+    98→  --input: oklch(1 0 0 / 15%);
+    99→  --ring: oklch(0.556 0 0);
+   100→  --chart-1: oklch(0.488 0.243 264.376);
+   101→  --chart-2: oklch(0.696 0.17 162.48);
+   102→  --chart-3: oklch(0.769 0.188 70.08);
+   103→  --chart-4: oklch(0.627 0.265 303.9);
+   104→  --chart-5: oklch(0.645 0.246 16.439);
+   105→  --sidebar: oklch(0.205 0 0);
+   106→  --sidebar-foreground: oklch(0.985 0 0);
+   107→  --sidebar-primary: oklch(0.488 0.243 264.376);
+   108→  --sidebar-primary-foreground: oklch(0.985 0 0);
+   109→  --sidebar-accent: oklch(0.269 0 0);
+   110→  --sidebar-accent-foreground: oklch(0.985 0 0);
+   111→  --sidebar-border: oklch(1 0 0 / 10%);
+   112→  --sidebar-ring: oklch(0.556 0 0);
+   113→}
+   114→
+   115→@layer base {
+   116→  * {
+   117→    @apply border-border outline-ring/50;
+   118→  }
+   119→  body {
+   120→    @apply bg-background text-foreground;
+   121→  }
+   122→}
+   123→
+   124→/* Custom scrollbar */
+   125→::-webkit-scrollbar {
+   126→  width: 6px;
+   127→  height: 6px;
+   128→}
+   129→::-webkit-scrollbar-track {
+   130→  background: transparent;
+   131→}
+   132→::-webkit-scrollbar-thumb {
+   133→  background: oklch(0.8 0 0);
+   134→  border-radius: 3px;
+   135→}
+   136→::-webkit-scrollbar-thumb:hover {
+   137→  background: oklch(0.65 0 0);
+   138→}
+   139→.dark ::-webkit-scrollbar-thumb {
+   140→  background: oklch(0.35 0 0);
+   141→}
+   142→.dark ::-webkit-scrollbar-thumb:hover {
+   143→  background: oklch(0.5 0 0);
+   144→}
+   145→
+   146→/* Sidebar custom scrollbar */
+   147→.dark-scrollbar::-webkit-scrollbar-thumb {
+   148→  background: oklch(0.35 0 0);
+   149→}
+   150→.dark-scrollbar::-webkit-scrollbar-thumb:hover {
+   151→  background: oklch(0.5 0 0);
+   152→}
+   153→
+   154→/* Animations */
+   155→@keyframes fade-in {
+   156→  from { opacity: 0; transform: translateY(8px); }
+   157→  to { opacity: 1; transform: translateY(0); }
+   158→}
+   159→@keyframes slide-in-right {
+   160→  from { opacity: 0; transform: translateX(12px); }
+   161→  to { opacity: 1; transform: translateX(0); }
+   162→}
+   163→@keyframes slide-in-left {
+   164→  from { opacity: 0; transform: translateX(-12px); }
+   165→  to { opacity: 1; transform: translateX(0); }
+   166→}
+   167→@keyframes scale-in {
+   168→  from { opacity: 0; transform: scale(0.95); }
+   169→  to { opacity: 1; transform: scale(1); }
+   170→}
+   171→@keyframes pulse-ring {
+   172→  0% { transform: scale(1); opacity: 1; }
+   173→  100% { transform: scale(1.4); opacity: 0; }
+   174→}
+   175→
+   176→.animate-fade-in {
+   177→  animation: fade-in 0.3s ease-out;
+   178→}
+   179→.animate-slide-in-right {
+   180→  animation: slide-in-right 0.3s ease-out;
+   181→}
+   182→.animate-slide-in-left {
+   183→  animation: slide-in-left 0.3s ease-out;
+   184→}
+   185→.animate-scale-in {
+   186→  animation: scale-in 0.2s ease-out;
+   187→}
+   188→.animate-pulse-ring {
+   189→  animation: pulse-ring 1.5s ease-out infinite;
+   190→}
+   191→
+   192→/* Staggered children animation */
+   193→.stagger-children > * {
+   194→  animation: fade-in 0.3s ease-out both;
+   195→}
+   196→.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+   197→.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+   198→.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+   199→.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+   200→.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+   201→.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+   202→.stagger-children > *:nth-child(7) { animation-delay: 300ms; }
+   203→.stagger-children > *:nth-child(8) { animation-delay: 350ms; }
+   204→
+   205→/* Glass effect */
+   206→.glass {
+   207→  backdrop-filter: blur(12px);
+   208→  -webkit-backdrop-filter: blur(12px);
+   209→}
+   210→
+   211→/* Gradient text */
+   212→.gradient-text {
+   213→  background: linear-gradient(135deg, oklch(0.55 0.15 160), oklch(0.5 0.12 180));
+   214→  -webkit-background-clip: text;
+   215→  -webkit-text-fill-color: transparent;
+   216→  background-clip: text;
+   217→}
+   218→
+   219→/* Smooth theme transition */
+   220→* {
+   221→  transition-property: color, background-color, border-color, box-shadow;
+   222→  transition-duration: 150ms;
+   223→  transition-timing-function: ease;
+   224→}
+   225→/* Exclude animations from theme transition */
+   226→.animate-fade-in,
+   227→.animate-slide-in-right,
+   228→.animate-slide-in-left,
+   229→.animate-scale-in,
+   230→.animate-pulse-ring,
+   231→.animate-shimmer,
+   232→.animate-float {
+   233→  transition: none;
+   234→}
+   235→
+   236→/* Better focus rings for accessibility */
+   237→:focus-visible {
+   238→  outline: 2px solid oklch(0.55 0.15 160);
+   239→  outline-offset: 2px;
+   240→  border-radius: 4px;
+   241→}
+   242→
+   243→/* Custom gradient utilities for cards */
+   244→.card-gradient-emerald {
+   245→  background: linear-gradient(135deg, oklch(0.97 0.02 160), oklch(0.55 0.15 160));
+   246→}
+   247→.card-gradient-teal {
+   248→  background: linear-gradient(135deg, oklch(0.97 0.02 180), oklch(0.5 0.12 180));
+   249→}
+   250→.card-gradient-amber {
+   251→  background: linear-gradient(135deg, oklch(0.97 0.02 85), oklch(0.75 0.15 85));
+   252→}
+   253→.card-gradient-slate {
+   254→  background: linear-gradient(135deg, oklch(0.97 0 0), oklch(0.7 0 0));
+   255→}
+   256→
+   257→/* Gradient border utility */
+   258→.gradient-border {
+   259→  position: relative;
+   260→}
+   261→.gradient-border::before {
+   262→  content: '';
+   263→  position: absolute;
+   264→  inset: 0;
+   265→  border-radius: inherit;
+   266→  padding: 2px;
+   267→  background: linear-gradient(135deg, oklch(0.55 0.15 160), oklch(0.5 0.12 180));
+   268→  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+   269→  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+   270→  -webkit-mask-composite: xor;
+   271→  mask-composite: exclude;
+   272→  pointer-events: none;
+   273→}
+   274→
+   275→/* Shimmer animation */
+   276→@keyframes shimmer {
+   277→  0% { background-position: -200% 0; }
+   278→  100% { background-position: 200% 0; }
+   279→}
+   280→.animate-shimmer {
+   281→  background: linear-gradient(90deg, transparent 25%, oklch(1 0 0 / 40%) 50%, transparent 75%);
+   282→  background-size: 200% 100%;
+   283→  animation: shimmer 2s ease-in-out infinite;
+   284→}
+   285→
+   286→/* Float animation */
+   287→@keyframes float {
+   288→  0%, 100% { transform: translateY(0); }
+   289→  50% { transform: translateY(-6px); }
+   290→}
+   291→.animate-float {
+   292→  animation: float 3s ease-in-out infinite;
+   293→}
+   294→
+   295→/* Animated gradient border for active badges */
+   296→@keyframes border-rotate {
+   297→  0% { --border-angle: 0deg; }
+   298→  100% { --border-angle: 360deg; }
+   299→}
+   300→.badge-animated-border {
+   301→  position: relative;
+   302→  overflow: hidden;
+   303→}
+   304→.badge-animated-border::after {
+   305→  content: '';
+   306→  position: absolute;
+   307→  inset: -1px;
+   308→  border-radius: inherit;
+   309→  background: conic-gradient(from 0deg, oklch(0.55 0.15 160), oklch(0.5 0.12 180), oklch(0.6 0.2 160));
+   310→  z-index: -1;
+   311→  animation: spin 3s linear infinite;
+   312→}
+   313→@keyframes spin {
+   314→  to { transform: rotate(360deg); }
+   315→}
+   316→
+   317→/* Subtle background pattern */
+   318→.bg-pattern-dots {
+   319→  background-image: radial-gradient(circle, oklch(0.7 0 0 / 8%) 1px, transparent 1px);
+   320→  background-size: 20px 20px;
+   321→}
+   322→
+   323→/* Dark mode specific styles */
+   324→.dark .bg-pattern-dots {
+   325→  background-image: radial-gradient(circle, oklch(0.5 0 0 / 6%) 1px, transparent 1px);
+   326→}
+   327→
+   328→/* Header bar dark mode */
+   329→.dark header,
+   330→.dark .header-bar {
+   331→  background-color: oklch(0.17 0 0);
+   332→  border-bottom-color: oklch(1 0 0 / 10%);
+   333→}
+   334→
+   335→/* Sidebar stays dark in both modes */
+   336→.dark aside {
+   337→  background-color: oklch(0.13 0 0);
+   338→}
+   339→
+   340→/* Main content area */
+   341→.dark main {
+   342→  background-color: oklch(0.145 0 0);
+   343→}
+   344→
+   345→/* Sparkline mini bars */
+   346→.sparkline-bar {
+   347→  transition: height 0.5s ease;
+   348→}
+   349→
+   350→/* Card hover effect */
+   351→.card-hover-lift {
+   352→  transition: transform 0.2s ease, box-shadow 0.2s ease;
+   353→}
+   354→.card-hover-lift:hover {
+   355→  transform: translateY(-2px);
+   356→  box-shadow: 0 8px 25px -5px oklch(0 0 0 / 10%), 0 4px 10px -6px oklch(0 0 0 / 10%);
+   357→}
+   358→
+   359→/* Progress bar animation */
+   360→.progress-animate {
+   361→  position: relative;
+   362→  overflow: hidden;
+   363→}
+   364→.progress-animate::after {
+   365→  content: '';
+   366→  position: absolute;
+   367→  top: 0;
+   368→  left: -100%;
+   369→  width: 100%;
+   370→  height: 100%;
+   371→  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 30%), transparent);
+   372→  animation: shimmer 2s ease-in-out infinite;
+   373→}
+   374→
+   375→/* ========================================================================
+   376→   1. PAGE TRANSITION ANIMATIONS
+   377→   ======================================================================== */
+   378→
+   379→/* View transition animation for module switching */
+   380→@keyframes page-enter {
+   381→  from {
+   382→    opacity: 0;
+   383→    transform: translateY(12px);
+   384→  }
+   385→  to {
+   386→    opacity: 1;
+   387→    transform: translateY(0);
+   388→  }
+   389→}
+   390→
+   391→@keyframes page-exit {
+   392→  from {
+   393→    opacity: 1;
+   394→    transform: translateY(0);
+   395→  }
+   396→  to {
+   397→    opacity: 0;
+   398→    transform: translateY(-8px);
+   399→  }
+   400→}
+   401→
+   402→/* Content fade-in with upward motion */
+   403→@keyframes content-fade-up {
+   404→  from {
+   405→    opacity: 0;
+   406→    transform: translateY(16px);
+   407→  }
+   408→  to {
+   409→    opacity: 1;
+   410→    transform: translateY(0);
+   411→  }
+   412→}
+   413→
+   414→/* Staggered card entrance animation */
+   415→@keyframes card-entrance {
+   416→  from {
+   417→    opacity: 0;
+   418→    transform: translateY(20px) scale(0.97);
+   419→  }
+   420→  to {
+   421→    opacity: 1;
+   422→    transform: translateY(0) scale(1);
+   423→  }
+   424→}
+   425→
+   426→.animate-page-enter {
+   427→  animation: page-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+   428→}
+   429→
+   430→.animate-page-exit {
+   431→  animation: page-exit 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+   432→}
+   433→
+   434→.animate-content-fade-up {
+   435→  animation: content-fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+   436→}
+   437→
+   438→/* Staggered card entrance container */
+   439→.stagger-cards > * {
+   440→  animation: card-entrance 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+   441→}
+   442→.stagger-cards > *:nth-child(1) { animation-delay: 0ms; }
+   443→.stagger-cards > *:nth-child(2) { animation-delay: 60ms; }
+   444→.stagger-cards > *:nth-child(3) { animation-delay: 120ms; }
+   445→.stagger-cards > *:nth-child(4) { animation-delay: 180ms; }
+   446→.stagger-cards > *:nth-child(5) { animation-delay: 240ms; }
+   447→.stagger-cards > *:nth-child(6) { animation-delay: 300ms; }
+   448→.stagger-cards > *:nth-child(7) { animation-delay: 360ms; }
+   449→.stagger-cards > *:nth-child(8) { animation-delay: 420ms; }
+   450→.stagger-cards > *:nth-child(9) { animation-delay: 480ms; }
+   451→.stagger-cards > *:nth-child(10) { animation-delay: 540ms; }
+   452→.stagger-cards > *:nth-child(n+11) { animation-delay: 600ms; }
+   453→
+   454→/* View transition API support */
+   455→@view-transition {
+   456→  navigation: auto;
+   457→}
+   458→::view-transition-old(root) {
+   459→  animation: page-exit 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+   460→}
+   461→::view-transition-new(root) {
+   462→  animation: page-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+   463→}
+   464→
+   465→/* ========================================================================
+   466→   2. MICRO-INTERACTION ANIMATIONS
+   467→   ======================================================================== */
+   468→
+   469→/* Button press scale effect */
+   470→.button-press {
+   471→  transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1),
+   472→              box-shadow 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+   473→}
+   474→.button-press:active {
+   475→  transform: scale(0.97);
+   476→}
+   477→
+   478→/* Card hover lift with shadow change */
+   479→.card-hover-lift-enhanced {
+   480→  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+   481→              box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+   482→}
+   483→.card-hover-lift-enhanced:hover {
+   484→  transform: translateY(-4px);
+   485→  box-shadow: 0 12px 32px -8px oklch(0 0 0 / 12%),
+   486→              0 4px 12px -4px oklch(0 0 0 / 8%);
+   487→}
+   488→.dark .card-hover-lift-enhanced:hover {
+   489→  box-shadow: 0 12px 32px -8px oklch(0 0 0 / 25%),
+   490→              0 4px 12px -4px oklch(0 0 0 / 15%);
+   491→}
+   492→
+   493→/* CSS-only ripple effect */
+   494→.ripple {
+   495→  position: relative;
+   496→  overflow: hidden;
+   497→}
+   498→.ripple::after {
+   499→  content: '';
+   500→  position: absolute;
+   501→  top: 50%;
+   502→  left: 50%;
+   503→  width: 0;
+   504→  height: 0;
+   505→  border-radius: 50%;
+   506→  background: oklch(1 0 0 / 25%);
+   507→  transform: translate(-50%, -50%);
+   508→  transition: width 0.5s ease, height 0.5s ease, opacity 0.5s ease;
+   509→  opacity: 0;
+   510→  pointer-events: none;
+   511→}
+   512→.ripple:active::after {
+   513→  width: 200%;
+   514→  height: 200%;
+   515→  opacity: 1;
+   516→  transition: 0s;
+   517→}
+   518→.dark .ripple::after {
+   519→  background: oklch(1 0 0 / 15%);
+   520→}
+   521→
+   522→/* Smooth color transitions on all interactive elements */
+   523→.interactive-color-transition {
+   524→  transition: color 0.2s ease,
+   525→              background-color 0.2s ease,
+   526→              border-color 0.2s ease,
+   527→              box-shadow 0.2s ease,
+   528→              fill 0.2s ease,
+   529→              stroke 0.2s ease;
+   530→}
+   531→
+   532→/* Pulse animation for live/active indicators */
+   533→@keyframes pulse-live {
+   534→  0%, 100% {
+   535→    opacity: 1;
+   536→    transform: scale(1);
+   537→  }
+   538→  50% {
+   539→    opacity: 0.7;
+   540→    transform: scale(1.05);
+   541→  }
+   542→}
+   543→.animate-pulse-live {
+   544→  animation: pulse-live 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+   545→}
+   546→
+   547→/* Skeleton shimmer with gradient sweep */
+   548→@keyframes shimmer-sweep {
+   549→  0% {
+   550→    background-position: -200% 0;
+   551→  }
+   552→  100% {
+   553→    background-position: 200% 0;
+   554→  }
+   555→}
+   556→
+   557→/* ========================================================================
+   558→   3. GLASSMORPHISM UTILITIES
+   559→   ======================================================================== */
+   560→
+   561→/* Shared glass custom properties */
+   562→:root {
+   563→  --glass-blur: 16px;
+   564→  --glass-bg: oklch(1 0 0 / 70%);
+   565→  --glass-border: oklch(1 0 0 / 25%);
+   566→  --glass-shadow: 0 8px 32px oklch(0 0 0 / 8%);
+   567→}
+   568→.dark {
+   569→  --glass-bg: oklch(0.2 0 0 / 65%);
+   570→  --glass-border: oklch(1 0 0 / 10%);
+   571→  --glass-shadow: 0 8px 32px oklch(0 0 0 / 25%);
+   572→}
+   573→
+   574→/* Glass card - frosted glass card */
+   575→.glass-card {
+   576→  background: var(--glass-bg);
+   577→  backdrop-filter: blur(var(--glass-blur));
+   578→  -webkit-backdrop-filter: blur(var(--glass-blur));
+   579→  border: 1px solid var(--glass-border);
+   580→  box-shadow: var(--glass-shadow);
+   581→  border-radius: var(--radius-lg);
+   582→}
+   583→/* Fallback for browsers without backdrop-filter */
+   584→@supports not (backdrop-filter: blur(1px)) {
+   585→  .glass-card {
+   586→    background: oklch(1 0 0 / 95%);
+   587→  }
+   588→  .dark .glass-card {
+   589→    background: oklch(0.2 0 0 / 95%);
+   590→  }
+   591→}
+   592→
+   593→/* Glass sidebar */
+   594→.glass-sidebar {
+   595→  background: var(--glass-bg);
+   596→  backdrop-filter: blur(var(--glass-blur));
+   597→  -webkit-backdrop-filter: blur(var(--glass-blur));
+   598→  border-right: 1px solid var(--glass-border);
+   599→  box-shadow: var(--glass-shadow);
+   600→}
+   601→@supports not (backdrop-filter: blur(1px)) {
+   602→  .glass-sidebar {
+   603→    background: oklch(0.985 0 0 / 98%);
+   604→  }
+   605→  .dark .glass-sidebar {
+   606→    background: oklch(0.13 0 0 / 98%);
+   607→  }
+   608→}
+   609→
+   610→/* Glass header */
+   611→.glass-header {
+   612→  background: var(--glass-bg);
+   613→  backdrop-filter: blur(var(--glass-blur));
+   614→  -webkit-backdrop-filter: blur(var(--glass-blur));
+   615→  border-bottom: 1px solid var(--glass-border);
+   616→  box-shadow: var(--glass-shadow);
+   617→}
+   618→@supports not (backdrop-filter: blur(1px)) {
+   619→  .glass-header {
+   620→    background: oklch(1 0 0 / 97%);
+   621→  }
+   622→  .dark .glass-header {
+   623→    background: oklch(0.17 0 0 / 97%);
+   624→  }
+   625→}
+   626→
+   627→/* Glass modal / dialog */
+   628→.glass-modal {
+   629→  background: var(--glass-bg);
+   630→  backdrop-filter: blur(calc(var(--glass-blur) + 8px));
+   631→  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 8px));
+   632→  border: 1px solid var(--glass-border);
+   633→  box-shadow: 0 16px 48px oklch(0 0 0 / 12%), var(--glass-shadow);
+   634→  border-radius: var(--radius-xl);
+   635→}
+   636→.dark .glass-modal {
+   637→  box-shadow: 0 16px 48px oklch(0 0 0 / 30%), var(--glass-shadow);
+   638→}
+   639→@supports not (backdrop-filter: blur(1px)) {
+   640→  .glass-modal {
+   641→    background: oklch(1 0 0 / 98%);
+   642→    box-shadow: 0 16px 48px oklch(0 0 0 / 15%);
+   643→  }
+   644→  .dark .glass-modal {
+   645→    background: oklch(0.2 0 0 / 98%);
+   646→  }
+   647→}
+   648→
+   649→/* ========================================================================
+   650→   4. ADVANCED SCROLLBAR STYLES
+   651→   ======================================================================== */
+   652→
+   653→/* Sidebar scrollbar - thin (4px) with hover-expand */
+   654→.sidebar-scrollbar::-webkit-scrollbar {
+   655→  width: 4px;
+   656→  height: 4px;
+   657→}
+   658→.sidebar-scrollbar::-webkit-scrollbar-track {
+   659→  background: transparent;
+   660→}
+   661→.sidebar-scrollbar::-webkit-scrollbar-thumb {
+   662→  background: oklch(0.8 0 0 / 50%);
+   663→  border-radius: 4px;
+   664→  transition: width 0.2s ease, background 0.2s ease;
+   665→}
+   666→.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+   667→  background: oklch(0.65 0 0 / 80%);
+   668→  width: 8px;
+   669→}
+   670→.dark .sidebar-scrollbar::-webkit-scrollbar-thumb {
+   671→  background: oklch(0.4 0 0 / 50%);
+   672→}
+   673→.dark .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+   674→  background: oklch(0.55 0 0 / 80%);
+   675→}
+   676→
+   677→/* Main content area scrollbar */
+   678→.main-scrollbar::-webkit-scrollbar {
+   679→  width: 6px;
+   680→  height: 6px;
+   681→}
+   682→.main-scrollbar::-webkit-scrollbar-track {
+   683→  background: transparent;
+   684→  margin: 4px;
+   685→}
+   686→.main-scrollbar::-webkit-scrollbar-thumb {
+   687→  background: oklch(0.75 0 0 / 40%);
+   688→  border-radius: 3px;
+   689→}
+   690→.main-scrollbar::-webkit-scrollbar-thumb:hover {
+   691→  background: oklch(0.6 0 0 / 70%);
+   692→}
+   693→
+   694→/* Hover-expand scrollbar effect */
+   695→.scrollbar-expand::-webkit-scrollbar {
+   696→  width: 4px;
+   697→  transition: width 0.25s ease;
+   698→}
+   699→.scrollbar-expand:hover::-webkit-scrollbar {
+   700→  width: 8px;
+   701→}
+   702→.scrollbar-expand::-webkit-scrollbar-thumb {
+   703→  border-radius: 4px;
+   704→  transition: background 0.2s ease;
+   705→}
+   706→
+   707→/* Dark mode scrollbar variants */
+   708→.dark .main-scrollbar::-webkit-scrollbar-thumb {
+   709→  background: oklch(0.35 0 0 / 50%);
+   710→}
+   711→.dark .main-scrollbar::-webkit-scrollbar-thumb:hover {
+   712→  background: oklch(0.5 0 0 / 70%);
+   713→}
+   714→
+   715→/* Inverted scrollbar for dark mode (light thumb on dark track) */
+   716→.dark-scrollbar-inverted::-webkit-scrollbar-thumb {
+   717→  background: oklch(0.6 0 0 / 40%);
+   718→}
+   719→.dark-scrollbar-inverted::-webkit-scrollbar-thumb:hover {
+   720→  background: oklch(0.7 0 0 / 60%);
+   721→}
+   722→
+   723→/* Firefox scrollbar styles */
+   724→.sidebar-scrollbar,
+   725→.main-scrollbar {
+   726→  scrollbar-width: thin;
+   727→  scrollbar-color: oklch(0.75 0 0 / 40%) transparent;
+   728→}
+   729→.dark .sidebar-scrollbar,
+   730→.dark .main-scrollbar {
+   731→  scrollbar-color: oklch(0.35 0 0 / 50%) transparent;
+   732→}
+   733→
+   734→/* ========================================================================
+   735→   5. BADGE & STATUS ANIMATIONS
+   736→   ======================================================================== */
+   737→
+   738→/* Pulsing badge for active states */
+   739→@keyframes badge-pulse-keyframe {
+   740→  0%, 100% {
+   741→    box-shadow: 0 0 0 0 oklch(0.55 0.15 160 / 40%);
+   742→  }
+   743→  50% {
+   744→    box-shadow: 0 0 0 6px oklch(0.55 0.15 160 / 0%);
+   745→  }
+   746→}
+   747→.badge-pulse {
+   748→  animation: badge-pulse-keyframe 2s ease-in-out infinite;
+   749→}
+   750→
+   751→/* Animated status indicator dot */
+   752→.status-dot {
+   753→  position: relative;
+   754→  display: inline-flex;
+   755→  align-items: center;
+   756→  justify-content: center;
+   757→  width: 10px;
+   758→  height: 10px;
+   759→  border-radius: 50%;
+   760→  flex-shrink: 0;
+   761→}
+   762→.status-dot::after {
+   763→  content: '';
+   764→  position: absolute;
+   765→  inset: 0;
+   766→  border-radius: 50%;
+   767→  animation: pulse-ring 1.5s ease-out infinite;
+   768→}
+   769→
+   770→/* Green pulsing online indicator */
+   771→.status-online {
+   772→  background-color: oklch(0.72 0.19 155);
+   773→}
+   774→.status-online::after {
+   775→  background: oklch(0.72 0.19 155);
+   776→}
+   777→
+   778→/* Amber warning indicator */
+   779→.status-warning {
+   780→  background-color: oklch(0.75 0.15 85);
+   781→}
+   782→.status-warning::after {
+   783→  background: oklch(0.75 0.15 85);
+   784→  animation: pulse-ring 2.5s ease-out infinite;
+   785→}
+   786→
+   787→/* Red error/offline indicator */
+   788→.status-error {
+   789→  background-color: oklch(0.577 0.245 27.325);
+   790→}
+   791→.status-error::after {
+   792→  background: oklch(0.577 0.245 27.325);
+   793→  animation: none;
+   794→}
+   795→
+   796→/* Neutral/idle indicator */
+   797→.status-idle {
+   798→  background-color: oklch(0.65 0 0);
+   799→}
+   800→.status-idle::after {
+   801→  animation: none;
+   802→}
+   803→
+   804→/* ========================================================================
+   805→   6. LOADING STATE ANIMATIONS
+   806→   ======================================================================== */
+   807→
+   808→/* Base skeleton with shimmer */
+   809→.skeleton {
+   810→  position: relative;
+   811→  color: transparent !important;
+   812→  background: oklch(0.92 0 0) !important;
+   813→  border-radius: var(--radius-md);
+   814→  overflow: hidden;
+   815→  pointer-events: none;
+   816→  user-select: none;
+   817→}
+   818→.skeleton::after {
+   819→  content: '';
+   820→  position: absolute;
+   821→  inset: 0;
+   822→  background: linear-gradient(
+   823→    90deg,
+   824→    transparent 0%,
+   825→    oklch(1 0 0 / 45%) 50%,
+   826→    transparent 100%
+   827→  );
+   828→  background-size: 200% 100%;
+   829→  animation: shimmer-sweep 1.8s ease-in-out infinite;
+   830→}
+   831→.dark .skeleton {
+   832→  background: oklch(0.25 0 0) !important;
+   833→}
+   834→.dark .skeleton::after {
+   835→  background: linear-gradient(
+   836→    90deg,
+   837→    transparent 0%,
+   838→    oklch(1 0 0 / 8%) 50%,
+   839→    transparent 100%
+   840→  );
+   841→  background-size: 200% 100%;
+   842→  animation: shimmer-sweep 1.8s ease-in-out infinite;
+   843→}
+   844→
+   845→/* Text-like skeleton (explicit - composes not valid in plain CSS) */
+   846→.skeleton-text {
+   847→  position: relative;
+   848→  color: transparent !important;
+   849→  background: oklch(0.92 0 0) !important;
+   850→  overflow: hidden;
+   851→  pointer-events: none;
+   852→  user-select: none;
+   853→  height: 1em;
+   854→  border-radius: calc(var(--radius-sm) / 2);
+   855→  margin-bottom: 0.5em;
+   856→  width: 100%;
+   857→}
+   858→.skeleton-text::after {
+   859→  content: '';
+   860→  position: absolute;
+   861→  inset: 0;
+   862→  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 45%) 50%, transparent 100%);
+   863→  background-size: 200% 100%;
+   864→  animation: shimmer-sweep 1.8s ease-in-out infinite;
+   865→}
+   866→.dark .skeleton-text {
+   867→  background: oklch(0.25 0 0) !important;
+   868→}
+   869→.dark .skeleton-text::after {
+   870→  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 8%) 50%, transparent 100%);
+   871→  background-size: 200% 100%;
+   872→}
+   873→
+   874→.skeleton-text-short {
+   875→  position: relative;
+   876→  color: transparent !important;
+   877→  background: oklch(0.92 0 0) !important;
+   878→  overflow: hidden;
+   879→  pointer-events: none;
+   880→  user-select: none;
+   881→  height: 1em;
+   882→  border-radius: calc(var(--radius-sm) / 2);
+   883→  width: 60%;
+   884→}
+   885→.skeleton-text-short::after {
+   886→  content: '';
+   887→  position: absolute;
+   888→  inset: 0;
+   889→  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 45%) 50%, transparent 100%);
+   890→  background-size: 200% 100%;
+   891→  animation: shimmer-sweep 1.8s ease-in-out infinite;
+   892→}
+   893→.dark .skeleton-text-short {
+   894→  background: oklch(0.25 0 0) !important;
+   895→}
+   896→.dark .skeleton-text-short::after {
+   897→  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 8%) 50%, transparent 100%);
+   898→  background-size: 200% 100%;
+   899→}
+   900→
+   901→.skeleton-circle {
+   902→  position: relative;
+   903→  color: transparent !important;
+   904→  background: oklch(0.92 0 0) !important;
+   905→  overflow: hidden;
+   906→  pointer-events: none;
+   907→  user-select: none;
+   908→  border-radius: 50%;
+   909→  width: 40px;
+   910→  height: 40px;
+   911→  flex-shrink: 0;
+   912→}
+   913→.skeleton-circle::after {
+   914→  content: '';
+   915→  position: absolute;
+   916→  inset: 0;
+   917→  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 45%) 50%, transparent 100%);
+   918→  background-size: 200% 100%;
+   919→  animation: shimmer-sweep 1.8s ease-in-out infinite;
+   920→}
+   921→.dark .skeleton-circle {
+   922→  background: oklch(0.25 0 0) !important;
+   923→}
+   924→.dark .skeleton-circle::after {
+   925→  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 8%) 50%, transparent 100%);
+   926→  background-size: 200% 100%;
+   927→}
+   928→
+   929→.skeleton-card {
+   930→  position: relative;
+   931→  color: transparent !important;
+   932→  background: oklch(0.92 0 0) !important;
+   933→  overflow: hidden;
+   934→  pointer-events: none;
+   935→  user-select: none;
+   936→  height: 140px;
+   937→  border-radius: var(--radius-lg);
+   938→}
+   939→.skeleton-card::after {
+   940→  content: '';
+   941→  position: absolute;
+   942→  inset: 0;
+   943→  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 45%) 50%, transparent 100%);
+   944→  background-size: 200% 100%;
+   945→  animation: shimmer-sweep 1.8s ease-in-out infinite;
+   946→}
+   947→.dark .skeleton-card {
+   948→  background: oklch(0.25 0 0) !important;
+   949→}
+   950→.dark .skeleton-card::after {
+   951→  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 8%) 50%, transparent 100%);
+   952→  background-size: 200% 100%;
+   953→}
+   954→
+   955→/* ========================================================================
+   956→   7. TRANSITION UTILITIES
+   957→   ======================================================================== */
+   958→
+   959→/* Custom cubic-bezier timing functions as custom properties */
+   960→:root {
+   961→  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+   962→  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+   963→  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+   964→  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+   965→  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+   966→  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+   967→}
+   968→
+   969→/* Smooth transition utility */
+   970→.transition-smooth {
+   971→  transition-property: all;
+   972→  transition-duration: 300ms;
+   973→  transition-timing-function: var(--ease-smooth);
+   974→}
+   975→
+   976→/* Bouncy spring transition */
+   977→.transition-bounce {
+   978→  transition-property: all;
+   979→  transition-duration: 400ms;
+   980→  transition-timing-function: var(--ease-bounce);
+   981→}
+   982→
+   983→/* Spring-like transition */
+   984→.transition-spring {
+   985→  transition-property: all;
+   986→  transition-duration: 500ms;
+   987→  transition-timing-function: var(--ease-spring);
+   988→}
+   989→
+   990→/* Reduced motion - disable complex transitions */
+   991→@media (prefers-reduced-motion: reduce) {
+   992→  .transition-smooth,
+   993→  .transition-bounce,
+   994→  .transition-spring {
+   995→    transition-duration: 0ms;
+   996→  }
+   997→  .animate-page-enter,
+   998→  .animate-page-exit,
+   999→  .animate-content-fade-up,
+  1000→  .stagger-cards > *,
+  1001→  .animate-pulse-live,
+  1002→  .badge-pulse,
+  1003→  .status-dot::after {
+  1004→    animation: none !important;
+  1005→  }
+  1006→}
+  1007→
+  1008→/* ========================================================================
+  1009→   8. FOCUS RING ENHANCEMENTS
+  1010→   ======================================================================== */
+  1011→
+  1012→/* Emerald focus ring for inputs */
+  1013→.focus-ring {
+  1014→  outline: none;
+  1015→}
+  1016→.focus-ring:focus-visible {
+  1017→  outline: 2px solid oklch(0.55 0.15 160);
+  1018→  outline-offset: 2px;
+  1019→  border-radius: var(--radius-sm);
+  1020→  transition: outline-offset 0.15s ease;
+  1021→}
+  1022→
+  1023→/* Focus ring for card elements */
+  1024→.focus-ring-card {
+  1025→  outline: none;
+  1026→}
+  1027→.focus-ring-card:focus-visible {
+  1028→  outline: 2px solid oklch(0.55 0.15 160 / 60%);
+  1029→  outline-offset: 3px;
+  1030→  border-radius: var(--radius-lg);
+  1031→  box-shadow: 0 0 0 4px oklch(0.55 0.15 160 / 15%);
+  1032→}
+  1033→
+  1034→/* Focus visible only (not on mouse click) - global enhancement */
+  1035→.focus-visible-only {
+  1036→  outline: none;
+  1037→}
+  1038→.focus-visible-only:focus-visible {
+  1039→  outline: 2px solid oklch(0.55 0.15 160);
+  1040→  outline-offset: 2px;
+  1041→}
+  1042→
+  1043→/* ========================================================================
+  1044→   9. PRINT STYLES
+  1045→   ======================================================================== */
+  1046→
+  1047→@media print {
+  1048→  /* Hide non-essential UI */
+  1049→  aside,
+  1050→  nav,
+  1051→  header,
+  1052→  .sidebar,
+  1053→  .header-bar,
+  1054→  .glass-sidebar,
+  1055→  .glass-header,
+  1056→  button:not(.print-button),
+  1057→  [role="navigation"],
+  1058→  [data-print-hide],
+  1059→  .no-print {
+  1060→    display: none !important;
+  1061→  }
+  1062→
+  1063→  /* Reset main content layout */
+  1064→  main {
+  1065→    margin: 0 !important;
+  1066→    padding: 0 !important;
+  1067→    width: 100% !important;
+  1068→    max-width: 100% !important;
+  1069→    background: white !important;
+  1070→    color: black !important;
+  1071→  }
+  1072→
+  1073→  /* Print-friendly body */
+  1074→  body {
+  1075→    background: white !important;
+  1076→    color: black !important;
+  1077→    font-size: 12pt !important;
+  1078→    line-height: 1.5 !important;
+  1079→  }
+  1080→
+  1081→  /* Print-friendly table styles */
+  1082→  table {
+  1083→    border-collapse: collapse !important;
+  1084→    width: 100% !important;
+  1085→  }
+  1086→  table th,
+  1087→  table td {
+  1088→    border: 1px solid #333 !important;
+  1089→    padding: 6px 8px !important;
+  1090→    text-align: left !important;
+  1091→    font-size: 10pt !important;
+  1092→    color: black !important;
+  1093→    background: transparent !important;
+  1094→  }
+  1095→  table th {
+  1096→    background: #f0f0f0 !important;
+  1097→    font-weight: 600 !important;
+  1098→  }
+  1099→
+  1100→  /* Remove backgrounds and shadows */
+  1101→  *,
+  1102→  *::before,
+  1103→  *::after {
+  1104→    background: transparent !important;
+  1105→    color: black !important;
+  1106→    box-shadow: none !important;
+  1107→    text-shadow: none !important;
+  1108→  }
+  1109→
+  1110→  /* Restore minimal borders for structure */
+  1111→  .card, .glass-card {
+  1112→    border: 1px solid #ccc !important;
+  1113→    break-inside: avoid;
+  1114→  }
+  1115→
+  1116→  /* Page break hints */
+  1117→  .page-break-before {
+  1118→    page-break-before: always;
+  1119→    break-before: page;
+  1120→  }
+  1121→  .page-break-after {
+  1122→    page-break-after: always;
+  1123→    break-after: page;
+  1124→  }
+  1125→  .page-break-avoid {
+  1126→    page-break-inside: avoid;
+  1127→    break-inside: avoid;
+  1128→  }
+  1129→
+  1130→  /* Links - show URL in print */
+  1131→  a[href]::after {
+  1132→    content: " (" attr(href) ")";
+  1133→    font-size: 9pt;
+  1134→    color: #666;
+  1135→  }
+  1136→  a[href^="#"]::after {
+  1137→    content: none;
+  1138→  }
+  1139→
+  1140→  /* Ensure images don't overflow */
+  1141→  img {
+  1142→    max-width: 100% !important;
+  1143→    page-break-inside: avoid;
+  1144→  }
+  1145→}
+  1146→
+  1147→/* ========================================================================
+  1148→   10. DARK MODE ENHANCEMENTS
+  1149→   ======================================================================== */
+  1150→
+  1151→/* Smooth transition when toggling between light/dark */
+  1152→html {
+  1153→  transition: color-scheme 0.3s ease;
+  1154→}
+  1155→html.dark {
+  1156→  color-scheme: dark;
+  1157→}
+  1158→
+  1159→/* Dark mode specific shadows */
+  1160→.dark .shadow-sm {
+  1161→  box-shadow: 0 1px 2px oklch(0 0 0 / 20%);
+  1162→}
+  1163→.dark .shadow-md {
+  1164→  box-shadow: 0 4px 6px -1px oklch(0 0 0 / 25%),
+  1165→              0 2px 4px -2px oklch(0 0 0 / 15%);
+  1166→}
+  1167→.dark .shadow-lg {
+  1168→  box-shadow: 0 10px 15px -3px oklch(0 0 0 / 30%),
+  1169→              0 4px 6px -4px oklch(0 0 0 / 15%);
+  1170→}
+  1171→.dark .shadow-xl {
+  1172→  box-shadow: 0 20px 25px -5px oklch(0 0 0 / 35%),
+  1173→              0 8px 10px -6px oklch(0 0 0 / 15%);
+  1174→}
+  1175→
+  1176→/* Dark mode specific borders (slightly lighter for visibility) */
+  1177→.dark-border {
+  1178→  border-color: oklch(1 0 0 / 12%);
+  1179→}
+  1180→.dark .dark-border {
+  1181→  border-color: oklch(1 0 0 / 15%);
+  1182→}
+  1183→
+  1184→/* Inverted scrollbar for dark mode */
+  1185→.dark {
+  1186→  scrollbar-color: oklch(0.4 0 0 / 60%) oklch(0.15 0 0 / 30%);
+  1187→  color-scheme: dark;
+  1188→}
+  1189→.dark::-webkit-scrollbar {
+  1190→  width: 8px;
+  1191→}
+  1192→.dark::-webkit-scrollbar-track {
+  1193→  background: oklch(0.12 0 0);
+  1194→}
+  1195→.dark::-webkit-scrollbar-thumb {
+  1196→  background: oklch(0.4 0 0 / 60%);
+  1197→  border-radius: 4px;
+  1198→}
+  1199→.dark::-webkit-scrollbar-thumb:hover {
+  1200→  background: oklch(0.55 0 0 / 80%);
+  1201→}
+  1202→
+  1203→/* Dark mode elevated surface */
+  1204→.dark-elevated {
+  1205→  background: oklch(0.22 0 0);
+  1206→  border: 1px solid oklch(1 0 0 / 8%);
+  1207→}
+  1208→
+  1209→/* Dark mode subtle ring for interactive elements */
+  1210→.dark .ring-subtle {
+  1211→  box-shadow: 0 0 0 1px oklch(1 0 0 / 8%);
+  1212→}
+  1213→

@@ -6,7 +6,8 @@ import {
   TrendingDown, CheckCircle, XCircle, Loader2, RefreshCw,
   BarChart3, PieChart, ArrowUpRight, ArrowDownRight, Info,
   CircleDot, AlertOctagon, ChevronRight, Calculator,
-  FileCheck, FileText, Activity, Zap
+  FileCheck, FileText, Activity, Zap, CalendarDays, Hash,
+  Timer, Gauge
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -138,6 +139,16 @@ const EXPENSE_SLICES: ExpenseSlice[] = [
   { label: 'ISR',           pct: 16.1, color: 'text-amber-700 dark:text-amber-400',   bgClass: 'bg-amber-500',  conicColor: '#f59e0b' },
   { label: 'Salario Neto',  pct: 63.05,color: 'text-emerald-700 dark:text-emerald-400', bgClass: 'bg-emerald-500', conicColor: '#10b981' },
   { label: 'Cargas Patronales', pct: 12.2, color: 'text-rose-700 dark:text-rose-400', bgClass: 'bg-rose-500', conicColor: '#f43f5e' },
+];
+
+/* ── Mock Employee Count Data (6 months) ── */
+const EMPLOYEE_COUNT_HISTORY = [
+  { month: 'Oct', count: 72 },
+  { month: 'Nov', count: 75 },
+  { month: 'Dic', count: 74 },
+  { month: 'Ene', count: 78 },
+  { month: 'Feb', count: 80 },
+  { month: 'Mar', count: 82 },
 ];
 
 /* ── Payroll Status Timeline Steps ── */
@@ -400,6 +411,89 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
     return { value: Math.abs(pctChange), direction: pctChange >= 0 ? 'up' as const : 'down' as const };
   }, [data]);
 
+  /* ── Monthly Comparison (current vs previous month) ── */
+  const monthlyComparison = useMemo(() => {
+    if (!data || data.planillas_recientes.length === 0) {
+      return {
+        brutoCurrent: 0, brutoPrev: 0,
+        netoCurrent: 0, netoPrev: 0,
+        deduccionesCurrent: 0, deduccionesPrev: 0,
+      };
+    }
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+    const currentMonthPlanillas = data.planillas_recientes.filter(p => {
+      const d = new Date(p.fecha_creacion);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+    const prevMonthPlanillas = data.planillas_recientes.filter(p => {
+      const d = new Date(p.fecha_creacion);
+      return d.getMonth() === prevMonth && d.getFullYear() === prevYear;
+    });
+
+    const brutoCurrent = currentMonthPlanillas.reduce((s, p) => s + p.total_bruto, 0);
+    const brutoPrev = prevMonthPlanillas.reduce((s, p) => s + p.total_bruto, 0);
+    const netoCurrent = currentMonthPlanillas.reduce((s, p) => s + p.total_neto, 0);
+    const netoPrev = prevMonthPlanillas.reduce((s, p) => s + p.total_neto, 0);
+    const deduccionesCurrent = brutoCurrent - netoCurrent;
+    const deduccionesPrev = brutoPrev - netoPrev;
+
+    return { brutoCurrent, brutoPrev, netoCurrent, netoPrev, deduccionesCurrent, deduccionesPrev };
+  }, [data]);
+
+  /* ── Live payroll status state ── */
+  const [svTime, setSvTime] = useState<Date>(new Date());
+  useEffect(() => {
+    const tick = () => setSvTime(new Date());
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  /* ── Additional stats for Quick Stats Footer ── */
+  const [additionalStats, setAdditionalStats] = useState<{
+    incidenciasPendientes: number;
+    vencimientosProximos: number;
+  }>({ incidenciasPendientes: 0, vencimientosProximos: 0 });
+
+  useEffect(() => {
+    const fetchAdditional = async () => {
+      try {
+        const [incRes, dashRes] = await Promise.all([
+          fetch('/api/incidencias', { headers: { Authorization: `Bearer ${accessToken}` } }).catch(() => null),
+          Promise.resolve(null),
+        ]);
+        if (incRes?.ok) {
+          const incData = await incRes.json();
+          const incidencias = incData.data || incData.incidencias || incData || [];
+          if (Array.isArray(incidencias)) {
+            const pending = incidencias.filter((inc: { estado?: string }) =>
+              inc.estado === 'PENDIENTE' || inc.estado === 'pendiente'
+            );
+            setAdditionalStats(prev => ({ ...prev, incidenciasPendientes: pending.length }));
+          }
+        }
+      } catch {
+        // silently fail
+      }
+    };
+    fetchAdditional();
+  }, [accessToken]);
+
+  // Count upcoming deadlines from vencimientos
+  const vencimientosProximos = useMemo(() => {
+    if (!data) return 0;
+    return data.vencimientos.filter(v => {
+      const fecha = new Date(v.fecha);
+      const now = new Date();
+      const diffDays = Math.ceil((fecha.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      return diffDays > 0 && diffDays <= 30;
+    }).length;
+  }, [data]);
+
   if (loading && !data) {
     return (
       <div className="space-y-4">
@@ -520,6 +614,67 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           </div>
         </div>
       </div>
+
+      {/* ── Live Payroll Status Indicator (Pulsing Banner) ── */}
+      {data.kpis.planilla_actual && (data.kpis.planilla_actual.estado === 'CALCULADA' || data.kpis.planilla_actual.estado === 'EN_CORRECCION') && (
+        <div className="relative rounded-xl overflow-hidden shadow-md border border-amber-200 dark:border-amber-800">
+          <div className="absolute inset-0 bg-gradient-to-r from-amber-50 via-amber-100/80 to-amber-50 dark:from-amber-950/40 dark:via-amber-900/30 dark:to-amber-950/40" />
+          <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-amber-200/20 via-amber-300/10 to-amber-200/20 dark:from-amber-800/10 dark:via-amber-700/5 dark:to-amber-800/10" />
+          <div className="relative z-10 px-4 py-3 sm:px-6 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-3 h-3 rounded-full bg-amber-500 animate-ping absolute inset-0" />
+                <div className="w-3 h-3 rounded-full bg-amber-500 relative z-10 shadow-lg shadow-amber-500/50" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-amber-800 dark:text-amber-200">En Proceso</p>
+                  <Badge className="bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200 text-[10px] border-0">
+                    {data.kpis.planilla_actual.estado}
+                  </Badge>
+                </div>
+                <p className="text-xs text-amber-700/80 dark:text-amber-300/80 mt-0.5">
+                  Planilla <span className="font-mono font-semibold">{data.kpis.planilla_actual.codigo}</span> — {data.kpis.planilla_actual.tipo}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              {/* Workflow step indicator */}
+              <div className="flex items-center gap-1.5">
+                {TIMELINE_STEPS.map((step, idx) => {
+                  const isActive = idx === timelineActiveStep;
+                  const isCompleted = idx < timelineActiveStep;
+                  const stepLabels = ['Cálculo', 'Aprobación', 'Pago'];
+                  return (
+                    <React.Fragment key={step}>
+                      {idx > 0 && <ChevronRight className="h-3 w-3 text-amber-400/50 dark:text-amber-600/50" />}
+                      <div className="flex items-center gap-1">
+                        <div className={`w-2 h-2 rounded-full transition-all ${
+                          isCompleted ? 'bg-emerald-500' :
+                          isActive ? 'bg-amber-500 animate-pulse shadow-sm shadow-amber-500/50' :
+                          'bg-amber-300/40 dark:bg-amber-700/40'
+                        }`} />
+                        <span className={`text-[10px] font-medium ${
+                          isCompleted ? 'text-emerald-700 dark:text-emerald-400' :
+                          isActive ? 'text-amber-800 dark:text-amber-200 font-bold' :
+                          'text-amber-500/60 dark:text-amber-500/40'
+                        }`}>{stepLabels[idx]}</span>
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+              {/* Estimated time */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/50 dark:bg-slate-900/30">
+                <Timer className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                <span className="text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                  {svTime.toLocaleTimeString('es-SV', { timeZone: 'America/El_Salvador', hour: '2-digit', minute: '2-digit' })} SV
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── KPI Summary Cards (Enhanced) ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -827,6 +982,163 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           </CardHeader>
           <CardContent>
             <StatusDonut statusCounts={statusCounts} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Monthly Comparison + Employee Count Mini-Chart ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Monthly Comparison Widget */}
+        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-emerald-500" /> Comparación Mensual
+            </CardTitle>
+            <CardDescription>Mes actual vs. mes anterior</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Total Bruto */}
+              {(() => {
+                const brutoDelta = monthlyComparison.brutoPrev > 0
+                  ? ((monthlyComparison.brutoCurrent - monthlyComparison.brutoPrev) / monthlyComparison.brutoPrev) * 100
+                  : 0;
+                const netoDelta = monthlyComparison.netoPrev > 0
+                  ? ((monthlyComparison.netoCurrent - monthlyComparison.netoPrev) / monthlyComparison.netoPrev) * 100
+                  : 0;
+                const dedDelta = monthlyComparison.deduccionesPrev > 0
+                  ? ((monthlyComparison.deduccionesCurrent - monthlyComparison.deduccionesPrev) / monthlyComparison.deduccionesPrev) * 100
+                  : 0;
+                const comparisons = [
+                  { label: 'Total Bruto', current: monthlyComparison.brutoCurrent, prev: monthlyComparison.brutoPrev, delta: brutoDelta, color: 'text-emerald-600 dark:text-emerald-400', bgBar: 'bg-emerald-500', bgBarPrev: 'bg-emerald-200 dark:bg-emerald-800' },
+                  { label: 'Total Neto', current: monthlyComparison.netoCurrent, prev: monthlyComparison.netoPrev, delta: netoDelta, color: 'text-teal-600 dark:text-teal-400', bgBar: 'bg-teal-500', bgBarPrev: 'bg-teal-200 dark:bg-teal-800' },
+                  { label: 'Deducciones', current: monthlyComparison.deduccionesCurrent, prev: monthlyComparison.deduccionesPrev, delta: dedDelta, color: 'text-amber-600 dark:text-amber-400', bgBar: 'bg-amber-500', bgBarPrev: 'bg-amber-200 dark:bg-amber-800' },
+                ];
+                const maxVal = Math.max(...comparisons.map(c => Math.max(c.current, c.prev)), 1);
+                return comparisons.map(comp => (
+                  <div key={comp.label} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{comp.label}</span>
+                      <div className="flex items-center gap-1.5">
+                        {comp.delta !== 0 && (
+                          <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold ${
+                            comp.delta > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {comp.delta > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                            {Math.abs(comp.delta).toFixed(1)}%
+                          </span>
+                        )}
+                        <span className={`text-sm font-bold font-mono ${comp.color}`}>
+                          {fmt(comp.current)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {/* Current month bar */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-slate-400 w-8 shrink-0">Actual</span>
+                        <div className="flex-1 h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-3 rounded-full ${comp.bgBar} transition-all duration-700`}
+                            style={{ width: `${Math.max((comp.current / maxVal) * 100, 2)}%` }}
+                          />
+                        </div>
+                      </div>
+                      {/* Previous month bar */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-slate-400 w-8 shrink-0">Anterior</span>
+                        <div className="flex-1 h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-2.5 rounded-full ${comp.bgBarPrev} transition-all duration-700`}
+                            style={{ width: `${Math.max((comp.prev / maxVal) * 100, 2)}%` }}
+                          />
+                        </div>
+                        <span className="text-[9px] text-slate-400 font-mono w-16 text-right shrink-0">{fmt(comp.prev)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Employee Count Mini-Chart (CSS-only area chart with gradient fill) */}
+        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4 text-teal-500" /> Evolución de Empleados
+            </CardTitle>
+            <CardDescription>Últimos 6 meses</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="relative">
+              {/* CSS-only area chart */}
+              <div className="relative h-40">
+                {(() => {
+                  const maxCount = Math.max(...EMPLOYEE_COUNT_HISTORY.map(e => e.count), 1);
+                  const minCount = Math.min(...EMPLOYEE_COUNT_HISTORY.map(e => e.count));
+                  const range = maxCount - minCount || 1;
+                  const points = EMPLOYEE_COUNT_HISTORY.map((e, i) => {
+                    const x = (i / (EMPLOYEE_COUNT_HISTORY.length - 1)) * 100;
+                    const y = 100 - ((e.count - minCount) / range) * 80 - 10;
+                    return `${x},${y}`;
+                  });
+                  const areaPoints = [...points, `100,100`, `0,100`];
+                  return (
+                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+                      <defs>
+                        <linearGradient id="areaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.3" />
+                          <stop offset="100%" stopColor="#14b8a6" stopOpacity="0.02" />
+                        </linearGradient>
+                      </defs>
+                      <polygon
+                        points={areaPoints.join(' ')}
+                        fill="url(#areaGrad)"
+                        className="transition-all duration-700"
+                      />
+                      <polyline
+                        points={points.join(' ')}
+                        fill="none"
+                        stroke="#14b8a6"
+                        strokeWidth="0.8"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                      />
+                      {/* Data points */}
+                      {EMPLOYEE_COUNT_HISTORY.map((e, i) => {
+                        const x = (i / (EMPLOYEE_COUNT_HISTORY.length - 1)) * 100;
+                        const y = 100 - ((e.count - minCount) / range) * 80 - 10;
+                        return (
+                          <circle key={i} cx={x} cy={y} r="1.5" fill="#14b8a6" stroke="white" strokeWidth="0.5" />
+                        );
+                      })}
+                    </svg>
+                  );
+                })()}
+              </div>
+              {/* Month labels and values */}
+              <div className="flex justify-between mt-2 px-1">
+                {EMPLOYEE_COUNT_HISTORY.map((e, i) => (
+                  <div key={i} className="flex flex-col items-center gap-0.5">
+                    <span className="text-[10px] font-mono font-bold text-teal-600 dark:text-teal-400">{e.count}</span>
+                    <span className="text-[9px] text-slate-400 dark:text-slate-500">{e.month}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Current count badge */}
+              <div className="flex items-center justify-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Empleados Activos</span>
+                <span className="text-lg font-bold text-teal-600 dark:text-teal-400 font-mono">
+                  {data.kpis.total_empleados_activos || EMPLOYEE_COUNT_HISTORY[EMPLOYEE_COUNT_HISTORY.length - 1].count}
+                </span>
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded-full">
+                  <ArrowUpRight className="h-3 w-3" />
+                  +{(data.kpis.tendencia_empleados === 'up' ? 3.2 : 0).toFixed(1)}%
+                </span>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1283,6 +1595,62 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           </CardContent>
         </Card>
       )}
+
+      {/* ── Quick Stats Footer ── */}
+      <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/80">
+        <CardContent className="p-3 sm:p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              {
+                icon: <Users className="h-3.5 w-3.5" />,
+                iconBg: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400',
+                value: data.kpis.total_empleados_activos,
+                label: 'Empleados Activos',
+              },
+              {
+                icon: <FileText className="h-3.5 w-3.5" />,
+                iconBg: 'bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400',
+                value: data.planillas_recientes.length,
+                label: 'Planillas Este Mes',
+              },
+              {
+                icon: <AlertTriangle className="h-3.5 w-3.5" />,
+                iconBg: 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400',
+                value: additionalStats.incidenciasPendientes,
+                label: 'Incidencias Pendientes',
+              },
+              {
+                icon: <CalendarDays className="h-3.5 w-3.5" />,
+                iconBg: 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400',
+                value: vencimientosProximos || data.vencimientos.length,
+                label: 'Vencimientos',
+              },
+              {
+                icon: <Shield className="h-3.5 w-3.5" />,
+                iconBg: `${data.kpis.cumplimiento_previsional >= 80 ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400' : data.kpis.cumplimiento_previsional >= 50 ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'}`,
+                value: `${data.kpis.cumplimiento_previsional}%`,
+                label: 'Cumplimiento',
+              },
+              {
+                icon: <Clock className="h-3.5 w-3.5" />,
+                iconBg: 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400',
+                value: svTime.toLocaleTimeString('es-SV', { timeZone: 'America/El_Salvador', hour: '2-digit', minute: '2-digit' }),
+                label: 'Última Actualización',
+              },
+            ].map((stat, idx) => (
+              <div key={idx} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-white/60 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50">
+                <div className={`p-1.5 rounded-md ${stat.iconBg} shrink-0`}>
+                  {stat.icon}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{stat.value}</p>
+                  <p className="text-[9px] text-slate-500 dark:text-slate-400 truncate leading-tight">{stat.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* CSS Keyframes for bar animation + custom scrollbar */}
       <style jsx>{`

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useEffect, createContext, useContext } from 'react';
+import React, { useState, useCallback, useEffect, createContext, useContext, useMemo } from 'react';
 import {
   Users, Briefcase, Calculator, FileText, Settings, User, Shield,
   ChevronDown, ChevronRight, LogOut, Lock, Menu, X, LayoutDashboard,
@@ -8,7 +8,8 @@ import {
   BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye, EyeOff, Mail,
   AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle,
   Sun, Moon, TrendingUp, TrendingDown, Bell, Info, AlertTriangle,
-  PieChart, CalendarDays, Megaphone
+  PieChart, CalendarDays, Megaphone, Search, Clock, Star, Pin,
+  PanelLeftClose, PanelLeft, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +53,7 @@ import SelfServicePortal from '@/components/modules/SelfServicePortal';
 import ProfileDescriptiveForm from '@/components/modules/ProfileDescriptiveForm';
 import ChangePasswordDialog from '@/components/ChangePasswordDialog';
 import NotificationBell from '@/components/NotificationBell';
+import CommandPalette from '@/components/CommandPalette';
 
 // ============================================================
 // Types
@@ -901,17 +903,66 @@ function PasswordRecoveryDialog({ open, onOpenChange }: PasswordRecoveryDialogPr
 }
 
 // ============================================================
-// SIDEBAR
+// SIDEBAR - Enhanced with Search, Keyboard Nav, Favorites, Collapse
 // ============================================================
+
+// Badge counts for specific nav items (can be dynamic from API later)
+const NAV_BADGES: Partial<Record<ViewId, number>> = {
+  '02-04': 3, // Incidencias - pending count
+  '04-04': 1, // Aprobación - pending count
+};
+
+const MAX_FAVORITES = 5;
+const FAVORITES_KEY = 'sidebar-favorites';
+const SIDEBAR_COLLAPSED_KEY = 'sidebar-collapsed';
+
+function getStoredFavorites(): ViewId[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(FAVORITES_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setStoredFavorites(favs: ViewId[]) {
+  try {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+  } catch {
+    // ignore
+  }
+}
+
+function getStoredCollapsed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function setStoredCollapsed(val: boolean) {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(val));
+  } catch {
+    // ignore
+  }
+}
+
 interface SidebarProps {
   user: UserData;
   currentView: ViewId;
   onNavigate: (view: ViewId) => void;
-  collapsed: boolean;
-  onToggle: () => void;
+  collapsed: boolean;       // desktop icon-only mode
+  onToggle: () => void;     // toggle desktop collapsed
+  mobileOpen: boolean;      // mobile overlay open
+  onMobileToggle: () => void; // toggle mobile overlay
 }
 
-function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: SidebarProps) {
+function Sidebar({ user, currentView, onNavigate, collapsed, onToggle, mobileOpen, onMobileToggle }: SidebarProps) {
+  // Expanded groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
     const initial = new Set<string>();
     NAV_GROUPS.forEach(g => {
@@ -922,6 +973,16 @@ function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: Sidebar
     return initial;
   });
 
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Favorites state
+  const [favorites, setFavorites] = useState<ViewId[]>(() => getStoredFavorites());
+
+  // Keyboard navigation state
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const sidebarNavRef = React.useRef<HTMLDivElement>(null);
+
   const toggleGroup = (title: string) => {
     setExpandedGroups(prev => {
       const next = new Set(prev);
@@ -931,123 +992,443 @@ function Sidebar({ user, currentView, onNavigate, collapsed, onToggle }: Sidebar
     });
   };
 
+  // Toggle favorite
+  const toggleFavorite = (viewId: ViewId, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setFavorites(prev => {
+      let next: ViewId[];
+      if (prev.includes(viewId)) {
+        next = prev.filter(id => id !== viewId);
+      } else {
+        if (prev.length >= MAX_FAVORITES) return prev;
+        next = [...prev, viewId];
+      }
+      setStoredFavorites(next);
+      return next;
+    });
+  };
+
+  // Build flat list of all visible nav items for keyboard navigation and search
+  const allNavItems = React.useMemo(() => {
+    const items: { id: ViewId; label: string; icon: React.ElementType; groupTitle: string }[] = [];
+    // Dashboard as first item
+    items.push({ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, groupTitle: '' });
+    NAV_GROUPS.forEach(group => {
+      const visibleItems = getVisibleItems(group, user.rol);
+      visibleItems.forEach(item => {
+        items.push({ id: item.id, label: item.label, icon: item.icon, groupTitle: group.title });
+      });
+    });
+    return items;
+  }, [user.rol]);
+
+  // Filtered items based on search
+  const filteredItems = React.useMemo(() => {
+    if (!searchQuery.trim()) return allNavItems;
+    const q = searchQuery.toLowerCase();
+    return allNavItems.filter(item =>
+      item.label.toLowerCase().includes(q) ||
+      item.groupTitle.toLowerCase().includes(q) ||
+      item.id.toLowerCase().includes(q)
+    );
+  }, [allNavItems, searchQuery]);
+
+  // Favorites items (resolved from stored IDs)
+  const favoriteItems = React.useMemo(() => {
+    return favorites
+      .map(favId => allNavItems.find(item => item.id === favId))
+      .filter((item): item is NonNullable<typeof item> => item != null);
+  }, [favorites, allNavItems]);
+
+  // Keyboard navigation handler
+  const handleSidebarKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (collapsed) return; // No keyboard nav in collapsed mode
+    const totalItems = searchQuery.trim() ? filteredItems.length : allNavItems.length;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedIndex(prev => (prev + 1) % totalItems);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedIndex(prev => (prev - 1 + totalItems) % totalItems);
+    } else if (e.key === 'Enter' && focusedIndex >= 0) {
+      e.preventDefault();
+      const items = searchQuery.trim() ? filteredItems : allNavItems;
+      if (focusedIndex < items.length) {
+        const item = items[focusedIndex];
+        onNavigate(item.id);
+        if (window.innerWidth < 1024) onMobileToggle();
+      }
+    } else if (e.key === 'Escape') {
+      if (searchQuery) {
+        setSearchQuery('');
+        setFocusedIndex(-1);
+      }
+    }
+  }, [collapsed, searchQuery, filteredItems, allNavItems, focusedIndex, onNavigate, onMobileToggle]);
+
+  // Scroll focused item into view
+  useEffect(() => {
+    if (focusedIndex >= 0 && sidebarNavRef.current) {
+      const focusedEl = sidebarNavRef.current.querySelector(`[data-nav-index="${focusedIndex}"]`);
+      if (focusedEl) {
+        focusedEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [focusedIndex]);
+
+  // Helper: render a nav item button
+  const renderNavItem = (
+    item: { id: ViewId; label: string; icon: React.ElementType; groupTitle: string },
+    index: number,
+    isFavoriteItem = false
+  ) => {
+    const isActive = currentView === item.id;
+    const isFocused = focusedIndex === index;
+    const isFav = favorites.includes(item.id);
+    const ItemIcon = item.icon;
+    const badgeCount = NAV_BADGES[item.id];
+
+    if (collapsed) {
+      return (
+        <TooltipProvider key={item.id}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => {
+                  onNavigate(item.id);
+                  if (window.innerWidth < 1024) onMobileToggle();
+                }}
+                className={`flex items-center justify-center w-full h-10 rounded-lg transition-all relative ${
+                  isActive
+                    ? 'bg-emerald-600/20 text-emerald-400'
+                    : 'text-slate-500 hover:bg-slate-800/70 hover:text-white'
+                }`}
+              >
+                {isActive && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-emerald-400 rounded-r-full" />
+                )}
+                <ItemIcon className="h-4 w-4" />
+                {badgeCount ? (
+                  <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-[9px] font-bold text-white">
+                    {badgeCount}
+                  </span>
+                ) : null}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="font-medium">
+              {item.label}
+              {badgeCount ? ` (${badgeCount})` : ''}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    return (
+      <button
+        key={item.id}
+        data-nav-index={index}
+        onClick={() => {
+          onNavigate(item.id);
+          if (window.innerWidth < 1024) onMobileToggle();
+        }}
+        onFocus={() => setFocusedIndex(index)}
+        className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-all duration-150 relative group/item outline-none ${
+          isActive
+            ? 'bg-emerald-500/15 text-emerald-400 font-semibold'
+            : isFocused
+              ? 'bg-slate-700/50 text-white ring-1 ring-emerald-500/30'
+              : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+        }`}
+      >
+        {/* Left accent bar for active */}
+        {isActive && (
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-emerald-400 rounded-r-full shadow-sm shadow-emerald-400/50" />
+        )}
+        <ItemIcon className={`h-4 w-4 shrink-0 transition-colors duration-150 ${isActive ? 'text-emerald-400' : 'text-slate-600 group-hover/item:text-slate-400'}`} />
+        <span className="truncate flex-1 text-left">{item.label}</span>
+
+        {/* Badge */}
+        {badgeCount ? (
+          <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-bold shrink-0">
+            {badgeCount}
+          </span>
+        ) : null}
+
+        {/* Favorite star */}
+        <span
+          onClick={(e) => toggleFavorite(item.id, e)}
+          className={`shrink-0 p-0.5 rounded transition-all duration-150 ${
+            isFav
+              ? 'text-amber-400 hover:text-amber-300'
+              : 'text-transparent group-hover/item:text-slate-600 hover:!text-amber-400'
+          }`}
+          title={isFav ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+        >
+          <Star className={`h-3 w-3 ${isFav ? 'fill-current' : ''}`} />
+        </span>
+
+        {/* Active indicator dot */}
+        {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />}
+      </button>
+    );
+  };
+
   return (
     <>
       {/* Mobile overlay */}
-      {!collapsed && (
+      {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={onToggle}
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
+          onClick={onMobileToggle}
         />
       )}
 
       <aside
         className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 text-white transition-all duration-300 ease-in-out ${
-          collapsed ? '-translate-x-full lg:translate-x-0 lg:w-0 lg:overflow-hidden' : 'w-64 translate-x-0'
-        }`}
+          mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        } ${collapsed ? 'lg:w-[68px]' : 'w-64'}`}
       >
         {/* Brand */}
-        <div className="flex items-center gap-3 px-4 h-14 border-b border-slate-700/50 shrink-0">
+        <div className={`flex items-center gap-3 h-14 border-b border-slate-700/50 shrink-0 ${collapsed ? 'px-3 justify-center' : 'px-4'}`}>
           <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0 shadow-lg shadow-emerald-900/40">
             <svg viewBox="0 0 40 40" className="w-5 h-5 text-white" fill="none">
               <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
               <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
             </svg>
           </div>
-          <div className="overflow-hidden">
-            <p className="font-bold text-sm leading-tight whitespace-nowrap tracking-tight">Nómina SV</p>
-            <p className="text-[10px] text-slate-500 whitespace-nowrap">El Salvador</p>
-          </div>
-          <button onClick={onToggle} className="ml-auto lg:hidden text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors">
-            <X className="h-5 w-5" />
-          </button>
+          {!collapsed && (
+            <div className="overflow-hidden flex-1">
+              <p className="font-bold text-sm leading-tight whitespace-nowrap tracking-tight">Nómina SV</p>
+              <p className="text-[10px] text-slate-500 whitespace-nowrap">El Salvador</p>
+            </div>
+          )}
+          {!collapsed && (
+            <button onClick={onMobileToggle} className="ml-auto lg:hidden text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          )}
         </div>
 
+        {/* Search input - only in expanded mode */}
+        {!collapsed && (
+          <div className="px-3 pt-3 pb-1 shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setFocusedIndex(-1); }}
+                placeholder="Buscar módulo..."
+                className="w-full h-8 pl-8 pr-7 rounded-lg bg-slate-800/60 border border-slate-700/50 text-xs text-slate-300 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => { setSearchQuery(''); setFocusedIndex(-1); }}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-700 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Navigation */}
-        <ScrollArea className="flex-1 py-2 dark-scrollbar">
-          <nav className="space-y-0.5 px-2">
-            {/* Dashboard link at top */}
-            <button
-              onClick={() => { onNavigate('dashboard'); if (window.innerWidth < 1024) onToggle(); }}
-              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-lg text-sm transition-all mb-2 ${
-                currentView === 'dashboard'
-                  ? 'bg-emerald-600/20 text-emerald-400 font-medium'
-                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
-              }`}
-            >
-              <LayoutDashboard className={`h-4 w-4 ${currentView === 'dashboard' ? 'text-emerald-400' : 'text-slate-500'}`} />
-              <span>Dashboard</span>
-              {currentView === 'dashboard' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-            </button>
+        <ScrollArea className="flex-1 py-1 dark-scrollbar">
+          <div
+            ref={sidebarNavRef}
+            onKeyDown={handleSidebarKeyDown}
+            tabIndex={0}
+            className="outline-none"
+          >
+            <nav className={`space-y-0.5 ${collapsed ? 'px-2' : 'px-2'}`}>
 
-            {NAV_GROUPS.map(group => {
-              const visibleItems = getVisibleItems(group, user.rol);
-              if (visibleItems.length === 0) return null;
-
-              const isExpanded = expandedGroups.has(group.title);
-              const GroupIcon = group.icon;
-
-              return (
-                <div key={group.title}>
-                  <button
-                    onClick={() => toggleGroup(group.title)}
-                    className="flex items-center gap-2 w-full px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-300 transition-colors rounded-md hover:bg-slate-800/30"
-                  >
-                    <GroupIcon className="h-3 w-3" />
-                    <span className="truncate flex-1 text-left">{group.title}</span>
-                    <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
-                  </button>
-
-                  <div className={`overflow-hidden transition-all duration-200 ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                    <div className="space-y-0.5 mt-0.5 mb-1.5">
-                      {visibleItems.map(item => {
-                        const isActive = currentView === item.id;
-                        const ItemIcon = item.icon;
-                        return (
-                          <button
-                            key={item.id}
-                            onClick={() => {
-                              onNavigate(item.id);
-                              if (window.innerWidth < 1024) onToggle();
-                            }}
-                            className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-all relative group/item ${
-                              isActive
-                                ? 'bg-emerald-600/20 text-emerald-400 font-medium'
-                                : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
-                            }`}
-                          >
-                            {isActive && (
-                              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-emerald-400 rounded-r-full" />
-                            )}
-                            <ItemIcon className={`h-4 w-4 transition-colors ${isActive ? 'text-emerald-400' : 'text-slate-600 group-hover/item:text-slate-400'}`} />
-                            <span>{item.label}</span>
-                            {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400" />}
-                          </button>
-                        );
-                      })}
-                    </div>
+              {/* Favorites section */}
+              {!collapsed && favoriteItems.length > 0 && !searchQuery && (
+                <div className="mb-2">
+                  <div className="flex items-center gap-2 px-2 py-1.5">
+                    <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Favoritos</span>
                   </div>
+                  <div className="space-y-0.5">
+                    {favoriteItems.map((item, idx) => renderNavItem(item, idx, true))}
+                  </div>
+                  <div className="mx-2 my-2 border-t border-slate-700/40" />
                 </div>
-              );
-            })}
-          </nav>
+              )}
+
+              {/* Collapsed mode: show icons only */}
+              {collapsed ? (
+                <div className="space-y-1 py-1">
+                  {/* Dashboard */}
+                  {(() => {
+                    const isActive = currentView === 'dashboard';
+                    return (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => { onNavigate('dashboard'); if (window.innerWidth < 1024) onMobileToggle(); }}
+                              className={`flex items-center justify-center w-full h-10 rounded-lg transition-all relative ${
+                                isActive
+                                  ? 'bg-emerald-600/20 text-emerald-400'
+                                  : 'text-slate-500 hover:bg-slate-800/70 hover:text-white'
+                              }`}
+                            >
+                              {isActive && (
+                                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-emerald-400 rounded-r-full" />
+                              )}
+                              <LayoutDashboard className="h-4 w-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="font-medium">Dashboard</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    );
+                  })()}
+
+                  <div className="mx-1 my-1 border-t border-slate-700/30" />
+
+                  {NAV_GROUPS.map(group => {
+                    const visibleItems = getVisibleItems(group, user.rol);
+                    if (visibleItems.length === 0) return null;
+                    return (
+                      <React.Fragment key={group.title}>
+                        {visibleItems.map(item => renderNavItem(
+                          { id: item.id, label: item.label, icon: item.icon, groupTitle: group.title },
+                          -1
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              ) : searchQuery.trim() ? (
+                /* Search results - flattened, no group headers */
+                <div className="space-y-0.5 py-1">
+                  {filteredItems.length === 0 ? (
+                    <div className="px-3 py-6 text-center">
+                      <Search className="h-6 w-6 text-slate-700 mx-auto mb-2" />
+                      <p className="text-xs text-slate-600">Sin resultados para &quot;{searchQuery}&quot;</p>
+                    </div>
+                  ) : (
+                    filteredItems.map((item, idx) => renderNavItem(item, idx))
+                  )}
+                </div>
+              ) : (
+                /* Normal navigation with groups */
+                <>
+                  {/* Dashboard link at top */}
+                  {renderNavItem(
+                    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, groupTitle: '' },
+                    0
+                  )}
+
+                  <div className="mx-2 my-2 border-t border-slate-700/30" />
+
+                  {NAV_GROUPS.map(group => {
+                    const visibleItems = getVisibleItems(group, user.rol);
+                    if (visibleItems.length === 0) return null;
+
+                    const isExpanded = expandedGroups.has(group.title);
+                    const GroupIcon = group.icon;
+
+                    return (
+                      <div key={group.title}>
+                        <button
+                          onClick={() => toggleGroup(group.title)}
+                          className="flex items-center gap-2 w-full px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:text-slate-400 transition-colors duration-150 rounded-md hover:bg-slate-800/30"
+                        >
+                          <GroupIcon className="h-3 w-3 shrink-0" />
+                          <span className="truncate flex-1 text-left">{group.title}</span>
+                          <ChevronDown className={`h-3 w-3 shrink-0 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+                        </button>
+
+                        <div className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                          <div className="space-y-0.5 mt-0.5 mb-1.5">
+                            {visibleItems.map(item => {
+                              // Calculate global index for keyboard nav
+                              const globalIdx = allNavItems.findIndex(ai => ai.id === item.id);
+                              return renderNavItem(
+                                { id: item.id, label: item.label, icon: item.icon, groupTitle: group.title },
+                                globalIdx
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Separator between groups */}
+                        <div className="mx-2 my-1 border-t border-slate-700/20" />
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </nav>
+          </div>
         </ScrollArea>
 
-        {/* User info at bottom */}
-        <div className="border-t border-slate-700/50 p-3 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <Avatar className="h-9 w-9 bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0">
-              <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-xs font-semibold">
-                {user.nombre[0]}{user.apellido[0]}
-              </AvatarFallback>
-            </Avatar>
-            <div className="overflow-hidden flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user.nombre} {user.apellido}</p>
-              <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                <p className="text-[10px] text-slate-400 truncate">{user.rol}</p>
+        {/* Bottom section: Collapse toggle + User info */}
+        <div className="border-t border-slate-700/50 shrink-0">
+          {/* Collapse/expand toggle */}
+          <div className={`flex ${collapsed ? 'justify-center' : 'justify-end'} px-2 pt-2 pb-1`}>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => {
+                      onToggle();
+                      setStoredCollapsed(!collapsed);
+                    }}
+                    className="flex items-center justify-center w-7 h-7 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-all duration-200"
+                  >
+                    {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {collapsed ? 'Expandir barra lateral' : 'Colapsar barra lateral'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          {/* User info */}
+          <div className={`${collapsed ? 'px-2 py-3 flex justify-center' : 'p-3'}`}>
+            {collapsed ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <Avatar className="h-8 w-8 bg-gradient-to-br from-emerald-500 to-teal-600 cursor-default">
+                        <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-[10px] font-semibold">
+                          {user.nombre[0]}{user.apellido[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {user.nombre} {user.apellido} — {user.rol}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <Avatar className="h-9 w-9 bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0">
+                  <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-xs font-semibold">
+                    {user.nombre[0]}{user.apellido[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="overflow-hidden flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{user.nombre} {user.apellido}</p>
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    <p className="text-[10px] text-slate-400 truncate">{user.rol}</p>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </aside>
@@ -1063,11 +1444,13 @@ interface HeaderBarProps {
   currentView: ViewId;
   accessToken: string | null;
   onToggleSidebar: () => void;
+  onToggleMobileSidebar: () => void;
   onLogout: () => void;
   onNavigate?: (viewId: ViewId) => void;
+  onOpenCommandPalette?: () => void;
 }
 
-function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onLogout, onNavigate }: HeaderBarProps) {
+function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onToggleMobileSidebar, onLogout, onNavigate, onOpenCommandPalette }: HeaderBarProps) {
   const { toast } = useToast();
   const [showChangePassword, setShowChangePassword] = useState(false);
   const { theme, setTheme } = useTheme();
@@ -1085,13 +1468,13 @@ function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onLogout, 
     <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-700/50 shadow-sm dark:shadow-slate-900/50 flex items-center px-4 gap-3 shrink-0 z-30">
       {/* Mobile menu toggle */}
       <button
-        onClick={onToggleSidebar}
+        onClick={onToggleMobileSidebar}
         className="lg:hidden text-slate-600 hover:text-slate-900 p-1 rounded-md hover:bg-slate-100 transition-colors"
       >
         <Menu className="h-5 w-5" />
       </button>
 
-      {/* Desktop sidebar toggle */}
+      {/* Desktop sidebar toggle (collapse/expand) */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1099,10 +1482,10 @@ function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onLogout, 
               onClick={onToggleSidebar}
               className="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
             >
-              <Menu className="h-4 w-4" />
+              <PanelLeft className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>Alternar menú</TooltipContent>
+          <TooltipContent>Alternar barra lateral</TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
@@ -1119,6 +1502,24 @@ function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onLogout, 
           )}
         </div>
       </div>
+
+      {/* Search / Command Palette trigger */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={onOpenCommandPalette}
+              className="flex items-center gap-2 h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-sm"
+              aria-label="Buscar (⌘K)"
+            >
+              <Search className="h-3.5 w-3.5" />
+              <span className="hidden md:inline text-xs">Buscar...</span>
+              <kbd className="hidden sm:inline-flex items-center rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-1 py-0.5 text-[9px] font-medium text-slate-400 dark:text-slate-500">⌘K</kbd>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Buscar vistas, empleados, acciones (⌘K)</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       {/* Dark mode toggle */}
       <TooltipProvider>
@@ -1308,6 +1709,77 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
   const [statsLoading, setStatsLoading] = useState(true);
   const [lastPayrollDate, setLastPayrollDate] = useState<string>('');
   const [nextDeadlineDate, setNextDeadlineDate] = useState<string>('');
+
+  // Live clock state - El Salvador timezone
+  const [svTime, setSvTime] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const tick = () => setSvTime(new Date());
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Format time in El Salvador timezone
+  const svTimeString = svTime.toLocaleTimeString('es-SV', {
+    timeZone: 'America/El_Salvador',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+
+  const svDateString = svTime.toLocaleDateString('es-SV', {
+    timeZone: 'America/El_Salvador',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const svDayOfWeek = svTime.toLocaleDateString('es-SV', {
+    timeZone: 'America/El_Salvador',
+    weekday: 'long',
+  });
+
+  // Relative time helper for activity feed
+  const getRelativeTime = (dateStr: string): string => {
+    try {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      if (diffMins < 1) return 'hace un momento';
+      if (diffMins < 60) return `hace ${diffMins} min`;
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `hace ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays < 7) return `hace ${diffDays} día${diffDays > 1 ? 's' : ''}`;
+      return date.toLocaleDateString('es-SV', { day: '2-digit', month: 'short' });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Compliance deadline status for "Estado del Día" widget
+  const complianceStatus = useMemo(() => {
+    if (!dashboardData?.vencimientos || dashboardData.vencimientos.length === 0) {
+      return { level: 'green' as const, label: 'Todo al día', daysUntil: null, nextName: '' };
+    }
+    const upcoming = dashboardData.vencimientos
+      .filter(v => v.dias > 0)
+      .sort((a, b) => a.dias - b.dias);
+    if (upcoming.length === 0) {
+      return { level: 'red' as const, label: 'Vencidos', daysUntil: 0, nextName: dashboardData.vencimientos[0]?.nombre || '' };
+    }
+    const next = upcoming[0];
+    if (next.dias <= 3) {
+      return { level: 'red' as const, label: 'Urgente', daysUntil: next.dias, nextName: next.nombre };
+    }
+    if (next.dias <= 7) {
+      return { level: 'amber' as const, label: 'Próximo', daysUntil: next.dias, nextName: next.nombre };
+    }
+    return { level: 'green' as const, label: 'Todo al día', daysUntil: next.dias, nextName: next.nombre };
+  }, [dashboardData?.vencimientos]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -1648,38 +2120,115 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
       </div>
 
       {/* ═══════════════════════════════════════════════════════════
-          3. SYSTEM STATUS WIDGET - Health indicators with colored dots
+          3. SYSTEM STATUS WIDGET - Health indicators + Live Clock + Estado del Día
           ═══════════════════════════════════════════════════════════ */}
-      <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/80">
-        <CardContent className="p-4 sm:p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="p-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40">
-              <Shield className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Estado del Sistema</h3>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-            {systemHealthItems.map((item) => (
-              <div key={item.label} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/60 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50">
-                <div className={`p-2 rounded-lg ${item.iconBg} shrink-0`}>
-                  {item.icon}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-2 h-2 rounded-full ${item.statusColor} shadow-sm ${item.statusGlow} animate-pulse`} />
-                    {statsLoading && item.label !== 'Estado del Sistema' ? (
-                      <div className="h-4 w-12 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                    ) : (
-                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{item.value}</p>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{item.label}</p>
-                </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Live Clock Widget */}
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-slate-900 overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-200/20 dark:bg-emerald-800/10 rounded-full -translate-y-1/3 translate-x-1/3" />
+          <CardContent className="p-4 sm:p-5 relative z-10">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="p-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40">
+                <Clock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Hora El Salvador</h3>
+              <div className="ml-auto w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-500/50" />
+            </div>
+            <div className="text-center py-1">
+              <p className="font-mono text-3xl sm:text-4xl font-bold text-emerald-700 dark:text-emerald-300 tracking-wider tabular-nums">
+                {svTimeString}
+              </p>
+              <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80 mt-2 capitalize font-medium">
+                {svDateString}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Estado del Día - Compliance Status Widget */}
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/80 overflow-hidden relative">
+          <div className={`absolute top-0 left-0 w-full h-1 ${
+            complianceStatus.level === 'green' ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' :
+            complianceStatus.level === 'amber' ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+            'bg-gradient-to-r from-red-400 to-red-600'
+          }`} />
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="p-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40">
+                <Shield className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Estado del Día</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full animate-pulse ${
+                    complianceStatus.level === 'green' ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' :
+                    complianceStatus.level === 'amber' ? 'bg-amber-500 shadow-sm shadow-amber-500/50' :
+                    'bg-red-500 shadow-sm shadow-red-500/50'
+                  }`} />
+                  <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 capitalize">{svDayOfWeek}</span>
+                </div>
+                <Badge className={`text-[10px] border ${
+                  complianceStatus.level === 'green' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' :
+                  complianceStatus.level === 'amber' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' :
+                  'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-800'
+                }`}>
+                  {complianceStatus.label}
+                </Badge>
+              </div>
+              {complianceStatus.daysUntil !== null && complianceStatus.daysUntil > 0 && (
+                <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Próximo vencimiento</span>
+                  <span className={`text-sm font-bold ${
+                    complianceStatus.level === 'red' ? 'text-red-600 dark:text-red-400' :
+                    complianceStatus.level === 'amber' ? 'text-amber-600 dark:text-amber-400' :
+                    'text-emerald-600 dark:text-emerald-400'
+                  }`}>{complianceStatus.daysUntil} días</span>
+                </div>
+              )}
+              {complianceStatus.nextName && (
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{complianceStatus.nextName}</p>
+              )}
+              {complianceStatus.level === 'green' && !complianceStatus.nextName && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ Todo al día</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* System Health Indicators */}
+        <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/80">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="p-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40">
+                <Shield className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Indicadores</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {systemHealthItems.map((item) => (
+                <div key={item.label} className="flex items-center gap-2 p-2 rounded-lg bg-white/60 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50">
+                  <div className={`p-1.5 rounded-md ${item.iconBg} shrink-0`}>
+                    {item.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1">
+                      <div className={`w-1.5 h-1.5 rounded-full ${item.statusColor} ${item.statusGlow} animate-pulse`} />
+                      {statsLoading && item.label !== 'Estado del Sistema' ? (
+                        <div className="h-3 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                      ) : (
+                        <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{item.value}</p>
+                      )}
+                    </div>
+                    <p className="text-[9px] text-slate-500 dark:text-slate-400 truncate">{item.label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* ═══════════════════════════════════════════════════════════
           2. ENHANCED KPI CARDS - Gradient left border, sparkline bars, skeleton, change indicators
@@ -2061,10 +2610,19 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
         {/* Enhanced Audit Timeline */}
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <ScrollText className="h-4 w-4 text-emerald-500" />
-              Actividad Reciente
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ScrollText className="h-4 w-4 text-emerald-500" />
+                Actividad Reciente
+              </CardTitle>
+              <button
+                onClick={() => onNavigate('06-04')}
+                className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-medium flex items-center gap-1 transition-colors"
+              >
+                Ver más
+                <ChevronRight className="h-3 w-3" />
+              </button>
+            </div>
           </CardHeader>
           <CardContent>
             {auditEntries.length === 0 ? (
@@ -2073,39 +2631,49 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
                 <p className="text-sm">Sin actividad reciente</p>
               </div>
             ) : (
-              <div className="relative max-h-80 overflow-y-auto pr-1">
+              <div className="relative max-h-80 overflow-y-auto pr-1 custom-scrollbar">
                 {/* Timeline connecting line */}
-                <div className="absolute left-5 top-3 bottom-3 w-px bg-slate-200 dark:bg-slate-700" />
+                <div className="absolute left-[11px] top-3 bottom-3 w-0.5 bg-gradient-to-b from-emerald-300 via-slate-200 to-slate-100 dark:from-emerald-700 dark:via-slate-700 dark:to-slate-800" />
                 <div className="space-y-1">
-                  {auditEntries.map((entry, idx) => (
-                    <div key={entry.id} className="relative flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-150 group">
-                      {/* Timeline node */}
-                      <div className={`relative z-10 p-2 rounded-full shrink-0 mt-0.5 ${getEnhancedAuditColor(entry.nivel_criticidad)} shadow-sm group-hover:shadow-md transition-shadow duration-200`}>
-                        {getEnhancedAuditIcon(entry.accion)}
-                      </div>
-                      {/* Content */}
-                      <div className="min-w-0 flex-1 pt-0.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            {entry.accion.replace(/_/g, ' ')}
-                          </p>
-                          {entry.nivel_criticidad === 'ALTA' && (
-                            <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] py-0 px-1.5">Alta</Badge>
-                          )}
+                  {auditEntries.map((entry, idx) => {
+                    const dotColor = entry.nivel_criticidad === 'ALTA' ? 'bg-red-500' : entry.nivel_criticidad === 'MEDIA' ? 'bg-amber-500' : 'bg-emerald-500';
+                    return (
+                      <div key={entry.id} className="relative flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-150 group">
+                        {/* Colored timeline dot */}
+                        <div className="relative z-10 shrink-0 mt-1">
+                          <div className={`w-[22px] h-[22px] rounded-full border-2 border-white dark:border-slate-900 ${dotColor} flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow duration-200`}>
+                            <div className="scale-75">
+                              {getEnhancedAuditIcon(entry.accion)}
+                            </div>
+                          </div>
                         </div>
-                        {entry.tabla_afectada && (
-                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                            Tabla: <span className="font-mono text-slate-500 dark:text-slate-400">{entry.tabla_afectada}</span>
-                          </p>
-                        )}
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                          {entry.usuario?.nombre ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : entry.usuario_email || 'Sistema'}
-                          <span className="mx-1">·</span>
-                          {new Date(entry.fecha_accion).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </p>
+                        {/* Content */}
+                        <div className="min-w-0 flex-1 pt-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                              {entry.accion.replace(/_/g, ' ')}
+                            </p>
+                            {entry.nivel_criticidad === 'ALTA' && (
+                              <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] py-0 px-1.5">Alta</Badge>
+                            )}
+                          </div>
+                          {entry.tabla_afectada && (
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                              Tabla: <span className="font-mono text-slate-500 dark:text-slate-400">{entry.tabla_afectada}</span>
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                              {entry.usuario?.nombre ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : entry.usuario_email || 'Sistema'}
+                            </p>
+                            <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 font-medium">
+                              {getRelativeTime(entry.fecha_accion)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -2151,7 +2719,28 @@ interface AppLayoutProps {
 function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
   const [currentView, setCurrentView] = useState<ViewId>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  // Global keyboard shortcut: Cmd+K / Ctrl+K
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(prev => !prev);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Handle employee selection from command palette
+  const handleCommandPaletteEmployee = useCallback((employeeId: string) => {
+    setSelectedEmployeeId(employeeId);
+    setCurrentView('02-02');
+  }, []);
 
   const renderView = () => {
     if (currentView === 'dashboard') {
@@ -2219,6 +2808,8 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
         onNavigate={setCurrentView}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        mobileOpen={mobileMenuOpen}
+        onMobileToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -2227,8 +2818,10 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
           currentView={currentView}
           accessToken={accessToken}
           onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onToggleMobileSidebar={() => setMobileMenuOpen(!mobileMenuOpen)}
           onLogout={onLogout}
           onNavigate={setCurrentView}
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         />
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 dark:bg-slate-950" key={currentView}>
@@ -2237,6 +2830,17 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
           </div>
         </main>
       </div>
+
+      {/* Command Palette */}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        onNavigate={setCurrentView}
+        onNavigateToEmployee={handleCommandPaletteEmployee}
+        onLogout={onLogout}
+        accessToken={accessToken}
+        userRole={user.rol}
+      />
     </div>
   );
 }

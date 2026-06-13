@@ -1,0 +1,502 @@
+   800→                        <td className="p-3 font-mono text-xs font-medium text-slate-700 dark:text-slate-300">{p.codigo}</td>
+   801→                        <td className="p-3 text-slate-600 dark:text-slate-400">{p.tipo}</td>
+   802→                        <td className="p-3">
+   803→                          <Badge className={`text-[10px] border ${estadoColors[p.estado] || 'bg-slate-100 text-slate-700'}`} variant="secondary">
+   804→                            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${estadoDot[p.estado] || 'bg-slate-400'}`} />
+   805→                            {p.estado}
+   806→                          </Badge>
+   807→                        </td>
+   808→                        <td className="p-3 text-right font-mono font-medium text-slate-900 dark:text-slate-100">{fmt(p.total_neto)}</td>
+   809→                        <td className="p-3 text-right text-slate-600 dark:text-slate-400">{p.empleados}</td>
+   810→                        <td className="p-3 text-right text-xs text-slate-500 dark:text-slate-500">{fmtDate(p.fecha_creacion)}</td>
+   811→                      </tr>
+   812→                    ))
+   813→                  )}
+   814→                </tbody>
+   815→              </table>
+   816→            </div>
+   817→          </CardContent>
+   818→        </Card>
+   819→
+   820→        {/* ── Status Summary Donut Widget ── */}
+   821→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+   822→          <CardHeader className="pb-3">
+   823→            <CardTitle className="text-base flex items-center gap-2">
+   824→              <PieChart className="h-4 w-4 text-slate-500" /> Estado de Planillas
+   825→            </CardTitle>
+   826→            <CardDescription>Distribución por estado</CardDescription>
+   827→          </CardHeader>
+   828→          <CardContent>
+   829→            <StatusDonut statusCounts={statusCounts} />
+   830→          </CardContent>
+   831→        </Card>
+   832→      </div>
+   833→
+   834→      {/* ── Charts row: Enhanced Trend + Donut Breakdown ── */}
+   835→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   836→        {/* ── Enhanced Monthly Trend Chart ── */}
+   837→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+   838→          <CardHeader className="pb-3">
+   839→            <CardTitle className="text-base flex items-center gap-2">
+   840→              <BarChart3 className="h-4 w-4 text-slate-500" /> Tendencia Mensual
+   841→            </CardTitle>
+   842→            <CardDescription>Total salarios brutos por mes</CardDescription>
+   843→          </CardHeader>
+   844→          <CardContent>
+   845→            {data.tendencia_mensual.every(m => m.total === 0) ? (
+   846→              <div className="flex items-center justify-center py-8 text-slate-400">
+   847→                <p className="text-sm">Sin datos históricos</p>
+   848→              </div>
+   849→            ) : (
+   850→              <div className="relative">
+   851→                {/* Y-axis labels */}
+   852→                <div className="absolute left-0 top-0 bottom-6 w-14 flex flex-col justify-between text-[9px] text-slate-400 dark:text-slate-500 font-mono pr-1">
+   853→                  <span>{fmtShort(maxTendencia)}</span>
+   854→                  <span>{fmtShort(maxTendencia * 0.75)}</span>
+   855→                  <span>{fmtShort(maxTendencia * 0.5)}</span>
+   856→                  <span>{fmtShort(maxTendencia * 0.25)}</span>
+   857→                  <span>$0</span>
+   858→                </div>
+   859→                {/* Chart area */}
+   860→                <div className="ml-14 relative">
+   861→                  {/* Horizontal grid lines */}
+   862→                  <div className="absolute inset-0 bottom-6 flex flex-col justify-between pointer-events-none">
+   863→                    {[0, 1, 2, 3, 4].map(i => (
+   864→                      <div key={i} className="border-t border-dashed border-slate-200 dark:border-slate-700/50" />
+   865→                    ))}
+   866→                  </div>
+   867→                  {/* Bars container */}
+   868→                  <div className="relative flex items-end gap-2 h-48 pt-2 pb-0">
+   869→                    {/* Gradient area behind bars */}
+   870→                    <div className="absolute inset-0 bottom-0 overflow-hidden rounded-b-lg">
+   871→                      <div
+   872→                        className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-emerald-100/40 via-teal-50/20 to-transparent dark:from-emerald-900/20 dark:via-teal-900/10 dark:to-transparent"
+   873→                        style={{ height: '85%' }}
+   874→                      />
+   875→                    </div>
+   876→                    {data.tendencia_mensual.map((m, i) => {
+   877→                      const height = Math.max((m.total / maxTendencia) * 160, 6);
+   878→                      const isMax = m.total === maxTendencia;
+   879→                      const isCurrentMonth = i === currentMonthIdx;
+   880→                      return (
+   881→                        <div key={i} className="flex-1 flex flex-col items-center gap-1.5 group relative z-10">
+   882→                          {/* Tooltip */}
+   883→                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap bg-white dark:bg-slate-800 px-2 py-1 rounded shadow-sm border border-slate-200 dark:border-slate-700">
+   884→                            {m.total > 0 ? fmt(m.total) : '-'}
+   885→                          </span>
+   886→                          {/* Bar with animation */}
+   887→                          <div
+   888→                            className={`w-full rounded-t-md transition-all duration-700 ease-out min-h-[6px] group-hover:opacity-90 group-hover:brightness-110 relative cursor-pointer ${
+   889→                              isCurrentMonth
+   890→                                ? 'bg-gradient-to-t from-emerald-700 to-emerald-400 shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-300/50 dark:ring-emerald-700/50'
+   891→                                : isMax
+   892→                                  ? 'bg-gradient-to-t from-emerald-600 to-emerald-400'
+   893→                                  : 'bg-gradient-to-t from-teal-500 to-teal-300 dark:from-teal-600 dark:to-teal-400'
+   894→                            }`}
+   895→                            style={{
+   896→                              height: `${height}px`,
+   897→                              animation: `barGrow 0.8s ease-out ${i * 0.08}s both`,
+   898→                            }}
+   899→                          />
+   900→                          {/* Current month indicator */}
+   901→                          {isCurrentMonth && (
+   902→                            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+   903→                          )}
+   904→                          <span className={`text-[10px] capitalize font-medium ${
+   905→                            isCurrentMonth ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500 dark:text-slate-400'
+   906→                          }`}>{m.mes}</span>
+   907→                        </div>
+   908→                      );
+   909→                    })}
+   910→                  </div>
+   911→                </div>
+   912→              </div>
+   913→            )}
+   914→          </CardContent>
+   915→        </Card>
+   916→
+   917→        {/* ── Expense Breakdown Donut Chart ── */}
+   918→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+   919→          <CardHeader className="pb-3">
+   920→            <CardTitle className="text-base flex items-center gap-2">
+   921→              <PieChart className="h-4 w-4 text-slate-500" /> Desglose de Nómina
+   922→            </CardTitle>
+   923→            <CardDescription>Distribución de deducciones y pago neto</CardDescription>
+   924→          </CardHeader>
+   925→          <CardContent>
+   926→            <div className="flex flex-col sm:flex-row items-center gap-6">
+   927→              {/* Donut chart */}
+   928→              <div className="relative shrink-0">
+   929→                <div
+   930→                  className="w-36 h-36 rounded-full shadow-inner"
+   931→                  style={{ background: conicGradient }}
+   932→                >
+   933→                  <div className="absolute inset-0 flex items-center justify-center">
+   934→                    <div className="w-20 h-20 rounded-full bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center">
+   935→                      <div className="text-center">
+   936→                        <p className="text-xs font-bold text-slate-900 dark:text-slate-100 font-mono">{fmt(baseAmount)}</p>
+   937→                        <p className="text-[9px] text-slate-400 dark:text-slate-500">Total</p>
+   938→                      </div>
+   939→                    </div>
+   940→                  </div>
+   941→                </div>
+   942→              </div>
+   943→              {/* Legend */}
+   944→              <div className="flex-1 space-y-2.5 w-full">
+   945→                {EXPENSE_SLICES.map((s, i) => (
+   946→                  <div key={s.label} className="flex items-center justify-between group">
+   947→                    <div className="flex items-center gap-2">
+   948→                      <div className={`w-3 h-3 rounded-sm ${s.bgClass}`} />
+   949→                      <span className={`text-xs font-medium ${s.color} group-hover:underline`}>{s.label}</span>
+   950→                    </div>
+   951→                    <div className="flex items-center gap-2">
+   952→                      <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{fmt(expenseAmounts[i])}</span>
+   953→                      <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+   954→                        {s.pct}%
+   955→                      </span>
+   956→                    </div>
+   957→                  </div>
+   958→                ))}
+   959→              </div>
+   960→            </div>
+   961→          </CardContent>
+   962→        </Card>
+   963→      </div>
+   964→
+   965→      {/* ── Department Distribution + Activity Timeline ── */}
+   966→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   967→        {/* Department Distribution with percentages */}
+   968→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+   969→          <CardHeader className="pb-3">
+   970→            <CardTitle className="text-base flex items-center gap-2">
+   971→              <BarChart3 className="h-4 w-4 text-slate-500" /> Distribución por Área
+   972→            </CardTitle>
+   973→            <CardDescription>Costo salarial por departamento</CardDescription>
+   974→          </CardHeader>
+   975→          <CardContent>
+   976→            {data.distribucion_areas.length === 0 ? (
+   977→              <div className="flex items-center justify-center py-8 text-slate-400">
+   978→                <p className="text-sm">Sin datos de distribución</p>
+   979→              </div>
+   980→            ) : (
+   981→              <div className="space-y-3 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+   982→                {data.distribucion_areas.slice(0, 8).map((a, i) => {
+   983→                  const pct = (a.total / maxArea) * 100;
+   984→                  const totalAllAreas = data.distribucion_areas.reduce((s, x) => s + x.total, 0);
+   985→                  const pctOfTotal = totalAllAreas > 0 ? ((a.total / totalAllAreas) * 100).toFixed(1) : '0';
+   986→                  const colors = [
+   987→                    'from-emerald-500 to-emerald-400', 'from-teal-500 to-teal-400', 'from-cyan-500 to-cyan-400', 'from-amber-500 to-amber-400',
+   988→                    'from-orange-500 to-orange-400', 'from-rose-500 to-rose-400', 'from-violet-500 to-violet-400', 'from-slate-500 to-slate-400',
+   989→                  ];
+   990→                  const bgColors = [
+   991→                    'bg-emerald-500', 'bg-teal-500', 'bg-cyan-500', 'bg-amber-500',
+   992→                    'bg-orange-500', 'bg-rose-500', 'bg-violet-500', 'bg-slate-500',
+   993→                  ];
+   994→                  return (
+   995→                    <div key={i} className="space-y-1.5 group">
+   996→                      <div className="flex items-center justify-between text-xs">
+   997→                        <div className="flex items-center gap-2">
+   998→                          <div className={`w-2.5 h-2.5 rounded-sm ${bgColors[i % bgColors.length]}`} />
+   999→                          <span className="font-medium text-slate-700 dark:text-slate-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">{a.nombre}</span>
+  1000→                        </div>
+  1001→                        <div className="flex items-center gap-2">
+  1002→                          <span className="font-mono text-slate-500 dark:text-slate-400 text-[11px]">{fmt(a.total)}</span>
+  1003→                          <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+  1004→                            {pctOfTotal}%
+  1005→                          </span>
+  1006→                        </div>
+  1007→                      </div>
+  1008→                      <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+  1009→                        <div
+  1010→                          className={`h-full rounded-full transition-all duration-700 bg-gradient-to-r ${colors[i % colors.length]}`}
+  1011→                          style={{ width: `${pct}%` }}
+  1012→                        />
+  1013→                      </div>
+  1014→                    </div>
+  1015→                  );
+  1016→                })}
+  1017→              </div>
+  1018→            )}
+  1019→          </CardContent>
+  1020→        </Card>
+  1021→
+  1022→        {/* ── Recent Activity Timeline ── */}
+  1023→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1024→          <CardHeader className="pb-3">
+  1025→            <CardTitle className="text-base flex items-center gap-2">
+  1026→              <Activity className="h-4 w-4 text-slate-500" /> Actividad Reciente
+  1027→            </CardTitle>
+  1028→            <CardDescription>Eventos de planillas recientes</CardDescription>
+  1029→          </CardHeader>
+  1030→          <CardContent>
+  1031→            {activityEvents.length === 0 ? (
+  1032→              <div className="flex items-center justify-center py-8 text-slate-400">
+  1033→                <p className="text-sm">Sin actividad reciente</p>
+  1034→              </div>
+  1035→            ) : (
+  1036→              <div className="relative max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+  1037→                {/* Timeline line */}
+  1038→                <div className="absolute left-[15px] top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700" />
+  1039→                <div className="space-y-0">
+  1040→                  {activityEvents.map((event, idx) => (
+  1041→                    <div key={event.id} className="relative flex items-start gap-3 py-2.5 group">
+  1042→                      {/* Timeline dot */}
+  1043→                      <div className={`relative z-10 w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 border-2 ${activityTypeBorder[event.type]} ${activityTypeColor[event.type]} transition-transform duration-200 group-hover:scale-110`}>
+  1044→                        {activityTypeIcon[event.type]}
+  1045→                      </div>
+  1046→                      {/* Content */}
+  1047→                      <div className="flex-1 min-w-0 pt-0.5">
+  1048→                        <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-snug">{event.description}</p>
+  1049→                        <div className="flex items-center gap-2 mt-1">
+  1050→                          <Badge className={`text-[9px] border px-1.5 py-0 ${estadoColors[event.status] || 'bg-slate-100 text-slate-700'}`} variant="secondary">
+  1051→                            {event.status}
+  1052→                          </Badge>
+  1053→                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{fmtRelativeTime(event.timestamp)}</span>
+  1054→                        </div>
+  1055→                      </div>
+  1056→                    </div>
+  1057→                  ))}
+  1058→                </div>
+  1059→              </div>
+  1060→            )}
+  1061→          </CardContent>
+  1062→        </Card>
+  1063→      </div>
+  1064→
+  1065→      {/* ── Compliance Semaphore + Planilla Detail ── */}
+  1066→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1067→        {/* Compliance semaphore - Enhanced with SVG ring */}
+  1068→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1069→          <CardHeader className="pb-3">
+  1070→            <CardTitle className="text-base flex items-center gap-2">
+  1071→              <Shield className="h-4 w-4 text-slate-500" /> Semáforo Previsional
+  1072→            </CardTitle>
+  1073→          </CardHeader>
+  1074→          <CardContent className="space-y-3">
+  1075→            {/* SVG Circular Progress + Traffic light */}
+  1076→            <div className="flex items-center justify-center gap-6 mb-4">
+  1077→              <ComplianceRing percentage={data.kpis.cumplimiento_previsional} />
+  1078→              <div>
+  1079→                <div className="flex flex-col items-center gap-1.5 p-3 bg-slate-900 dark:bg-slate-800 rounded-2xl shadow-inner">
+  1080→                  <div className={`w-6 h-6 rounded-full transition-all ${
+  1081→                    data.kpis.semaforo === 'rojo'
+  1082→                      ? 'bg-red-500 shadow-lg shadow-red-500/50'
+  1083→                      : 'bg-red-900/30'
+  1084→                  }`} />
+  1085→                  <div className={`w-6 h-6 rounded-full transition-all ${
+  1086→                    data.kpis.semaforo === 'amarillo'
+  1087→                      ? 'bg-amber-400 shadow-lg shadow-amber-400/50'
+  1088→                      : 'bg-amber-900/30'
+  1089→                  }`} />
+  1090→                  <div className={`w-6 h-6 rounded-full transition-all ${
+  1091→                    data.kpis.semaforo === 'verde'
+  1092→                      ? 'bg-emerald-400 shadow-lg shadow-emerald-400/50'
+  1093→                      : 'bg-emerald-900/30'
+  1094→                  }`} />
+  1095→                </div>
+  1096→                <p className={`text-sm font-bold text-center mt-2 ${
+  1097→                  data.kpis.semaforo === 'verde' ? 'text-emerald-600' :
+  1098→                  data.kpis.semaforo === 'amarillo' ? 'text-amber-600' :
+  1099→                  'text-red-600'
+  1100→                }`}>{semaforoLabel}</p>
+  1101→              </div>
+  1102→            </div>
+  1103→
+  1104→            <Separator />
+  1105→
+  1106→            {/* Compliance items */}
+  1107→            {data.cumplimientos.map(c => (
+  1108→              <div key={c.nombre} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100/80 dark:hover:bg-slate-700/50 transition-colors">
+  1109→                <div className="flex items-center gap-2">
+  1110→                  {c.presentado ? (
+  1111→                    <CheckCircle className="h-4 w-4 text-emerald-500" />
+  1112→                  ) : (
+  1113→                    <XCircle className="h-4 w-4 text-red-500" />
+  1114→                  )}
+  1115→                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{c.nombre}</span>
+  1116→                </div>
+  1117→                <Badge variant={c.presentado ? 'default' : 'destructive'} className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 'bg-red-100 text-red-700'}`}>
+  1118→                  {c.presentado ? 'Presentado' : 'Pendiente'}
+  1119→                </Badge>
+  1120→              </div>
+  1121→            ))}
+  1122→
+  1123→            <Separator className="my-2" />
+  1124→
+  1125→            {/* Deadlines */}
+  1126→            <div className="space-y-2">
+  1127→              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Vencimientos</p>
+  1128→              {data.vencimientos.map(v => (
+  1129→                <div key={v.nombre} className="flex items-center justify-between text-xs bg-orange-50/50 dark:bg-orange-900/20 rounded px-2 py-1.5">
+  1130→                  <span className="text-slate-700 dark:text-slate-300 font-medium">{v.nombre}</span>
+  1131→                  <span className="font-semibold text-orange-600">{v.fecha}</span>
+  1132→                </div>
+  1133→              ))}
+  1134→              {data.vencimientos.length === 0 && (
+  1135→                <p className="text-xs text-emerald-600 text-center py-1 flex items-center justify-center gap-1">
+  1136→                  <CheckCircle className="h-3 w-3" /> Todos los pagos al día
+  1137→                </p>
+  1138→              )}
+  1139→            </div>
+  1140→          </CardContent>
+  1141→        </Card>
+  1142→
+  1143→        {/* ── Planilla Detail Card ── */}
+  1144→        {data.kpis.planilla_actual ? (
+  1145→          <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1146→            <CardHeader className="pb-3">
+  1147→              <CardTitle className="text-base flex items-center gap-2">
+  1148→                <CircleDot className="h-4 w-4 text-slate-500" /> Detalle de Estado
+  1149→              </CardTitle>
+  1150→              <CardDescription>Información de la planilla actual</CardDescription>
+  1151→            </CardHeader>
+  1152→            <CardContent>
+  1153→              <div className="space-y-3">
+  1154→                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1155→                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Código</span>
+  1156→                  <span className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.codigo}</span>
+  1157→                </div>
+  1158→                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1159→                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tipo</span>
+  1160→                  <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.tipo}</span>
+  1161→                </div>
+  1162→                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1163→                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Estado</span>
+  1164→                  <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium`}>
+  1165→                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${estadoDot[data.kpis.planilla_actual.estado] || 'bg-slate-400'}`} />
+  1166→                    {data.kpis.planilla_actual.estado}
+  1167→                  </Badge>
+  1168→                </div>
+  1169→                {data.kpis.planilla_actual.calculada_por && (
+  1170→                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1171→                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Calculada por</span>
+  1172→                    <span className="text-sm text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.calculada_por}</span>
+  1173→                  </div>
+  1174→                )}
+  1175→
+  1176→                <Separator className="my-2" />
+  1177→
+  1178→                {/* Compact timeline */}
+  1179→                <div className="flex items-center gap-1 pt-1">
+  1180→                  {TIMELINE_STEPS.map((step, idx) => {
+  1181→                    const isActive = idx === timelineActiveStep;
+  1182→                    const isCompleted = idx < timelineActiveStep;
+  1183→                    return (
+  1184→                      <React.Fragment key={step}>
+  1185→                        {idx > 0 && (
+  1186→                          <ChevronRight className={`h-3 w-3 ${
+  1187→                            idx <= timelineActiveStep ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'
+  1188→                          }`} />
+  1189→                        )}
+  1190→                        <div className="flex items-center gap-1">
+  1191→                          <div className={`w-2 h-2 rounded-full ${
+  1192→                            isCompleted ? 'bg-emerald-500' :
+  1193→                            isActive ? 'bg-amber-400 animate-pulse' :
+  1194→                            'bg-slate-300 dark:bg-slate-600'
+  1195→                          }`} />
+  1196→                          <span className={`text-[10px] font-semibold uppercase tracking-wider ${
+  1197→                            isCompleted ? 'text-emerald-600 dark:text-emerald-400' :
+  1198→                            isActive ? 'text-amber-600 dark:text-amber-400' :
+  1199→                            'text-slate-400 dark:text-slate-500'
+  1200→                          }`}>
+  1201→                            {step === 'CALCULADA' ? 'Calculada' : step === 'APROBADA' ? 'Aprobada' : 'Pagada'}
+  1202→                          </span>
+  1203→                        </div>
+  1204→                      </React.Fragment>
+  1205→                    );
+  1206→                  })}
+  1207→                </div>
+  1208→              </div>
+  1209→            </CardContent>
+  1210→          </Card>
+  1211→        ) : (
+  1212→          <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1213→            <CardHeader className="pb-3">
+  1214→              <CardTitle className="text-base flex items-center gap-2">
+  1215→                <CircleDot className="h-4 w-4 text-slate-500" /> Flujo de Planilla
+  1216→              </CardTitle>
+  1217→              <CardDescription>Progreso de la planilla actual</CardDescription>
+  1218→            </CardHeader>
+  1219→            <CardContent>
+  1220→              <div className="flex items-center justify-center py-8 text-slate-400">
+  1221→                <div className="text-center">
+  1222→                  <CircleDot className="h-8 w-8 mb-2 mx-auto text-slate-300 dark:text-slate-600" />
+  1223→                  <p className="text-sm font-medium">No hay planilla en proceso</p>
+  1224→                  {onNavigate && (
+  1225→                    <Button
+  1226→                      size="sm"
+  1227→                      className="mt-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1228→                      onClick={() => onNavigate('04-03')}
+  1229→                    >
+  1230→                      <Calculator className="h-3.5 w-3.5 mr-1.5" />
+  1231→                      Crear Planilla
+  1232→                    </Button>
+  1233→                  )}
+  1234→                </div>
+  1235→              </div>
+  1236→            </CardContent>
+  1237→          </Card>
+  1238→        )}
+  1239→      </div>
+  1240→
+  1241→      {/* Alerts with severity icons */}
+  1242→      {data.alertas.length > 0 && (
+  1243→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1244→          <CardHeader className="pb-3">
+  1245→            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
+  1246→              <AlertTriangle className="h-4 w-4 text-amber-500" /> Alertas del Sistema
+  1247→              <Badge variant="secondary" className="ml-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px]">
+  1248→                {data.alertas.length}
+  1249→              </Badge>
+  1250→            </CardTitle>
+  1251→          </CardHeader>
+  1252→          <CardContent>
+  1253→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+  1254→              {data.alertas.map((a, i) => {
+  1255→                const isHigh = a.severidad === 'ALTA';
+  1256→                const isMedium = a.severidad === 'MEDIA';
+  1257→                return (
+  1258→                  <div
+  1259→                    key={i}
+  1260→                    className={`flex items-start gap-2.5 p-3 rounded-lg border transition-all duration-200 hover:shadow-sm ${
+  1261→                      isHigh ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300' :
+  1262→                      isMedium ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300' :
+  1263→                      'bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300'
+  1264→                    }`}
+  1265→                  >
+  1266→                    {isHigh ? (
+  1267→                      <AlertOctagon className="h-4 w-4 shrink-0 mt-0.5 text-red-500 dark:text-red-400" />
+  1268→                    ) : isMedium ? (
+  1269→                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500 dark:text-amber-400" />
+  1270→                    ) : (
+  1271→                      <Info className="h-4 w-4 shrink-0 mt-0.5 text-sky-500 dark:text-sky-400" />
+  1272→                    )}
+  1273→                    <div className="min-w-0">
+  1274→                      <p className="text-xs font-medium">{a.mensaje}</p>
+  1275→                      <p className={`text-[10px] mt-0.5 font-semibold uppercase ${
+  1276→                        isHigh ? 'text-red-500' : isMedium ? 'text-amber-500' : 'text-sky-500'
+  1277→                      }`}>{a.severidad}</p>
+  1278→                    </div>
+  1279→                  </div>
+  1280→                );
+  1281→              })}
+  1282→            </div>
+  1283→          </CardContent>
+  1284→        </Card>
+  1285→      )}
+  1286→
+  1287→      {/* CSS Keyframes for bar animation + custom scrollbar */}
+  1288→      <style jsx>{`
+  1289→        @keyframes barGrow {
+  1290→          from {
+  1291→            height: 0;
+  1292→            opacity: 0;
+  1293→          }
+  1294→          to {
+  1295→            opacity: 1;
+  1296→          }
+  1297→        }
+  1298→        .custom-scrollbar::-webkit-scrollbar {
+  1299→          width: 4px;
+
+[showing lines 800-1299 of 1315; use offset=1300 with limit to continue reading]

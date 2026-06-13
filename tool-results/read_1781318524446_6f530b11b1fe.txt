@@ -1,0 +1,502 @@
+  1702→      </Card>
+  1703→
+  1704→      {/* ═══════════════════════════════════════════════════════════
+  1705→          2. ENHANCED KPI CARDS - Gradient left border, sparkline bars, skeleton, change indicators
+  1706→          ═══════════════════════════════════════════════════════════ */}
+  1707→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+  1708→        {loading ? (
+  1709→          Array.from({ length: 4 }).map((_, i) => (
+  1710→            <Card key={i} className="shadow-sm border-l-4 border-l-slate-200 dark:border-l-slate-700">
+  1711→              <CardContent className="p-4 sm:p-6">
+  1712→                <div className="animate-pulse space-y-3">
+  1713→                  <div className="flex items-center justify-between">
+  1714→                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-20" />
+  1715→                    <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+  1716→                  </div>
+  1717→                  <div className="h-7 bg-slate-200 dark:bg-slate-700 rounded w-24" />
+  1718→                  <div className="flex items-center gap-2">
+  1719→                    <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-10" />
+  1720→                    <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-16" />
+  1721→                  </div>
+  1722→                </div>
+  1723→              </CardContent>
+  1724→            </Card>
+  1725→          ))
+  1726→        ) : (
+  1727→          kpis.map(kpi => (
+  1728→            <Card key={kpi.label} className={`shadow-sm card-hover-lift bg-gradient-to-br ${kpi.gradient} border-slate-200/60 dark:border-slate-700/40 border-l-4 ${kpi.borderAccent} transition-all duration-200 hover:shadow-md`}>
+  1729→              <CardContent className="p-4 sm:p-6">
+  1730→                <div className="flex items-center justify-between mb-2">
+  1731→                  <div className="flex items-center gap-2">
+  1732→                    <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">{kpi.label}</p>
+  1733→                    <SparklineBars trend={kpi.trend} color={kpi.sparkColor} />
+  1734→                  </div>
+  1735→                  <div className={`p-2 sm:p-2.5 rounded-xl ${kpi.bg} shrink-0 transition-transform duration-200 group-hover:scale-110`}>
+  1736→                    <kpi.icon className={`h-5 w-5 sm:h-5 sm:w-5 ${kpi.color}`} />
+  1737→                  </div>
+  1738→                </div>
+  1739→                <p className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 truncate">{kpi.value}</p>
+  1740→                <div className="flex items-center gap-1.5 mt-2">
+  1741→                  {kpi.trend === 'up' ? (
+  1742→                    <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+  1743→                  ) : kpi.trend === 'down' ? (
+  1744→                    <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+  1745→                  ) : null}
+  1746→                  <span className={`text-xs font-semibold ${kpi.trend === 'up' ? 'text-emerald-600 dark:text-emerald-400' : kpi.trend === 'down' ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
+  1747→                    {kpi.change}
+  1748→                  </span>
+  1749→                  <span className="text-[10px] text-slate-400 dark:text-slate-500">{kpi.changeLabel}</span>
+  1750→                </div>
+  1751→              </CardContent>
+  1752→            </Card>
+  1753→          ))
+  1754→        )}
+  1755→      </div>
+  1756→
+  1757→      {/* ═══════════════════════════════════════════════════════════
+  1758→          8. PAYROLL TREND CHART + AREA DISTRIBUTION MINI-CHART
+  1759→          ═══════════════════════════════════════════════════════════ */}
+  1760→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+  1761→        {/* Mini Payroll Trend Chart */}
+  1762→        <Card className="shadow-sm">
+  1763→          <CardHeader className="pb-3">
+  1764→            <CardTitle className="text-base flex items-center gap-2">
+  1765→              <BarChart3 className="h-4 w-4 text-emerald-500" />
+  1766→              Tendencia de Nómina
+  1767→            </CardTitle>
+  1768→            <CardDescription className="text-xs">Totales mensuales (últimos 12 meses)</CardDescription>
+  1769→          </CardHeader>
+  1770→          <CardContent>
+  1771→            <div className="relative h-44 sm:h-52">
+  1772→              {/* Grid lines */}
+  1773→              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+  1774→                {[...Array(5)].map((_, i) => (
+  1775→                  <div key={i} className="border-b border-slate-100 dark:border-slate-800 relative">
+  1776→                    <span className="absolute -left-0 -top-2.5 text-[9px] text-slate-400 dark:text-slate-500">
+  1777→                      {i === 0 ? '' : `$${Math.round(maxValue - (i * maxValue / 4)).toLocaleString()}`}
+  1778→                    </span>
+  1779→                  </div>
+  1780→                ))}
+  1781→              </div>
+  1782→              {/* Bars */}
+  1783→              <div className="absolute inset-0 flex items-end gap-1 sm:gap-1.5 pl-10 sm:pl-12 pb-5 pt-1">
+  1784→                {PAYROLL_TREND_DATA.map((item) => {
+  1785→                  const heightPct = (item.value / maxValue) * 100;
+  1786→                  return (
+  1787→                    <div key={item.month} className="flex-1 flex flex-col items-center justify-end h-full group">
+  1788→                      {/* Tooltip on hover */}
+  1789→                      <div className="opacity-0 group-hover:opacity-100 transition-opacity mb-1 text-[9px] font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow-sm border border-slate-100 dark:border-slate-700 whitespace-nowrap z-10">
+  1790→                        ${item.value.toLocaleString()}
+  1791→                      </div>
+  1792→                      <div
+  1793→                        className="w-full rounded-t-sm sm:rounded-t transition-all duration-200 group-hover:opacity-90"
+  1794→                        style={{
+  1795→                          height: `${heightPct}%`,
+  1796→                          background: `linear-gradient(to top, oklch(0.6 0.15 160), oklch(0.55 0.12 180))`,
+  1797→                          minHeight: '4px',
+  1798→                        }}
+  1799→                      />
+  1800→                      <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">{item.month}</span>
+  1801→                    </div>
+  1802→                  );
+  1803→                })}
+  1804→              </div>
+  1805→            </div>
+  1806→          </CardContent>
+  1807→        </Card>
+  1808→
+  1809→        {/* Area Distribution Visual */}
+  1810→        <Card className="shadow-sm">
+  1811→          <CardHeader className="pb-3">
+  1812→            <CardTitle className="text-base flex items-center gap-2">
+  1813→              <PieChart className="h-4 w-4 text-teal-500" />
+  1814→              Distribución por Área
+  1815→            </CardTitle>
+  1816→            <CardDescription className="text-xs">Empleados por departamento ({areaTotal} total)</CardDescription>
+  1817→          </CardHeader>
+  1818→          <CardContent className="space-y-4">
+  1819→            {/* Horizontal stacked bar */}
+  1820→            <div className="flex h-6 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+  1821→              {areaDistribution.map((area) => {
+  1822→                const pct = areaTotal > 0 ? (area.count / areaTotal) * 100 : 0;
+  1823→                return (
+  1824→                  <div
+  1825→                    key={area.name}
+  1826→                    className={`${area.color} transition-all duration-300 hover:opacity-80 relative group`}
+  1827→                    style={{ width: `${pct}%`, minWidth: pct > 0 ? '4px' : '0' }}
+  1828→                    title={`${area.name}: ${area.count} (${pct.toFixed(1)}%)`}
+  1829→                  >
+  1830→                    {pct > 12 && (
+  1831→                      <span className="absolute inset-0 flex items-center justify-center text-[8px] font-semibold text-white/90 truncate px-0.5">
+  1832→                        {pct.toFixed(0)}%
+  1833→                      </span>
+  1834→                    )}
+  1835→                  </div>
+  1836→                );
+  1837→              })}
+  1838→            </div>
+  1839→
+  1840→            {/* Legend with mini bars */}
+  1841→            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+  1842→              {areaDistribution.map((area) => {
+  1843→                const pct = areaTotal > 0 ? (area.count / areaTotal) * 100 : 0;
+  1844→                return (
+  1845→                  <div key={area.name} className="flex items-center gap-2">
+  1846→                    <div className={`w-2.5 h-2.5 rounded-sm ${area.color} shrink-0`} />
+  1847→                    <div className="flex-1 min-w-0">
+  1848→                      <div className="flex items-center justify-between">
+  1849→                        <span className="text-xs text-slate-600 dark:text-slate-300 truncate">{area.name}</span>
+  1850→                        <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 ml-1">{area.count}</span>
+  1851→                      </div>
+  1852→                      <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-0.5">
+  1853→                        <div
+  1854→                          className={`h-1.5 rounded-full ${area.color} opacity-70 transition-all duration-300`}
+  1855→                          style={{ width: `${pct}%` }}
+  1856→                        />
+  1857→                      </div>
+  1858→                    </div>
+  1859→                  </div>
+  1860→                );
+  1861→              })}
+  1862→            </div>
+  1863→          </CardContent>
+  1864→        </Card>
+  1865→      </div>
+  1866→
+  1867→      {/* ═══════════════════════════════════════════════════════════
+  1868→          ANNOUNCEMENTS / ALERTS SECTION
+  1869→          ═══════════════════════════════════════════════════════════ */}
+  1870→      <Card className="shadow-sm">
+  1871→        <CardHeader className="pb-3">
+  1872→          <CardTitle className="text-base flex items-center gap-2">
+  1873→            <Megaphone className="h-4 w-4 text-amber-500" />
+  1874→            Avisos del Sistema
+  1875→          </CardTitle>
+  1876→        </CardHeader>
+  1877→        <CardContent>
+  1878→          <div className="space-y-2">
+  1879→            {MOCK_ANNOUNCEMENTS.map((announcement) => (
+  1880→              <div
+  1881→                key={announcement.id}
+  1882→                className={`flex items-start gap-3 p-3 rounded-lg border-l-4 ${getSeverityStyle(announcement.severity)} transition-all duration-200 hover:shadow-sm`}
+  1883→              >
+  1884→                <div className="shrink-0 mt-0.5">
+  1885→                  {getSeverityIcon(announcement.severity)}
+  1886→                </div>
+  1887→                <div className="flex-1 min-w-0">
+  1888→                  <div className="flex items-center gap-2 flex-wrap">
+  1889→                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{announcement.title}</p>
+  1890→                    {getSeverityBadge(announcement.severity)}
+  1891→                  </div>
+  1892→                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">{announcement.message}</p>
+  1893→                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+  1894→                    {new Date(announcement.date).toLocaleDateString('es-SV', { day: '2-digit', month: 'short', year: 'numeric' })}
+  1895→                  </p>
+  1896→                </div>
+  1897→              </div>
+  1898→            ))}
+  1899→          </div>
+  1900→        </CardContent>
+  1901→      </Card>
+  1902→
+  1903→      {/* ═══════════════════════════════════════════════════════════
+  1904→          5. ENHANCED COMPLIANCE SEMAPHORE & 7. ENHANCED VENCIMIENTOS
+  1905→          ═══════════════════════════════════════════════════════════ */}
+  1906→      {dashboardData && (
+  1907→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+  1908→          {/* Enhanced Compliance Semaphore */}
+  1909→          <Card className="shadow-sm overflow-hidden">
+  1910→            {/* Colored top bar based on semaphore */}
+  1911→            <div className={`h-1.5 ${
+  1912→              dashboardData.semaforo === 'verde' ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' :
+  1913→              dashboardData.semaforo === 'amarillo' ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+  1914→              'bg-gradient-to-r from-red-400 to-red-600'
+  1915→            }`} />
+  1916→            <CardHeader className="pb-3">
+  1917→              <CardTitle className="text-base flex items-center gap-2">
+  1918→                <Shield className="h-4 w-4 text-emerald-500" />
+  1919→                Semáforo de Cumplimiento
+  1920→                {/* Prominent animated traffic light */}
+  1921→                <div className="flex items-center gap-1.5 ml-auto p-1.5 bg-slate-900 dark:bg-slate-700 rounded-full shadow-inner">
+  1922→                  <div className={`w-3 h-3 rounded-full transition-all duration-500 ${dashboardData.semaforo === 'rojo' ? 'bg-red-500 shadow-md shadow-red-500/60 animate-pulse' : 'bg-red-900/40'}`} />
+  1923→                  <div className={`w-3 h-3 rounded-full transition-all duration-500 ${dashboardData.semaforo === 'amarillo' ? 'bg-amber-400 shadow-md shadow-amber-400/60 animate-pulse' : 'bg-amber-900/40'}`} />
+  1924→                  <div className={`w-3 h-3 rounded-full transition-all duration-500 ${dashboardData.semaforo === 'verde' ? 'bg-emerald-400 shadow-md shadow-emerald-400/60 animate-pulse' : 'bg-emerald-900/40'}`} />
+  1925→                </div>
+  1926→              </CardTitle>
+  1927→            </CardHeader>
+  1928→            <CardContent className="space-y-3">
+  1929→              {/* Overall compliance progress bar */}
+  1930→              <div className="p-3 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
+  1931→                <div className="flex items-center justify-between mb-1.5">
+  1932→                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Cumplimiento General</span>
+  1933→                  <span className={`text-sm font-bold ${dashboardData.cumplimiento_previsional >= 80 ? 'text-emerald-600 dark:text-emerald-400' : dashboardData.cumplimiento_previsional >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+  1934→                    {dashboardData.cumplimiento_previsional}%
+  1935→                  </span>
+  1936→                </div>
+  1937→                <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+  1938→                  <div
+  1939→                    className={`h-2 rounded-full transition-all duration-700 ${
+  1940→                      dashboardData.cumplimiento_previsional >= 80 ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' :
+  1941→                      dashboardData.cumplimiento_previsional >= 50 ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+  1942→                      'bg-gradient-to-r from-red-400 to-red-600'
+  1943→                    }`}
+  1944→                    style={{ width: `${dashboardData.cumplimiento_previsional}%` }}
+  1945→                  />
+  1946→                </div>
+  1947→              </div>
+  1948→              {/* Compliance items grid with progress bars */}
+  1949→              <div className="grid grid-cols-1 gap-2">
+  1950→                {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => (
+  1951→                  <div key={c.nombre} className="p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+  1952→                    <div className="flex items-center justify-between mb-1.5">
+  1953→                      <div className="flex items-center gap-2">
+  1954→                        {c.presentado ? (
+  1955→                          <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+  1956→                        ) : (
+  1957→                          <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+  1958→                        )}
+  1959→                        <span className="text-sm text-slate-700 dark:text-slate-300">{c.nombre}</span>
+  1960→                      </div>
+  1961→                      <div className="flex items-center gap-2">
+  1962→                        <span className="text-[10px] text-slate-400 dark:text-slate-500">Peso: {c.peso}%</span>
+  1963→                        <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+  1964→                          {c.presentado ? 'Presentado' : 'Pendiente'}
+  1965→                        </Badge>
+  1966→                      </div>
+  1967→                    </div>
+  1968→                    {/* Progress bar for each compliance item */}
+  1969→                    <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+  1970→                      <div
+  1971→                        className={`h-1.5 rounded-full transition-all duration-500 ${c.presentado ? 'bg-emerald-500' : 'bg-red-400'}`}
+  1972→                        style={{ width: c.presentado ? '100%' : `${Math.max(c.peso * 0.3, 5)}%` }}
+  1973→                      />
+  1974→                    </div>
+  1975→                  </div>
+  1976→                ))}
+  1977→              </div>
+  1978→            </CardContent>
+  1979→          </Card>
+  1980→
+  1981→          {/* Enhanced Vencimientos with countdown display and urgency gradient */}
+  1982→          <Card className="shadow-sm overflow-hidden">
+  1983→            <div className="h-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-emerald-500" />
+  1984→            <CardHeader className="pb-3">
+  1985→              <CardTitle className="text-base flex items-center gap-2">
+  1986→                <CalendarDays className="h-4 w-4 text-amber-500" />
+  1987→                Próximos Vencimientos
+  1988→              </CardTitle>
+  1989→            </CardHeader>
+  1990→            <CardContent className="space-y-3">
+  1991→              {dashboardData.vencimientos?.length === 0 ? (
+  1992→                <div className="flex flex-col items-center justify-center py-8">
+  1993→                  <CheckCircle className="h-10 w-10 text-emerald-500 mb-2" />
+  1994→                  <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Todos los pagos al día</p>
+  1995→                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">No hay vencimientos próximos</p>
+  1996→                </div>
+  1997→              ) : (
+  1998→                dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => {
+  1999→                  const urgency = getUrgencyClasses(v.dias);
+  2000→                  return (
+  2001→                    <div key={v.nombre} className={`p-3 rounded-lg border ${urgency.bg} ${urgency.border} transition-all duration-200 hover:shadow-sm`}>
+  2002→                      <div className="flex items-center justify-between">
+  2003→                        <div className="flex items-center gap-3">
+  2004→                          <div className={`p-2 rounded-lg ${urgency.dot === 'bg-red-500' ? 'bg-red-100 dark:bg-red-900/30' : urgency.dot === 'bg-amber-500' ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-emerald-100 dark:bg-emerald-900/30'}`}>
+  2005→                            <CalendarDays className={`h-4 w-4 ${urgency.countdown}`} />
+  2006→                          </div>
+  2007→                          <div>
+  2008→                            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{v.nombre}</p>
+  2009→                            <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(v.fecha).toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' })}</p>
+  2010→                          </div>
+  2011→                        </div>
+  2012→                        <div className="text-center shrink-0 ml-2">
+  2013→                          {v.dias > 0 ? (
+  2014→                            <>
+  2015→                              <p className={`text-2xl sm:text-3xl font-bold ${urgency.countdown}`}>{v.dias}</p>
+  2016→                              <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-0.5">días</p>
+  2017→                            </>
+  2018→                          ) : (
+  2019→                            <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs">Vencido</Badge>
+  2020→                          )}
+  2021→                        </div>
+  2022→                      </div>
+  2023→                      {/* Urgency progress bar */}
+  2024→                      {v.dias > 0 && (
+  2025→                        <div className="mt-2 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+  2026→                          <div
+  2027→                            className={`h-1 rounded-full transition-all duration-500 ${
+  2028→                              v.dias <= 3 ? 'bg-gradient-to-r from-red-400 to-red-600' :
+  2029→                              v.dias <= 7 ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+  2030→                              'bg-gradient-to-r from-emerald-400 to-emerald-600'
+  2031→                            }`}
+  2032→                            style={{ width: `${Math.min((1 - v.dias / 30) * 100, 100)}%` }}
+  2033→                          />
+  2034→                        </div>
+  2035→                      )}
+  2036→                    </div>
+  2037→                  );
+  2038→                })
+  2039→              )}
+  2040→            </CardContent>
+  2041→          </Card>
+  2042→        </div>
+  2043→      )}
+  2044→
+  2045→      {/* ═══════════════════════════════════════════════════════════
+  2046→          4. ENHANCED QUICK ACTIONS + 6. ENHANCED AUDIT TIMELINE
+  2047→          ═══════════════════════════════════════════════════════════ */}
+  2048→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+  2049→        {/* Enhanced Quick Actions */}
+  2050→        <Card className="shadow-sm">
+  2051→          <CardHeader className="pb-3">
+  2052→            <CardTitle className="text-base flex items-center gap-2">
+  2053→              <ListChecks className="h-4 w-4 text-emerald-500" />
+  2054→              Acciones Rápidas
+  2055→            </CardTitle>
+  2056→          </CardHeader>
+  2057→          <CardContent>
+  2058→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  2059→              {visibleActions.map(action => (
+  2060→                <button
+  2061→                  key={action.viewId + action.label}
+  2062→                  onClick={() => onNavigate(action.viewId)}
+  2063→                  className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-all duration-200 cursor-pointer text-left border border-slate-100 dark:border-slate-700/50 hover:border-emerald-200 dark:hover:border-emerald-700/50 hover:shadow-md hover:scale-[1.02] active:scale-[0.98] group"
+  2064→                >
+  2065→                  <div className={`p-2.5 rounded-xl ${action.gradientBg} shrink-0 shadow-sm group-hover:shadow-md transition-all duration-200`}>
+  2066→                    <action.icon className="h-5 w-5 text-white" />
+  2067→                  </div>
+  2068→                  <div className="min-w-0 flex-1">
+  2069→                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{action.label}</p>
+  2070→                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{action.desc}</p>
+  2071→                    {action.count && (
+  2072→                      <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">{action.count}</p>
+  2073→                    )}
+  2074→                  </div>
+  2075→                </button>
+  2076→              ))}
+  2077→            </div>
+  2078→          </CardContent>
+  2079→        </Card>
+  2080→
+  2081→        {/* Enhanced Audit Timeline */}
+  2082→        <Card className="shadow-sm">
+  2083→          <CardHeader className="pb-3">
+  2084→            <CardTitle className="text-base flex items-center gap-2">
+  2085→              <ScrollText className="h-4 w-4 text-emerald-500" />
+  2086→              Actividad Reciente
+  2087→            </CardTitle>
+  2088→          </CardHeader>
+  2089→          <CardContent>
+  2090→            {auditEntries.length === 0 ? (
+  2091→              <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+  2092→                <ScrollText className="h-8 w-8 mb-2" />
+  2093→                <p className="text-sm">Sin actividad reciente</p>
+  2094→              </div>
+  2095→            ) : (
+  2096→              <div className="relative max-h-80 overflow-y-auto pr-1">
+  2097→                {/* Timeline connecting line */}
+  2098→                <div className="absolute left-5 top-3 bottom-3 w-px bg-slate-200 dark:bg-slate-700" />
+  2099→                <div className="space-y-1">
+  2100→                  {auditEntries.map((entry, idx) => (
+  2101→                    <div key={entry.id} className="relative flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-150 group">
+  2102→                      {/* Timeline node */}
+  2103→                      <div className={`relative z-10 p-2 rounded-full shrink-0 mt-0.5 ${getEnhancedAuditColor(entry.nivel_criticidad)} shadow-sm group-hover:shadow-md transition-shadow duration-200`}>
+  2104→                        {getEnhancedAuditIcon(entry.accion)}
+  2105→                      </div>
+  2106→                      {/* Content */}
+  2107→                      <div className="min-w-0 flex-1 pt-0.5">
+  2108→                        <div className="flex items-center gap-2 flex-wrap">
+  2109→                          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+  2110→                            {entry.accion.replace(/_/g, ' ')}
+  2111→                          </p>
+  2112→                          {entry.nivel_criticidad === 'ALTA' && (
+  2113→                            <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] py-0 px-1.5">Alta</Badge>
+  2114→                          )}
+  2115→                        </div>
+  2116→                        {entry.tabla_afectada && (
+  2117→                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+  2118→                            Tabla: <span className="font-mono text-slate-500 dark:text-slate-400">{entry.tabla_afectada}</span>
+  2119→                          </p>
+  2120→                        )}
+  2121→                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+  2122→                          {entry.usuario?.nombre ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : entry.usuario_email || 'Sistema'}
+  2123→                          <span className="mx-1">·</span>
+  2124→                          {new Date(entry.fecha_accion).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+  2125→                        </p>
+  2126→                      </div>
+  2127→                    </div>
+  2128→                  ))}
+  2129→                </div>
+  2130→              </div>
+  2131→            )}
+  2132→          </CardContent>
+  2133→        </Card>
+  2134→      </div>
+  2135→    </div>
+  2136→  );
+  2137→}
+  2138→
+  2139→// ============================================================
+  2140→// PLACEHOLDER VIEW
+  2141→// ============================================================
+  2142→function PlaceholderView({ viewId }: { viewId: ViewId }) {
+  2143→  const label = VIEW_LABELS[viewId] || 'Vista';
+  2144→  return (
+  2145→    <Card className="shadow-sm">
+  2146→      <CardContent className="p-12 text-center">
+  2147→        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 mb-4">
+  2148→          <LayoutDashboard className="h-8 w-8 text-slate-400" />
+  2149→        </div>
+  2150→        <h2 className="text-xl font-semibold text-slate-900">{label}</h2>
+  2151→        <p className="text-slate-500 mt-2 max-w-md mx-auto">
+  2152→          Este módulo se encuentra en desarrollo. Pronto estará disponible con todas sus funcionalidades.
+  2153→        </p>
+  2154→        <Badge variant="secondary" className="mt-4">
+  2155→          Vista {viewId}
+  2156→        </Badge>
+  2157→      </CardContent>
+  2158→    </Card>
+  2159→  );
+  2160→}
+  2161→
+  2162→// ============================================================
+  2163→// MAIN APPLICATION LAYOUT
+  2164→// ============================================================
+  2165→interface AppLayoutProps {
+  2166→  user: UserData;
+  2167→  accessToken: string | null;
+  2168→  onLogout: () => void;
+  2169→}
+  2170→
+  2171→function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
+  2172→  const [currentView, setCurrentView] = useState<ViewId>('dashboard');
+  2173→  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  2174→  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  2175→  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  2176→
+  2177→  // Global keyboard shortcut: Cmd+K / Ctrl+K
+  2178→  useEffect(() => {
+  2179→    const handleKeyDown = (e: KeyboardEvent) => {
+  2180→      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+  2181→        e.preventDefault();
+  2182→        setCommandPaletteOpen(prev => !prev);
+  2183→      }
+  2184→    };
+  2185→    document.addEventListener('keydown', handleKeyDown);
+  2186→    return () => document.removeEventListener('keydown', handleKeyDown);
+  2187→  }, []);
+  2188→
+  2189→  // Handle employee selection from command palette
+  2190→  const handleCommandPaletteEmployee = useCallback((employeeId: string) => {
+  2191→    setSelectedEmployeeId(employeeId);
+  2192→    setCurrentView('02-02');
+  2193→  }, []);
+  2194→
+  2195→  const renderView = () => {
+  2196→    if (currentView === 'dashboard') {
+  2197→      return <WelcomeDashboard user={user} accessToken={accessToken} onNavigate={setCurrentView} />;
+  2198→    }
+  2199→    switch (currentView) {
+  2200→      case '02-01':
+  2201→        return <EmployeeDirectory accessToken={accessToken} userRole={user.rol} onNavigateToDetail={(id) => { setSelectedEmployeeId(id); setCurrentView('02-02'); }} onNavigateToNew={() => setCurrentView('02-03')} />;
+
+[showing lines 1702-2201 of 2434; use offset=2202 with limit to continue reading]

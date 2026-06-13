@@ -1,0 +1,1063 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  ArrowLeft, Edit2, Save, X, FileText, Briefcase, Heart, DollarSign,
+     6→  Palmtree, FolderOpen, Loader2, AlertCircle, Plus, Clock,
+     7→  User, CalendarDays, AlertTriangle, Printer, MapPin, Phone, Mail,
+     8→  Shield, Building2, Hash, CreditCard, TrendingUp, ChevronDown,
+     9→  ChevronUp, Globe, Droplets, Users, Award
+    10→} from 'lucide-react';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Input } from '@/components/ui/input';
+    13→import { Label } from '@/components/ui/label';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    16→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    17→import {
+    18→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    19→} from '@/components/ui/table';
+    20→import {
+    21→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    22→} from '@/components/ui/select';
+    23→import {
+    24→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+    25→} from '@/components/ui/dialog';
+    26→import { Separator } from '@/components/ui/separator';
+    27→import { Skeleton } from '@/components/ui/skeleton';
+    28→import { useToast } from '@/hooks/use-toast';
+    29→
+    30→type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+    31→
+    32→interface EmployeeDetailProps {
+    33→  empleadoId: string;
+    34→  onBack: () => void;
+    35→  userRole: UserRole;
+    36→  accessToken: string | null;
+    37→}
+    38→
+    39→interface EmpleadoDetail {
+    40→  id: string;
+    41→  codigo_empleado: string;
+    42→  primer_nombre: string;
+    43→  segundo_nombre: string | null;
+    44→  primer_apellido: string;
+    45→  segundo_apellido: string | null;
+    46→  apellido_casada: string | null;
+    47→  dui: string;
+    48→  nit: string | null;
+    49→  fecha_nacimiento: string | null;
+    50→  genero: string | null;
+    51→  estado_civil: string | null;
+    52→  direccion: string | null;
+    53→  telefono: string | null;
+    54→  email_personal: string | null;
+    55→  numero_isss: string | null;
+    56→  numero_afp: string | null;
+    57→  afp_administradora: string | null;
+    58→  tipo_sangre: string | null;
+    59→  contacto_emergencia_nombre: string | null;
+    60→  contacto_emergencia_telefono: string | null;
+    61→  contacto_emergencia_relacion: string | null;
+    62→  nacionalidad: string;
+    63→  fecha_ingreso: string;
+    64→  fecha_salida: string | null;
+    65→  salario_base: number;
+    66→  estado: string;
+    67→  area: { id: string; nombre: string; codigo: string } | null;
+    68→  perfil_puesto: { id: string; nombre_puesto: string; codigo: string; banda_salarial: { nombre: string; salario_minimo: number; salario_maximo: number } | null } | null;
+    69→  contratos: Array<{
+    70→    id: string; tipo_contrato: string; salario_base_contrato: number; tipo_jornada: string;
+    71→    fecha_inicio: string; fecha_fin: string | null; activo: boolean; observaciones: string | null;
+    72→    perfil_puesto: { nombre_puesto: string } | null;
+    73→  }>;
+    74→  vacaciones: Array<{
+    75→    id: string; anio: number; dias_derecho: number; dias_tomados: number;
+    76→    dias_pendientes: number; dias_vendidos: number; estado: string;
+    77→  }>;
+    78→  documentos: Array<{
+    79→    id: string; tipo_documento: string; nombre_archivo: string; descripcion: string | null; fecha_creacion: string;
+    80→  }>;
+    81→  incidencias: Array<{
+    82→    id: string; tipo: string; estado: string; fecha_inicio: string; fecha_fin: string | null;
+    83→    cantidad_horas: number | null; monto: number | null; descripcion: string | null;
+    84→  }>;
+    85→  cambios_salariales: Array<{
+    86→    id: string; salario_anterior: number; salario_nuevo: number; tipo_cambio: string;
+    87→    motivo: string | null; fecha_cambio: string;
+    88→  }>;
+    89→  usuario: { id: string; email: string; rol: string } | null;
+    90→}
+    91→
+    92→/* ─── circular progress ring ─── */
+    93→function CircularProgress({ value, max, size = 80, strokeWidth = 6, color = 'emerald' }: {
+    94→  value: number; max: number; size?: number; strokeWidth?: number; color?: string;
+    95→}) {
+    96→  const radius = (size - strokeWidth) / 2;
+    97→  const circumference = radius * 2 * Math.PI;
+    98→  const pct = max > 0 ? Math.min(value / max, 1) : 0;
+    99→  const offset = circumference - pct * circumference;
+   100→  const colorMap: Record<string, string> = {
+   101→    emerald: 'text-emerald-500',
+   102→    amber: 'text-amber-500',
+   103→    sky: 'text-sky-500',
+   104→    purple: 'text-purple-500',
+   105→  };
+   106→  const strokeClass = colorMap[color] || colorMap.emerald;
+   107→  return (
+   108→    <svg width={size} height={size} className="-rotate-90">
+   109→      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className="text-slate-200 dark:text-slate-700" />
+   110→      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" className={`${strokeClass} transition-all duration-700`} />
+   111→    </svg>
+   112→  );
+   113→}
+   114→
+   115→export default function EmployeeDetail({ empleadoId, onBack, userRole, accessToken }: EmployeeDetailProps) {
+   116→  const [empleado, setEmpleado] = useState<EmpleadoDetail | null>(null);
+   117→  const [loading, setLoading] = useState(true);
+   118→  const [editing, setEditing] = useState(false);
+   119→  const [editData, setEditData] = useState<Record<string, unknown>>({});
+   120→  const [saving, setSaving] = useState(false);
+   121→  const [newContractOpen, setNewContractOpen] = useState(false);
+   122→  const [contractData, setContractData] = useState({ tipo_contrato: 'INDEFINIDO', salario_base_contrato: '', tipo_jornada: 'COMPLETA', fecha_inicio: '', fecha_fin: '', observaciones: '' });
+   123→  const { toast } = useToast();
+   124→
+   125→  const fetchEmpleado = useCallback(async () => {
+   126→    setLoading(true);
+   127→    try {
+   128→      const res = await fetch(`/api/empleados/${empleadoId}`, {
+   129→        headers: { Authorization: `Bearer ${accessToken}` },
+   130→      });
+   131→      const data = await res.json();
+   132→      if (res.ok) {
+   133→        setEmpleado(data.data);
+   134→      }
+   135→    } catch (err) {
+   136→      console.error('Error fetching employee:', err);
+   137→    } finally {
+   138→      setLoading(false);
+   139→    }
+   140→  }, [empleadoId, accessToken]);
+   141→
+   142→  useEffect(() => { fetchEmpleado(); }, [fetchEmpleado]);
+   143→
+   144→  const canEdit = userRole === 'ADMIN' || userRole === 'ANALISTA';
+   145→  const canEditOwn = userRole === 'EMPLEADO';
+   146→
+   147→  const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('es-SV') : '—';
+   148→  const formatSalary = (amount: number) => `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+   149→  const getNombreCompleto = () => {
+   150→    if (!empleado) return '';
+   151→    return `${empleado.primer_nombre}${empleado.segundo_nombre ? ' ' + empleado.segundo_nombre : ''} ${empleado.primer_apellido}${empleado.segundo_apellido ? ' ' + empleado.segundo_apellido : ''}`;
+   152→  };
+   153→
+   154→  const getInitials = () => {
+   155→    if (!empleado) return '';
+   156→    const first = empleado.primer_nombre?.[0] || '';
+   157→    const last = empleado.primer_apellido?.[0] || '';
+   158→    return `${first}${last}`.toUpperCase();
+   159→  };
+   160→
+   161→  const handleEdit = () => {
+   162→    if (!empleado) return;
+   163→    setEditData({
+   164→      primer_nombre: empleado.primer_nombre,
+   165→      segundo_nombre: empleado.segundo_nombre || '',
+   166→      primer_apellido: empleado.primer_apellido,
+   167→      segundo_apellido: empleado.segundo_apellido || '',
+   168→      apellido_casada: empleado.apellido_casada || '',
+   169→      dui: empleado.dui,
+   170→      nit: empleado.nit || '',
+   171→      genero: empleado.genero || '',
+   172→      estado_civil: empleado.estado_civil || '',
+   173→      direccion: empleado.direccion || '',
+   174→      telefono: empleado.telefono || '',
+   175→      email_personal: empleado.email_personal || '',
+   176→      fecha_nacimiento: empleado.fecha_nacimiento ? new Date(empleado.fecha_nacimiento).toISOString().slice(0, 10) : '',
+   177→      numero_isss: empleado.numero_isss || '',
+   178→      numero_afp: empleado.numero_afp || '',
+   179→      afp_administradora: empleado.afp_administradora || '',
+   180→      tipo_sangre: empleado.tipo_sangre || '',
+   181→      contacto_emergencia_nombre: empleado.contacto_emergencia_nombre || '',
+   182→      contacto_emergencia_telefono: empleado.contacto_emergencia_telefono || '',
+   183→      contacto_emergencia_relacion: empleado.contacto_emergencia_relacion || '',
+   184→    });
+   185→    setEditing(true);
+   186→  };
+   187→
+   188→  const handleSave = async () => {
+   189→    setSaving(true);
+   190→    try {
+   191→      const res = await fetch(`/api/empleados/${empleadoId}`, {
+   192→        method: 'PUT',
+   193→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   194→        body: JSON.stringify(editData),
+   195→      });
+   196→      const data = await res.json();
+   197→      if (res.ok) {
+   198→        toast({ title: 'Empleado actualizado', description: 'Los datos han sido guardados correctamente' });
+   199→        setEditing(false);
+   200→        fetchEmpleado();
+   201→      } else {
+   202→        toast({ title: 'Error', description: data.error || 'Error al actualizar', variant: 'destructive' });
+   203→      }
+   204→    } catch {
+   205→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   206→    } finally {
+   207→      setSaving(false);
+   208→    }
+   209→  };
+   210→
+   211→  const handleCreateContract = async () => {
+   212→    setSaving(true);
+   213→    try {
+   214→      const res = await fetch(`/api/empleados/${empleadoId}/contratos`, {
+   215→        method: 'POST',
+   216→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   217→        body: JSON.stringify({
+   218→          ...contractData,
+   219→          salario_base_contrato: parseFloat(contractData.salario_base_contrato),
+   220→          fecha_fin: contractData.fecha_fin || null,
+   221→        }),
+   222→      });
+   223→      const data = await res.json();
+   224→      if (res.ok) {
+   225→        toast({ title: 'Contrato creado', description: 'El nuevo contrato ha sido registrado' });
+   226→        setNewContractOpen(false);
+   227→        setContractData({ tipo_contrato: 'INDEFINIDO', salario_base_contrato: '', tipo_jornada: 'COMPLETA', fecha_inicio: '', fecha_fin: '', observaciones: '' });
+   228→        fetchEmpleado();
+   229→      } else {
+   230→        toast({ title: 'Error', description: data.error || 'Error al crear contrato', variant: 'destructive' });
+   231→      }
+   232→    } catch {
+   233→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   234→    } finally {
+   235→      setSaving(false);
+   236→    }
+   237→  };
+   238→
+   239→  /* ─── Loading ─── */
+   240→  if (loading) {
+   241→    return (
+   242→      <div className="space-y-4">
+   243→        <Skeleton className="h-10 w-48" />
+   244→        <Skeleton className="h-48 w-full rounded-xl" />
+   245→        <Skeleton className="h-8 w-full" />
+   246→        <Skeleton className="h-64 w-full" />
+   247→      </div>
+   248→    );
+   249→  }
+   250→
+   251→  /* ─── Not found ─── */
+   252→  if (!empleado) {
+   253→    return (
+   254→      <Card className="shadow-sm">
+   255→        <CardContent className="p-12 text-center">
+   256→          <AlertCircle className="h-10 w-10 text-slate-400 mx-auto mb-2" />
+   257→          <p className="text-slate-600">Empleado no encontrado</p>
+   258→          <Button variant="outline" className="mt-4" onClick={onBack}>
+   259→            <ArrowLeft className="h-4 w-4 mr-1" /> Volver
+   260→          </Button>
+   261→        </CardContent>
+   262→      </Card>
+   263→    );
+   264→  }
+   265→
+   266→  const activeContract = empleado.contratos.find(c => c.activo);
+   267→  const totalVacPendientes = empleado.vacaciones.reduce((s, v) => s + v.dias_pendientes, 0);
+   268→  const totalVacDerecho = empleado.vacaciones.reduce((s, v) => s + v.dias_derecho, 0);
+   269→
+   270→  /* ─── InfoField with icon ─── */
+   271→  const InfoField = ({ label, value, icon }: { label: string; value: string | null | undefined; icon?: React.ReactNode }) => (
+   272→    <div className="flex items-start gap-2.5 py-2">
+   273→      {icon && <span className="mt-0.5 text-slate-400 shrink-0">{icon}</span>}
+   274→      <div className="min-w-0">
+   275→        <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wider">{label}</p>
+   276→        <p className="text-sm text-slate-800 dark:text-slate-200 mt-0.5 font-medium">{value || '—'}</p>
+   277→      </div>
+   278→    </div>
+   279→  );
+   280→
+   281→  const EditField = ({ label, field, type = 'text' }: { label: string; field: string; type?: string }) => (
+   282→    <div>
+   283→      <Label className="text-xs">{label}</Label>
+   284→      <Input
+   285→        type={type}
+   286→        value={String(editData[field] || '')}
+   287→        onChange={e => setEditData(prev => ({ ...prev, [field]: e.target.value }))}
+   288→        className="h-8 text-sm"
+   289→      />
+   290→    </div>
+   291→  );
+   292→
+   293→  return (
+   294→    <div className="space-y-5">
+   295→      {/* ═══════════════════════════════════════════
+   296→          ENHANCED HEADER PROFILE CARD
+   297→         ═══════════════════════════════════════════ */}
+   298→      <Card className="overflow-hidden border-0 shadow-lg">
+   299→        {/* Gradient banner */}
+   300→        <div className="h-28 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-700 relative">
+   301→          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjA4KSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgZmlsbD0idXJsKCNnKSIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIvPjwvc3ZnPg==')] opacity-60" />
+   302→        </div>
+   303→        <div className="relative px-6 pb-5">
+   304→          {/* Avatar */}
+   305→          <div className="-mt-14 mb-4 flex items-end justify-between">
+   306→            <div className="flex items-end gap-4">
+   307→              <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 border-4 border-white shadow-lg flex items-center justify-center">
+   308→                <span className="text-3xl font-bold text-white">{getInitials()}</span>
+   309→              </div>
+   310→              <div className="pb-1">
+   311→                <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{getNombreCompleto()}</h2>
+   312→                <div className="flex items-center gap-2 mt-1">
+   313→                  <span className="text-sm text-slate-500 dark:text-slate-400">
+   314→                    {empleado.perfil_puesto?.nombre_puesto || empleado.area?.nombre || 'Sin puesto asignado'}
+   315→                  </span>
+   316→                  <span className="text-slate-300">•</span>
+   317→                  <span className="text-sm text-slate-500 dark:text-slate-400">{empleado.area?.nombre || 'Sin área'}</span>
+   318→                  <Badge className={`ml-2 text-xs ${empleado.estado === 'ACTIVO' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+   319→                    {empleado.estado}
+   320→                  </Badge>
+   321→                </div>
+   322→              </div>
+   323→            </div>
+   324→            <div className="flex items-center gap-2 pb-1">
+   325→              <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700" onClick={() => window.print()}>
+   326→                <Printer className="h-4 w-4 mr-1" /> Imprimir
+   327→              </Button>
+   328→              <Button variant="outline" size="sm" onClick={onBack}>
+   329→                <ArrowLeft className="h-4 w-4 mr-1" /> Volver
+   330→              </Button>
+   331→              {(canEdit || canEditOwn) && !editing && (
+   332→                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleEdit}>
+   333→                  <Edit2 className="h-4 w-4 mr-1" /> Editar
+   334→                </Button>
+   335→              )}
+   336→              {editing && (
+   337→                <div className="flex gap-2">
+   338→                  <Button variant="outline" size="sm" onClick={() => setEditing(false)}><X className="h-4 w-4 mr-1" /> Cancelar</Button>
+   339→                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleSave} disabled={saving}>
+   340→                    {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />} Guardar
+   341→                  </Button>
+   342→                </div>
+   343→              )}
+   344→            </div>
+   345→          </div>
+   346→
+   347→          {/* Quick info row */}
+   348→          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-2">
+   349→            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+   350→              <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+   351→                <Hash className="h-4 w-4 text-emerald-600" />
+   352→              </div>
+   353→              <div>
+   354→                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Código</p>
+   355→                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{empleado.codigo_empleado}</p>
+   356→              </div>
+   357→            </div>
+   358→            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+   359→              <div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+   360→                <CreditCard className="h-4 w-4 text-amber-600" />
+   361→              </div>
+   362→              <div>
+   363→                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">DUI</p>
+   364→                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{empleado.dui}</p>
+   365→              </div>
+   366→            </div>
+   367→            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+   368→              <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+   369→                <DollarSign className="h-4 w-4 text-emerald-600" />
+   370→              </div>
+   371→              <div>
+   372→                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Salario</p>
+   373→                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{formatSalary(empleado.salario_base)}</p>
+   374→              </div>
+   375→            </div>
+   376→            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+   377→              <div className="h-9 w-9 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+   378→                <CalendarDays className="h-4 w-4 text-sky-600" />
+   379→              </div>
+   380→              <div>
+   381→                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Fecha Ingreso</p>
+   382→                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{formatDate(empleado.fecha_ingreso)}</p>
+   383→              </div>
+   384→            </div>
+   385→          </div>
+   386→        </div>
+   387→      </Card>
+   388→
+   389→      {/* ═══════════════════════════════════════════
+   390→          ENHANCED TAB NAVIGATION
+   391→         ═══════════════════════════════════════════ */}
+   392→      <Tabs defaultValue="general" className="space-y-4">
+   393→        <div className="border-b border-slate-200 dark:border-slate-700">
+   394→          <TabsList className="bg-transparent h-auto p-0 gap-0 w-full justify-start overflow-x-auto">
+   395→            <TabsTrigger value="general" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+   396→              <User className="h-4 w-4" /> General
+   397→            </TabsTrigger>
+   398→            <TabsTrigger value="contratos" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+   399→              <FileText className="h-4 w-4" /> Contratos
+   400→            </TabsTrigger>
+   401→            <TabsTrigger value="salario" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+   402→              <DollarSign className="h-4 w-4" /> Salario
+   403→            </TabsTrigger>
+   404→            <TabsTrigger value="vacaciones" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+   405→              <CalendarDays className="h-4 w-4" /> Vacaciones
+   406→            </TabsTrigger>
+   407→            <TabsTrigger value="incidencias" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+   408→              <AlertTriangle className="h-4 w-4" /> Incidencias
+   409→            </TabsTrigger>
+   410→            <TabsTrigger value="documentos" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+   411→              <FolderOpen className="h-4 w-4" /> Documentos
+   412→            </TabsTrigger>
+   413→          </TabsList>
+   414→        </div>
+   415→
+   416→        {/* ═══════════════════════════════════════════
+   417→            TAB: GENERAL — Grouped info cards
+   418→           ═══════════════════════════════════════════ */}
+   419→        <TabsContent value="general">
+   420→          {editing ? (
+   421→            <Card className="shadow-sm border-emerald-200">
+   422→              <CardHeader className="pb-3 bg-emerald-50/50 dark:bg-emerald-900/10">
+   423→                <CardTitle className="text-base flex items-center gap-2">
+   424→                  <Edit2 className="h-4 w-4 text-emerald-600" />
+   425→                  Editar Datos Personales
+   426→                </CardTitle>
+   427→              </CardHeader>
+   428→              <CardContent className="pt-4">
+   429→                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   430→                  <EditField label="Primer Nombre" field="primer_nombre" />
+   431→                  <EditField label="Segundo Nombre" field="segundo_nombre" />
+   432→                  <EditField label="Primer Apellido" field="primer_apellido" />
+   433→                  <EditField label="Segundo Apellido" field="segundo_apellido" />
+   434→                  <EditField label="Apellido de Casada" field="apellido_casada" />
+   435→                  <EditField label="DUI" field="dui" />
+   436→                  <EditField label="NIT" field="nit" />
+   437→                  <EditField label="Fecha de Nacimiento" field="fecha_nacimiento" type="date" />
+   438→                  <div>
+   439→                    <Label className="text-xs">Género</Label>
+   440→                    <Select value={String(editData.genero || '')} onValueChange={v => setEditData(p => ({ ...p, genero: v }))}>
+   441→                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+   442→                      <SelectContent>
+   443→                        <SelectItem value="">Seleccionar</SelectItem>
+   444→                        <SelectItem value="MASCULINO">Masculino</SelectItem>
+   445→                        <SelectItem value="FEMENINO">Femenino</SelectItem>
+   446→                      </SelectContent>
+   447→                    </Select>
+   448→                  </div>
+   449→                  <EditField label="Teléfono" field="telefono" />
+   450→                  <EditField label="Email Personal" field="email_personal" type="email" />
+   451→                  <div className="sm:col-span-2 lg:col-span-3">
+   452→                    <EditField label="Dirección" field="direccion" />
+   453→                  </div>
+   454→                  <Separator className="sm:col-span-2 lg:col-span-3" />
+   455→                  <EditField label="Contacto Emergencia Nombre" field="contacto_emergencia_nombre" />
+   456→                  <EditField label="Contacto Emergencia Teléfono" field="contacto_emergencia_telefono" />
+   457→                  <EditField label="Contacto Emergencia Relación" field="contacto_emergencia_relacion" />
+   458→                </div>
+   459→              </CardContent>
+   460→            </Card>
+   461→          ) : (
+   462→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   463→              {/* Datos Personales */}
+   464→              <Card className="shadow-sm border-l-4 border-l-emerald-500">
+   465→                <CardHeader className="pb-2">
+   466→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+   467→                    <User className="h-4 w-4" /> Datos Personales
+   468→                  </CardTitle>
+   469→                </CardHeader>
+   470→                <CardContent className="pt-0 space-y-0.5">
+   471→                  <InfoField label="Primer Nombre" value={empleado.primer_nombre} icon={<User className="h-3.5 w-3.5" />} />
+   472→                  <InfoField label="Segundo Nombre" value={empleado.segundo_nombre} icon={<User className="h-3.5 w-3.5" />} />
+   473→                  <InfoField label="Primer Apellido" value={empleado.primer_apellido} icon={<User className="h-3.5 w-3.5" />} />
+   474→                  <InfoField label="Segundo Apellido" value={empleado.segundo_apellido} icon={<User className="h-3.5 w-3.5" />} />
+   475→                  <InfoField label="Apellido de Casada" value={empleado.apellido_casada} icon={<User className="h-3.5 w-3.5" />} />
+   476→                  <InfoField label="DUI" value={empleado.dui} icon={<CreditCard className="h-3.5 w-3.5" />} />
+   477→                  <InfoField label="NIT" value={empleado.nit} icon={<Hash className="h-3.5 w-3.5" />} />
+   478→                  <InfoField label="Fecha Nacimiento" value={formatDate(empleado.fecha_nacimiento)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+   479→                  <InfoField label="Género" value={empleado.genero} icon={<User className="h-3.5 w-3.5" />} />
+   480→                  <InfoField label="Estado Civil" value={empleado.estado_civil} icon={<Users className="h-3.5 w-3.5" />} />
+   481→                  <InfoField label="Nacionalidad" value={empleado.nacionalidad} icon={<Globe className="h-3.5 w-3.5" />} />
+   482→                </CardContent>
+   483→              </Card>
+   484→
+   485→              {/* Datos Laborales */}
+   486→              <Card className="shadow-sm border-l-4 border-l-amber-500">
+   487→                <CardHeader className="pb-2">
+   488→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-700 dark:text-amber-400">
+   489→                    <Briefcase className="h-4 w-4" /> Datos Laborales
+   490→                  </CardTitle>
+   491→                </CardHeader>
+   492→                <CardContent className="pt-0 space-y-0.5">
+   493→                  <InfoField label="Código Empleado" value={empleado.codigo_empleado} icon={<Hash className="h-3.5 w-3.5" />} />
+   494→                  <InfoField label="Puesto" value={empleado.perfil_puesto?.nombre_puesto} icon={<Briefcase className="h-3.5 w-3.5" />} />
+   495→                  <InfoField label="Área" value={empleado.area?.nombre} icon={<Building2 className="h-3.5 w-3.5" />} />
+   496→                  <InfoField label="Fecha Ingreso" value={formatDate(empleado.fecha_ingreso)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+   497→                  <InfoField label="Fecha Salida" value={formatDate(empleado.fecha_salida)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+   498→                  <InfoField label="Estado" value={empleado.estado} icon={<Shield className="h-3.5 w-3.5" />} />
+   499→                  <InfoField label="Banda Salarial" value={empleado.perfil_puesto?.banda_salarial?.nombre} icon={<Award className="h-3.5 w-3.5" />} />
+   500→                </CardContent>
+   501→              </Card>
+   502→
+   503→              {/* Contacto */}
+   504→              <Card className="shadow-sm border-l-4 border-l-sky-500">
+   505→                <CardHeader className="pb-2">
+   506→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-sky-700 dark:text-sky-400">
+   507→                    <Phone className="h-4 w-4" /> Contacto
+   508→                  </CardTitle>
+   509→                </CardHeader>
+   510→                <CardContent className="pt-0 space-y-0.5">
+   511→                  <InfoField label="Teléfono" value={empleado.telefono} icon={<Phone className="h-3.5 w-3.5" />} />
+   512→                  <InfoField label="Email Personal" value={empleado.email_personal} icon={<Mail className="h-3.5 w-3.5" />} />
+   513→                  <Separator className="my-2" />
+   514→                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">Contacto de Emergencia</p>
+   515→                  <InfoField label="Nombre" value={empleado.contacto_emergencia_nombre} icon={<User className="h-3.5 w-3.5" />} />
+   516→                  <InfoField label="Teléfono" value={empleado.contacto_emergencia_telefono} icon={<Phone className="h-3.5 w-3.5" />} />
+   517→                  <InfoField label="Relación" value={empleado.contacto_emergencia_relacion} icon={<Users className="h-3.5 w-3.5" />} />
+   518→                </CardContent>
+   519→              </Card>
+   520→
+   521→              {/* Ubicación + Previsional */}
+   522→              <Card className="shadow-sm border-l-4 border-l-purple-500">
+   523→                <CardHeader className="pb-2">
+   524→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-purple-700 dark:text-purple-400">
+   525→                    <MapPin className="h-4 w-4" /> Ubicación y Previsional
+   526→                  </CardTitle>
+   527→                </CardHeader>
+   528→                <CardContent className="pt-0 space-y-0.5">
+   529→                  <InfoField label="Dirección" value={empleado.direccion} icon={<MapPin className="h-3.5 w-3.5" />} />
+   530→                  <Separator className="my-2" />
+   531→                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">Datos Previsionales</p>
+   532→                  <InfoField label="Número ISSS" value={empleado.numero_isss} icon={<Shield className="h-3.5 w-3.5" />} />
+   533→                  <InfoField label="Número AFP (NUP)" value={empleado.numero_afp} icon={<Shield className="h-3.5 w-3.5" />} />
+   534→                  <InfoField label="AFP Administradora" value={empleado.afp_administradora} icon={<Building2 className="h-3.5 w-3.5" />} />
+   535→                  <InfoField label="Tipo de Sangre" value={empleado.tipo_sangre} icon={<Droplets className="h-3.5 w-3.5" />} />
+   536→                </CardContent>
+   537→              </Card>
+   538→            </div>
+   539→          )}
+   540→        </TabsContent>
+   541→
+   542→        {/* ═══════════════════════════════════════════
+   543→            TAB: CONTRATOS — Timeline + status badges
+   544→           ═══════════════════════════════════════════ */}
+   545→        <TabsContent value="contratos">
+   546→          <div className="space-y-4">
+   547→            {/* Active Contract Highlighted */}
+   548→            <Card className={`shadow-sm ${activeContract ? 'border-emerald-300 border-2 bg-emerald-50/30 dark:bg-emerald-900/10' : ''}`}>
+   549→              <CardHeader className="pb-3">
+   550→                <div className="flex items-center justify-between">
+   551→                  <CardTitle className="text-base flex items-center gap-2">
+   552→                    <FileText className="h-4 w-4 text-emerald-600" />
+   553→                    Contrato Vigente
+   554→                    {activeContract && (
+   555→                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs ml-2">Activo</Badge>
+   556→                    )}
+   557→                  </CardTitle>
+   558→                  {canEdit && (
+   559→                    <Button size="sm" variant="outline" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => setNewContractOpen(true)}>
+   560→                      <Plus className="h-4 w-4 mr-1" /> Nuevo Contrato
+   561→                    </Button>
+   562→                  )}
+   563→                </div>
+   564→              </CardHeader>
+   565→              <CardContent>
+   566→                {activeContract ? (
+   567→                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   568→                    <InfoField label="Tipo de Contrato" value={activeContract.tipo_contrato} icon={<FileText className="h-3.5 w-3.5" />} />
+   569→                    <InfoField label="Salario Base" value={formatSalary(activeContract.salario_base_contrato)} icon={<DollarSign className="h-3.5 w-3.5" />} />
+   570→                    <InfoField label="Jornada" value={activeContract.tipo_jornada} icon={<Clock className="h-3.5 w-3.5" />} />
+   571→                    <InfoField label="Fecha Inicio" value={formatDate(activeContract.fecha_inicio)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+   572→                    <InfoField label="Fecha Fin" value={activeContract.fecha_fin ? formatDate(activeContract.fecha_fin) : 'Indefinido'} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+   573→                    <InfoField label="Puesto" value={activeContract.perfil_puesto?.nombre_puesto || '—'} icon={<Briefcase className="h-3.5 w-3.5" />} />
+   574→                    {activeContract.observaciones && (
+   575→                      <div className="sm:col-span-2 lg:col-span-3">
+   576→                        <InfoField label="Observaciones" value={activeContract.observaciones} icon={<FileText className="h-3.5 w-3.5" />} />
+   577→                      </div>
+   578→                    )}
+   579→                  </div>
+   580→                ) : (
+   581→                  <div className="flex flex-col items-center py-10 text-slate-400">
+   582→                    <FileText className="h-10 w-10 mb-2" />
+   583→                    <p className="text-sm font-medium">No hay contrato vigente</p>
+   584→                  </div>
+   585→                )}
+   586→              </CardContent>
+   587→            </Card>
+   588→
+   589→            {/* Contract History Timeline */}
+   590→            <Card className="shadow-sm">
+   591→              <CardHeader className="pb-3">
+   592→                <CardTitle className="text-base flex items-center gap-2">
+   593→                  <Clock className="h-4 w-4 text-slate-500" />
+   594→                  Historial de Contratos
+   595→                </CardTitle>
+   596→              </CardHeader>
+   597→              <CardContent>
+   598→                {empleado.contratos.length === 0 ? (
+   599→                  <p className="text-sm text-slate-500 text-center py-6">Sin contratos registrados</p>
+   600→                ) : (
+   601→                  <div className="relative space-y-0">
+   602→                    {/* Timeline line */}
+   603→                    <div className="absolute left-5 top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700" />
+   604→                    {empleado.contratos.map((c, idx) => (
+   605→                      <div key={c.id} className="relative flex items-start gap-4 py-3">
+   606→                        {/* Timeline dot */}
+   607→                        <div className={`relative z-10 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+   608→                          c.activo
+   609→                            ? 'border-emerald-500 bg-emerald-500'
+   610→                            : 'border-slate-300 bg-white dark:bg-slate-800'
+   611→                        }`}>
+   612→                          {c.activo && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+   613→                        </div>
+   614→                        {/* Content card */}
+   615→                        <div className={`flex-1 p-3 rounded-lg border transition-colors ${
+   616→                          c.activo
+   617→                            ? 'border-emerald-200 bg-emerald-50/50 dark:bg-emerald-900/10'
+   618→                            : 'border-slate-100 bg-slate-50/50 dark:bg-slate-800/30'
+   619→                        }`}>
+   620→                          <div className="flex items-center justify-between">
+   621→                            <div className="flex items-center gap-2">
+   622→                              <Badge variant={c.activo ? 'default' : 'secondary'} className={c.activo ? 'bg-emerald-100 text-emerald-700' : 'text-xs'}>
+   623→                                {c.activo ? 'Vigente' : 'Finalizado'}
+   624→                              </Badge>
+   625→                              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{c.tipo_contrato}</span>
+   626→                            </div>
+   627→                            <span className="text-sm font-mono text-emerald-600 font-semibold">{formatSalary(c.salario_base_contrato)}</span>
+   628→                          </div>
+   629→                          <div className="flex items-center gap-4 mt-1.5 text-xs text-slate-500">
+   630→                            <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{formatDate(c.fecha_inicio)} — {c.fecha_fin ? formatDate(c.fecha_fin) : 'Indefinido'}</span>
+   631→                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{c.tipo_jornada}</span>
+   632→                            {c.perfil_puesto && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{c.perfil_puesto.nombre_puesto}</span>}
+   633→                          </div>
+   634→                        </div>
+   635→                      </div>
+   636→                    ))}
+   637→                  </div>
+   638→                )}
+   639→
+   640→                {/* Salary mini chart (sparkline) */}
+   641→                {empleado.contratos.length > 1 && (
+   642→                  <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+   643→                    <p className="text-xs text-slate-400 font-medium mb-2">Evolución Salarial en Contratos</p>
+   644→                    <div className="flex items-end gap-1 h-16">
+   645→                      {empleado.contratos.map((c, idx) => {
+   646→                        const maxSal = Math.max(...empleado.contratos.map(x => x.salario_base_contrato));
+   647→                        const minSal = Math.min(...empleado.contratos.map(x => x.salario_base_contrato));
+   648→                        const range = maxSal - minSal || 1;
+   649→                        const height = 20 + ((c.salario_base_contrato - minSal) / range) * 80;
+   650→                        return (
+   651→                          <div key={c.id} className="flex-1 flex flex-col items-center gap-1">
+   652→                            <div
+   653→                              className={`w-full rounded-t ${c.activo ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'} transition-all`}
+   654→                              style={{ height: `${height}%` }}
+   655→                            />
+   656→                            <span className="text-[9px] text-slate-400">{formatDate(c.fecha_inicio).slice(-4)}</span>
+   657→                          </div>
+   658→                        );
+   659→                      })}
+   660→                    </div>
+   661→                  </div>
+   662→                )}
+   663→              </CardContent>
+   664→            </Card>
+   665→          </div>
+   666→        </TabsContent>
+   667→
+   668→        {/* ═══════════════════════════════════════════
+   669→            TAB: SALARIO — Large display + band + history
+   670→           ═══════════════════════════════════════════ */}
+   671→        <TabsContent value="salario">
+   672→          <div className="space-y-4">
+   673→            {/* Current salary large display */}
+   674→            <Card className="shadow-sm overflow-hidden">
+   675→              <div className="bg-gradient-to-r from-emerald-600 to-teal-500 p-6 text-white">
+   676→                <p className="text-sm font-medium opacity-80 mb-1">Salario Base Mensual</p>
+   677→                <p className="text-4xl font-bold tracking-tight">{formatSalary(empleado.salario_base)}</p>
+   678→                <div className="flex items-center gap-3 mt-3 text-sm opacity-90">
+   679→                  <span className="flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" /> {empleado.perfil_puesto?.nombre_puesto || 'Sin puesto'}</span>
+   680→                  <span>•</span>
+   681→                  <span>{empleado.area?.nombre || 'Sin área'}</span>
+   682→                </div>
+   683→              </div>
+   684→              {/* Salary band position indicator */}
+   685→              {empleado.perfil_puesto?.banda_salarial && (
+   686→                <div className="p-5">
+   687→                  <div className="flex items-center justify-between mb-2">
+   688→                    <p className="text-xs text-slate-500 font-medium">Posición en Banda Salarial</p>
+   689→                    <Badge variant="outline" className="text-xs">{empleado.perfil_puesto.banda_salarial.nombre}</Badge>
+   690→                  </div>
+   691→                  <div className="relative h-4 rounded-full bg-gradient-to-r from-emerald-200 via-amber-200 to-red-200 overflow-hidden">
+   692→                    <div
+   693→                      className="absolute top-0 h-full w-1.5 bg-slate-800 dark:bg-white rounded-full shadow-lg transition-all duration-500"
+   694→                      style={{
+   695→                        left: `${Math.min(100, Math.max(0,
+   696→                          ((empleado.salario_base - empleado.perfil_puesto.banda_salarial.salario_minimo) /
+   697→                          (empleado.perfil_puesto.banda_salarial.salario_maximo - empleado.perfil_puesto.banda_salarial.salario_minimo)) * 100
+   698→                        ))}%`
+   699→                      }}
+   700→                    />
+   701→                  </div>
+   702→                  <div className="flex justify-between mt-1.5 text-xs text-slate-400">
+   703→                    <span>Mín: {formatSalary(empleado.perfil_puesto.banda_salarial.salario_minimo)}</span>
+   704→                    <span>Máx: {formatSalary(empleado.perfil_puesto.banda_salarial.salario_maximo)}</span>
+   705→                  </div>
+   706→                </div>
+   707→              )}
+   708→            </Card>
+   709→
+   710→            {/* Next review date */}
+   711→            {empleado.cambios_salariales.length > 0 && (
+   712→              <Card className="shadow-sm border-amber-200 bg-amber-50/30 dark:bg-amber-900/10">
+   713→                <CardContent className="p-4 flex items-center gap-3">
+   714→                  <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+   715→                    <TrendingUp className="h-5 w-5 text-amber-600" />
+   716→                  </div>
+   717→                  <div>
+   718→                    <p className="text-xs text-slate-500">Último cambio salarial</p>
+   719→                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+   720→                      {formatDate(empleado.cambios_salariales[0].fecha_cambio)} — {empleado.cambios_salariales[0].tipo_cambio}
+   721→                    </p>
+   722→                  </div>
+   723→                </CardContent>
+   724→              </Card>
+   725→            )}
+   726→
+   727→            {/* Change history timeline */}
+   728→            <Card className="shadow-sm">
+   729→              <CardHeader className="pb-3">
+   730→                <CardTitle className="text-base flex items-center gap-2">
+   731→                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+   732→                  Historial de Cambios Salariales
+   733→                </CardTitle>
+   734→              </CardHeader>
+   735→              <CardContent>
+   736→                {empleado.cambios_salariales.length === 0 ? (
+   737→                  <p className="text-sm text-slate-500 text-center py-6">Sin cambios salariales registrados</p>
+   738→                ) : (
+   739→                  <div className="relative space-y-0">
+   740→                    <div className="absolute left-5 top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700" />
+   741→                    {empleado.cambios_salariales.map(cs => {
+   742→                      const diff = cs.salario_nuevo - cs.salario_anterior;
+   743→                      const isIncrease = diff > 0;
+   744→                      return (
+   745→                        <div key={cs.id} className="relative flex items-start gap-4 py-3">
+   746→                          <div className={`relative z-10 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+   747→                            isIncrease ? 'border-emerald-500 bg-emerald-500' : 'border-amber-500 bg-amber-500'
+   748→                          }`}>
+   749→                            <TrendingUp className={`h-2.5 w-2.5 text-white ${!isIncrease ? 'rotate-180' : ''}`} />
+   750→                          </div>
+   751→                          <div className="flex-1 p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+   752→                            <div className="flex items-center justify-between">
+   753→                              <div>
+   754→                                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{cs.tipo_cambio}</p>
+   755→                                <p className="text-xs text-slate-400 mt-0.5">{formatDate(cs.fecha_cambio)}</p>
+   756→                              </div>
+   757→                              <div className="text-right">
+   758→                                <p className="text-sm font-mono text-slate-600 dark:text-slate-400">{formatSalary(cs.salario_anterior)} → {formatSalary(cs.salario_nuevo)}</p>
+   759→                                <p className={`text-xs font-semibold ${isIncrease ? 'text-emerald-600' : 'text-amber-600'}`}>
+   760→                                  {isIncrease ? '+' : ''}{formatSalary(diff)}
+   761→                                </p>
+   762→                              </div>
+   763→                            </div>
+   764→                            {cs.motivo && <p className="text-xs text-slate-400 mt-1.5 italic">{cs.motivo}</p>}
+   765→                          </div>
+   766→                        </div>
+   767→                      );
+   768→                    })}
+   769→                  </div>
+   770→                )}
+   771→              </CardContent>
+   772→            </Card>
+   773→          </div>
+   774→        </TabsContent>
+   775→
+   776→        {/* ═══════════════════════════════════════════
+   777→            TAB: VACACIONES — Circular progress + per-year
+   778→           ═══════════════════════════════════════════ */}
+   779→        <TabsContent value="vacaciones">
+   780→          <div className="space-y-4">
+   781→            {/* Vacation balance summary */}
+   782→            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   783→              <Card className="shadow-sm bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200">
+   784→                <CardContent className="p-5 flex items-center gap-4">
+   785→                  <div className="relative">
+   786→                    <CircularProgress value={totalVacDerecho > 0 ? totalVacPendientes : 0} max={totalVacDerecho || 1} size={80} strokeWidth={6} color="emerald" />
+   787→                    <div className="absolute inset-0 flex items-center justify-center">
+   788→                      <span className="text-lg font-bold text-emerald-700">{totalVacPendientes}</span>
+   789→                    </div>
+   790→                  </div>
+   791→                  <div>
+   792→                    <p className="text-xs text-slate-500 font-medium">Días Pendientes</p>
+   793→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{totalVacPendientes}</p>
+   794→                    <p className="text-xs text-slate-400">de {totalVacDerecho} totales</p>
+   795→                  </div>
+   796→                </CardContent>
+   797→              </Card>
+   798→              <Card className="shadow-sm">
+   799→                <CardContent className="p-5 flex items-center gap-4">
+   800→                  <div className="h-14 w-14 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+   801→                    <CalendarDays className="h-6 w-6 text-amber-600" />
+   802→                  </div>
+   803→                  <div>
+   804→                    <p className="text-xs text-slate-500 font-medium">Días Tomados</p>
+   805→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{empleado.vacaciones.reduce((s, v) => s + v.dias_tomados, 0)}</p>
+   806→                  </div>
+   807→                </CardContent>
+   808→              </Card>
+   809→              <Card className="shadow-sm">
+   810→                <CardContent className="p-5 flex items-center gap-4">
+   811→                  <div className="h-14 w-14 rounded-xl bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+   812→                    <DollarSign className="h-6 w-6 text-sky-600" />
+   813→                  </div>
+   814→                  <div>
+   815→                    <p className="text-xs text-slate-500 font-medium">Días Vendidos</p>
+   816→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{empleado.vacaciones.reduce((s, v) => s + v.dias_vendidos, 0)}</p>
+   817→                  </div>
+   818→                </CardContent>
+   819→              </Card>
+   820→            </div>
+   821→
+   822→            {/* Request vacation button for EMPLEADO */}
+   823→            {userRole === 'EMPLEADO' && (
+   824→              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+   825→                <Palmtree className="h-4 w-4 mr-2" /> Solicitar Vacaciones
+   826→              </Button>
+   827→            )}
+   828→
+   829→            {/* Per-year breakdown with progress bars */}
+   830→            <Card className="shadow-sm">
+   831→              <CardHeader className="pb-3">
+   832→                <CardTitle className="text-base flex items-center gap-2">
+   833→                  <Palmtree className="h-4 w-4 text-emerald-600" />
+   834→                  Desglose por Año
+   835→                </CardTitle>
+   836→              </CardHeader>
+   837→              <CardContent>
+   838→                {empleado.vacaciones.length === 0 ? (
+   839→                  <div className="flex flex-col items-center py-10 text-slate-400">
+   840→                    <Palmtree className="h-10 w-10 mb-2" />
+   841→                    <p className="text-sm font-medium">Sin registros de vacaciones</p>
+   842→                  </div>
+   843→                ) : (
+   844→                  <div className="space-y-4">
+   845→                    {empleado.vacaciones.map(v => {
+   846→                      const usedPct = v.dias_derecho > 0 ? (v.dias_tomados / v.dias_derecho) * 100 : 0;
+   847→                      const pendPct = v.dias_derecho > 0 ? (v.dias_pendientes / v.dias_derecho) * 100 : 0;
+   848→                      return (
+   849→                        <div key={v.id} className="p-4 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+   850→                          <div className="flex items-center justify-between mb-3">
+   851→                            <div className="flex items-center gap-2">
+   852→                              <span className="text-lg font-bold text-slate-800 dark:text-slate-200">{v.anio}</span>
+   853→                              <Badge className={`text-xs ${v.estado === 'ABIERTO' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+   854→                                {v.estado}
+   855→                              </Badge>
+   856→                            </div>
+   857→                            <span className="text-sm font-semibold text-amber-600">{v.dias_pendientes} días pend.</span>
+   858→                          </div>
+   859→                          <div className="grid grid-cols-4 gap-3 text-center mb-3">
+   860→                            <div>
+   861→                              <p className="text-[10px] text-slate-400 uppercase">Derecho</p>
+   862→                              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{v.dias_derecho}</p>
+   863→                            </div>
+   864→                            <div>
+   865→                              <p className="text-[10px] text-slate-400 uppercase">Tomados</p>
+   866→                              <p className="text-sm font-semibold text-emerald-600">{v.dias_tomados}</p>
+   867→                            </div>
+   868→                            <div>
+   869→                              <p className="text-[10px] text-slate-400 uppercase">Pendientes</p>
+   870→                              <p className="text-sm font-semibold text-amber-600">{v.dias_pendientes}</p>
+   871→                            </div>
+   872→                            <div>
+   873→                              <p className="text-[10px] text-slate-400 uppercase">Vendidos</p>
+   874→                              <p className="text-sm font-semibold text-sky-600">{v.dias_vendidos}</p>
+   875→                            </div>
+   876→                          </div>
+   877→                          {/* Stacked progress bar */}
+   878→                          <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+   879→                            <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${usedPct}%` }} />
+   880→                            <div className="bg-amber-400 transition-all duration-500" style={{ width: `${pendPct}%` }} />
+   881→                          </div>
+   882→                          <div className="flex justify-between mt-1 text-[10px] text-slate-400">
+   883→                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Tomados</span>
+   884→                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" /> Pendientes</span>
+   885→                          </div>
+   886→                        </div>
+   887→                      );
+   888→                    })}
+   889→                  </div>
+   890→                )}
+   891→              </CardContent>
+   892→            </Card>
+   893→          </div>
+   894→        </TabsContent>
+   895→
+   896→        {/* ═══════════════════════════════════════════
+   897→            TAB: INCIDENCIAS
+   898→           ═══════════════════════════════════════════ */}
+   899→        <TabsContent value="incidencias">
+   900→          <Card className="shadow-sm">
+   901→            <CardHeader className="pb-3">
+   902→              <CardTitle className="text-base flex items-center gap-2">
+   903→                <AlertTriangle className="h-4 w-4 text-amber-500" />
+   904→                Incidencias del Empleado
+   905→              </CardTitle>
+   906→              <CardDescription>Registro de incidencias, permisos y novedades</CardDescription>
+   907→            </CardHeader>
+   908→            <CardContent>
+   909→              {empleado.incidencias.length === 0 ? (
+   910→                <div className="flex flex-col items-center py-10 text-slate-400">
+   911→                  <AlertTriangle className="h-10 w-10 mb-2" />
+   912→                  <p className="text-sm font-medium">Sin incidencias registradas</p>
+   913→                  <p className="text-xs">Las incidencias del empleado aparecerán aquí</p>
+   914→                </div>
+   915→              ) : (
+   916→                <div className="space-y-3 max-h-96 overflow-y-auto">
+   917→                  {empleado.incidencias.map(inc => {
+   918→                    const tipoColors: Record<string, string> = {
+   919→                      PERMISO: 'bg-sky-100 text-sky-700 border-sky-200',
+   920→                      VACACION: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+   921→                      ENFERMEDAD: 'bg-amber-100 text-amber-700 border-amber-200',
+   922→                      AUSENCIA: 'bg-red-100 text-red-700 border-red-200',
+   923→                      HORAS_EXTRA: 'bg-purple-100 text-purple-700 border-purple-200',
+   924→                    };
+   925→                    const estadoColors: Record<string, string> = {
+   926→                      PENDIENTE: 'bg-yellow-100 text-yellow-700',
+   927→                      APROBADA: 'bg-emerald-100 text-emerald-700',
+   928→                      RECHAZADA: 'bg-red-100 text-red-700',
+   929→                    };
+   930→                    return (
+   931→                      <div key={inc.id} className="p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+   932→                        <div className="flex items-center justify-between mb-1">
+   933→                          <div className="flex items-center gap-2">
+   934→                            <Badge variant="outline" className={tipoColors[inc.tipo] || 'bg-slate-100 text-slate-600'}>
+   935→                              {inc.tipo}
+   936→                            </Badge>
+   937→                            <Badge className={estadoColors[inc.estado] || 'bg-slate-100 text-slate-600'}>
+   938→                              {inc.estado}
+   939→                            </Badge>
+   940→                          </div>
+   941→                          <span className="text-xs text-slate-400">{formatDate(inc.fecha_inicio)}</span>
+   942→                        </div>
+   943→                        {inc.descripcion && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{inc.descripcion}</p>}
+   944→                        <div className="flex gap-4 mt-1.5 text-xs text-slate-400">
+   945→                          {inc.cantidad_horas && <span>{inc.cantidad_horas} hrs</span>}
+   946→                          {inc.monto && <span className="text-emerald-600 font-medium">{formatSalary(inc.monto)}</span>}
+   947→                          {inc.fecha_fin && <span>Fin: {formatDate(inc.fecha_fin)}</span>}
+   948→                        </div>
+   949→                      </div>
+   950→                    );
+   951→                  })}
+   952→                </div>
+   953→              )}
+   954→            </CardContent>
+   955→          </Card>
+   956→        </TabsContent>
+   957→
+   958→        {/* ═══════════════════════════════════════════
+   959→            TAB: DOCUMENTOS
+   960→           ═══════════════════════════════════════════ */}
+   961→        <TabsContent value="documentos">
+   962→          <Card className="shadow-sm">
+   963→            <CardHeader className="pb-3">
+   964→              <CardTitle className="text-base flex items-center gap-2">
+   965→                <FolderOpen className="h-4 w-4 text-emerald-600" />
+   966→                Documentos del Empleado
+   967→              </CardTitle>
+   968→              <CardDescription>Documentos y archivos adjuntos del expediente</CardDescription>
+   969→            </CardHeader>
+   970→            <CardContent>
+   971→              {empleado.documentos.length === 0 ? (
+   972→                <div className="flex flex-col items-center py-12 text-slate-400">
+   973→                  <FolderOpen className="h-10 w-10 mb-2" />
+   974→                  <p className="text-sm font-medium">Sin documentos registrados</p>
+   975→                  <p className="text-xs">Los documentos del empleado aparecerán aquí</p>
+   976→                </div>
+   977→              ) : (
+   978→                <div className="space-y-2 max-h-96 overflow-y-auto">
+   979→                  {empleado.documentos.map(doc => (
+   980→                    <div key={doc.id} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors">
+   981→                      <div className="h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+   982→                        <FileText className="h-5 w-5 text-emerald-600" />
+   983→                      </div>
+   984→                      <div className="flex-1 min-w-0">
+   985→                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{doc.nombre_archivo}</p>
+   986→                        <p className="text-xs text-slate-500">{doc.tipo_documento} • {formatDate(doc.fecha_creacion)}</p>
+   987→                      </div>
+   988→                      {doc.descripcion && <p className="text-xs text-slate-400 hidden sm:block max-w-[200px] truncate">{doc.descripcion}</p>}
+   989→                    </div>
+   990→                  ))}
+   991→                </div>
+   992→              )}
+   993→            </CardContent>
+   994→          </Card>
+   995→        </TabsContent>
+   996→      </Tabs>
+   997→
+   998→      {/* ═══════════════════════════════════════════
+   999→          NEW CONTRACT DIALOG
+  1000→         ═══════════════════════════════════════════ */}
+  1001→      <Dialog open={newContractOpen} onOpenChange={setNewContractOpen}>
+  1002→        <DialogContent>
+  1003→          <DialogHeader>
+  1004→            <DialogTitle>Nuevo Contrato</DialogTitle>
+  1005→            <DialogDescription>Crear un nuevo contrato para {getNombreCompleto()}</DialogDescription>
+  1006→          </DialogHeader>
+  1007→          <div className="space-y-4">
+  1008→            <div className="grid grid-cols-2 gap-3">
+  1009→              <div>
+  1010→                <Label>Tipo de Contrato</Label>
+  1011→                <Select value={contractData.tipo_contrato} onValueChange={v => setContractData(p => ({ ...p, tipo_contrato: v }))}>
+  1012→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1013→                  <SelectContent>
+  1014→                    <SelectItem value="INDEFINIDO">Indefinido</SelectItem>
+  1015→                    <SelectItem value="PLAZO_FIJO">Plazo Fijo</SelectItem>
+  1016→                    <SelectItem value="OBRA_LABOR">Obra/Labor</SelectItem>
+  1017→                    <SelectItem value="TEMPORAL">Temporal</SelectItem>
+  1018→                  </SelectContent>
+  1019→                </Select>
+  1020→              </div>
+  1021→              <div>
+  1022→                <Label>Tipo Jornada</Label>
+  1023→                <Select value={contractData.tipo_jornada} onValueChange={v => setContractData(p => ({ ...p, tipo_jornada: v }))}>
+  1024→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1025→                  <SelectContent>
+  1026→                    <SelectItem value="COMPLETA">Completa</SelectItem>
+  1027→                    <SelectItem value="MEDIA">Media</SelectItem>
+  1028→                    <SelectItem value="POR_HORAS">Por Horas</SelectItem>
+  1029→                  </SelectContent>
+  1030→                </Select>
+  1031→              </div>
+  1032→            </div>
+  1033→            <div>
+  1034→              <Label>Salario Base (USD)</Label>
+  1035→              <Input type="number" step="0.01" value={contractData.salario_base_contrato} onChange={e => setContractData(p => ({ ...p, salario_base_contrato: e.target.value }))} />
+  1036→            </div>
+  1037→            <div className="grid grid-cols-2 gap-3">
+  1038→              <div>
+  1039→                <Label>Fecha Inicio</Label>
+  1040→                <Input type="date" value={contractData.fecha_inicio} onChange={e => setContractData(p => ({ ...p, fecha_inicio: e.target.value }))} />
+  1041→              </div>
+  1042→              <div>
+  1043→                <Label>Fecha Fin (opcional)</Label>
+  1044→                <Input type="date" value={contractData.fecha_fin} onChange={e => setContractData(p => ({ ...p, fecha_fin: e.target.value }))} />
+  1045→              </div>
+  1046→            </div>
+  1047→            <div>
+  1048→              <Label>Observaciones</Label>
+  1049→              <Input value={contractData.observaciones} onChange={e => setContractData(p => ({ ...p, observaciones: e.target.value }))} />
+  1050→            </div>
+  1051→            <div className="flex justify-end gap-2">
+  1052→              <Button variant="outline" onClick={() => setNewContractOpen(false)}>Cancelar</Button>
+  1053→              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCreateContract} disabled={saving}>
+  1054→                {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Crear Contrato
+  1055→              </Button>
+  1056→            </div>
+  1057→          </div>
+  1058→        </DialogContent>
+  1059→      </Dialog>
+  1060→    </div>
+  1061→  );
+  1062→}
+  1063→

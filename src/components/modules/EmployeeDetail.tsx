@@ -6,7 +6,9 @@ import {
   Palmtree, FolderOpen, Loader2, AlertCircle, Plus, Clock,
   User, CalendarDays, AlertTriangle, Printer, MapPin, Phone, Mail,
   Shield, Building2, Hash, CreditCard, TrendingUp, ChevronDown,
-  ChevronUp, Globe, Droplets, Users, Award
+  ChevronUp, Globe, Droplets, Users, Award, Download, Search,
+  FileCheck, Stamp, LetterText, FileSpreadsheet,
+  Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -89,6 +91,855 @@ interface EmpleadoDetail {
   usuario: { id: string; email: string; rol: string } | null;
 }
 
+/* ─── Document Category & Card Types ─── */
+interface DocItem {
+  id: string;
+  title: string;
+  description: string;
+  category: 'contratos' | 'constancias' | 'boletas' | 'cartas' | 'otros';
+  icon: React.ReactNode;
+  iconBg: string;
+  iconColor: string;
+  date: string;
+  status: 'Vigente' | 'Expirado' | 'Borrador';
+  statusColor: string;
+  onDownload?: () => void;
+  onPrint?: () => void;
+}
+
+function getDocStatusColor(status: string): string {
+  switch (status) {
+    case 'Vigente': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+    case 'Expirado': return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
+    case 'Borrador': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+    default: return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+  }
+}
+
+function getContractStatus(fechaFin: string | null, activo: boolean): 'Vigente' | 'Expirado' | 'Borrador' {
+  if (!activo) return 'Expirado';
+  if (!fechaFin) return 'Vigente';
+  return new Date(fechaFin) > new Date() ? 'Vigente' : 'Expirado';
+}
+
+/* ─── DocumentGrid Component ─── */
+function DocumentGrid({
+  empleado,
+  docCategory,
+  docSearch,
+  planillas,
+  selectedPlanilla,
+  setSelectedPlanilla,
+  aguinaldoAnio,
+  accessToken,
+  formatDate,
+  formatSalary,
+  addToRecentDocs,
+  getNombreCompleto,
+  toast,
+  recentDocs,
+}: {
+  empleado: EmpleadoDetail;
+  docCategory: string;
+  docSearch: string;
+  planillas: Array<{ id: string; codigo_planilla: string; tipo: string; estado: string; fecha_inicio_periodo: string; fecha_fin_periodo: string }>;
+  selectedPlanilla: string;
+  setSelectedPlanilla: (v: string) => void;
+  aguinaldoAnio: string;
+  accessToken: string | null;
+  formatDate: (d: string | null) => string;
+  formatSalary: (amount: number) => string;
+  addToRecentDocs: (doc: { id: string; title: string; type: string; date: string; category: string }) => void;
+  getNombreCompleto: () => string;
+  toast: (opts: { title: string; description?: string; variant?: string }) => void;
+  recentDocs: Array<{ id: string; title: string; type: string; date: string; category: string }>;
+}) {
+  const handleDownloadBoleta = async (planillaId: string, planillaCodigo: string) => {
+    try {
+      const res = await fetch(`/api/nomina/planillas/${planillaId}/boleta?empleado_id=${empleado.id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({ title: 'Error', description: (data as { error?: string }).error || 'No se pudo generar la boleta', variant: 'destructive' });
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `boleta-${empleado.codigo_empleado}-${planillaCodigo}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      addToRecentDocs({
+        id: `boleta-${planillaId}`,
+        title: `Boleta ${planillaCodigo}`,
+        type: 'Boleta de Pago',
+        date: new Date().toISOString(),
+        category: 'boletas',
+      });
+      toast({ title: 'Boleta descargada', description: `Boleta de ${planillaCodigo} descargada exitosamente` });
+    } catch {
+      toast({ title: 'Error', description: 'Error de conexión al descargar boleta', variant: 'destructive' });
+    }
+  };
+
+  const handleDownloadAguinaldo = async () => {
+    try {
+      const res = await fetch(`/api/nomina/aguinaldo/pdf?empleado_id=${empleado.id}&anio=${aguinaldoAnio}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({ title: 'Error', description: (data as { error?: string }).error || 'No se pudo generar la constancia', variant: 'destructive' });
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aguinaldo-${empleado.codigo_empleado}-${aguinaldoAnio}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      addToRecentDocs({
+        id: `aguinaldo-${aguinaldoAnio}`,
+        title: `Constancia Aguinaldo ${aguinaldoAnio}`,
+        type: 'Constancia de Aguinaldo',
+        date: new Date().toISOString(),
+        category: 'constancias',
+      });
+      toast({ title: 'Constancia descargada', description: `Constancia de aguinaldo ${aguinaldoAnio} descargada` });
+    } catch {
+      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+    }
+  };
+
+  const handleGenerateTextDoc = (title: string, content: string, filename: string, category: string, docId: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    addToRecentDocs({
+      id: docId,
+      title,
+      type: category,
+      date: new Date().toISOString(),
+      category: category === 'Constancia de Empleo' || category === 'Constancia de Salario' ? 'constancias' : 'cartas',
+    });
+    toast({ title: 'Documento generado', description: `${title} descargado exitosamente` });
+  };
+
+  const handlePrintDoc = (title: string, content: string) => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html><head><title>${title}</title>
+        <style>body{font-family:Arial,sans-serif;margin:40px;line-height:1.6}h1{color:#047857}table{width:100%;border-collapse:collapse;margin:16px 0}td,th{padding:8px;border:1px solid #e2e8f0;text-align:left}th{background:#f0fdf4}.header{text-align:center;margin-bottom:32px}.signature{margin-top:64px;display:flex;justify-content:space-between}.sig-line{border-top:1px solid #000;width:200px;text-align:center;padding-top:4px}</style>
+        </head><body>${content}</body></html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  };
+
+  /* Build document list from employee data */
+  const allDocuments: DocItem[] = (() => {
+    const docs: DocItem[] = [];
+
+    // Contratos from DB
+    empleado.contratos.forEach(c => {
+      const status = getContractStatus(c.fecha_fin, c.activo);
+      docs.push({
+        id: `contrato-${c.id}`,
+        title: `Contrato ${c.tipo_contrato.replace(/_/g, ' ')}`,
+        description: `Puesto: ${c.perfil_puesto?.nombre_puesto || 'N/A'} • Jornada: ${c.tipo_jornada.replace(/_/g, ' ')} • Salario: ${formatSalary(c.salario_base_contrato)}`,
+        category: 'contratos',
+        icon: <FileText className="h-5 w-5" />,
+        iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+        iconColor: 'text-emerald-600 dark:text-emerald-400',
+        date: c.fecha_inicio,
+        status,
+        statusColor: getDocStatusColor(status),
+        onDownload: () => {
+          const content = generateConstanciaEmpleoHTML(empleado, formatDate, formatSalary);
+          handleGenerateTextDoc(`Contrato ${c.tipo_contrato}`, content, `contrato-${empleado.codigo_empleado}-${c.tipo_contrato}.txt`, 'Contrato', `contrato-${c.id}`);
+        },
+        onPrint: () => {
+          const content = generateConstanciaEmpleoHTML(empleado, formatDate, formatSalary);
+          handlePrintDoc(`Contrato ${c.tipo_contrato}`, content);
+        },
+      });
+    });
+
+    // Constancias (generated)
+    docs.push({
+      id: 'constancia-empleo',
+      title: 'Constancia de Empleo',
+      description: 'Certifica que el empleado labora activamente en la empresa',
+      category: 'constancias',
+      icon: <Stamp className="h-5 w-5" />,
+      iconBg: 'bg-teal-100 dark:bg-teal-900/30',
+      iconColor: 'text-teal-600 dark:text-teal-400',
+      date: new Date().toISOString(),
+      status: empleado.estado === 'ACTIVO' ? 'Vigente' : 'Expirado',
+      statusColor: getDocStatusColor(empleado.estado === 'ACTIVO' ? 'Vigente' : 'Expirado'),
+      onDownload: () => {
+        const content = generateConstanciaEmpleoHTML(empleado, formatDate, formatSalary);
+        handleGenerateTextDoc('Constancia de Empleo', content, `constancia-empleo-${empleado.codigo_empleado}.txt`, 'Constancia de Empleo', 'constancia-empleo');
+      },
+      onPrint: () => {
+        const content = generateConstanciaEmpleoHTML(empleado, formatDate, formatSalary);
+        handlePrintDoc('Constancia de Empleo', content);
+      },
+    });
+
+    docs.push({
+      id: 'constancia-salario',
+      title: 'Constancia de Salario',
+      description: `Salario actual: ${formatSalary(empleado.salario_base)}`,
+      category: 'constancias',
+      icon: <DollarSign className="h-5 w-5" />,
+      iconBg: 'bg-amber-100 dark:bg-amber-900/30',
+      iconColor: 'text-amber-600 dark:text-amber-400',
+      date: new Date().toISOString(),
+      status: empleado.estado === 'ACTIVO' ? 'Vigente' : 'Expirado',
+      statusColor: getDocStatusColor(empleado.estado === 'ACTIVO' ? 'Vigente' : 'Expirado'),
+      onDownload: () => {
+        const content = generateConstanciaSalarioHTML(empleado, formatDate, formatSalary);
+        handleGenerateTextDoc('Constancia de Salario', content, `constancia-salario-${empleado.codigo_empleado}.txt`, 'Constancia de Salario', 'constancia-salario');
+      },
+      onPrint: () => {
+        const content = generateConstanciaSalarioHTML(empleado, formatDate, formatSalary);
+        handlePrintDoc('Constancia de Salario', content);
+      },
+    });
+
+    // Constancia de Aguinaldo
+    docs.push({
+      id: `constancia-aguinaldo-${aguinaldoAnio}`,
+      title: `Constancia de Aguinaldo ${aguinaldoAnio}`,
+      description: 'Cálculo de aguinaldo según ley salvadoreña',
+      category: 'constancias',
+      icon: <Palmtree className="h-5 w-5" />,
+      iconBg: 'bg-purple-100 dark:bg-purple-900/30',
+      iconColor: 'text-purple-600 dark:text-purple-400',
+      date: new Date().toISOString(),
+      status: 'Borrador',
+      statusColor: getDocStatusColor('Borrador'),
+      onDownload: handleDownloadAguinaldo,
+      onPrint: handleDownloadAguinaldo,
+    });
+
+    // Boletas de Pago (from planillas)
+    planillas.forEach(p => {
+      docs.push({
+        id: `boleta-${p.id}`,
+        title: `Boleta ${p.codigo_planilla}`,
+        description: `Período: ${formatDate(p.fecha_inicio_periodo)} - ${formatDate(p.fecha_fin_periodo)} • Tipo: ${p.tipo}`,
+        category: 'boletas',
+        icon: <FileSpreadsheet className="h-5 w-5" />,
+        iconBg: 'bg-rose-100 dark:bg-rose-900/30',
+        iconColor: 'text-rose-600 dark:text-rose-400',
+        date: p.fecha_fin_periodo,
+        status: p.estado === 'CERRADA' ? 'Vigente' : 'Borrador',
+        statusColor: getDocStatusColor(p.estado === 'CERRADA' ? 'Vigente' : 'Borrador'),
+        onDownload: () => handleDownloadBoleta(p.id, p.codigo_planilla),
+        onPrint: () => handleDownloadBoleta(p.id, p.codigo_planilla),
+      });
+    });
+
+    // Cartas
+    docs.push({
+      id: 'carta-referencia',
+      title: 'Carta de Referencia Laboral',
+      description: 'Referencia laboral del empleado',
+      category: 'cartas',
+      icon: <LetterText className="h-5 w-5" />,
+      iconBg: 'bg-sky-100 dark:bg-sky-900/30',
+      iconColor: 'text-sky-600 dark:text-sky-400',
+      date: new Date().toISOString(),
+      status: 'Borrador',
+      statusColor: getDocStatusColor('Borrador'),
+      onDownload: () => {
+        const content = generateCartaReferenciaHTML(empleado, formatDate, formatSalary);
+        handleGenerateTextDoc('Carta de Referencia', content, `carta-referencia-${empleado.codigo_empleado}.txt`, 'Carta de Referencia', 'carta-referencia');
+      },
+      onPrint: () => {
+        const content = generateCartaReferenciaHTML(empleado, formatDate, formatSalary);
+        handlePrintDoc('Carta de Referencia', content);
+      },
+    });
+
+    // Otros - from empleado.documentos
+    empleado.documentos.forEach(doc => {
+      docs.push({
+        id: `doc-${doc.id}`,
+        title: doc.nombre_archivo,
+        description: doc.descripcion || doc.tipo_documento,
+        category: 'otros',
+        icon: <FileCheck className="h-5 w-5" />,
+        iconBg: 'bg-slate-100 dark:bg-slate-800/50',
+        iconColor: 'text-slate-600 dark:text-slate-400',
+        date: doc.fecha_creacion,
+        status: 'Vigente',
+        statusColor: getDocStatusColor('Vigente'),
+      });
+    });
+
+    return docs;
+  })();
+
+  /* Filter documents */
+  const filteredDocs = (() => {
+    let result = allDocuments;
+    if (docCategory !== 'todos') {
+      result = result.filter(d => d.category === docCategory);
+    }
+    if (docSearch.trim()) {
+      const q = docSearch.toLowerCase();
+      result = result.filter(d => d.title.toLowerCase().includes(q) || d.description.toLowerCase().includes(q));
+    }
+    return result;
+  })();
+
+  /* Category counts */
+  const categoryCounts = (() => {
+    const counts: Record<string, number> = { todos: allDocuments.length };
+    allDocuments.forEach(d => {
+      counts[d.category] = (counts[d.category] || 0) + 1;
+    });
+    return counts;
+  })();
+
+  /* Recent docs from parent state */
+  const recentDocItems = (() => {
+    if (recentDocs.length === 0) return [];
+    return recentDocs.map(rd => {
+      const matchingDoc = allDocuments.find(d => d.id === rd.id);
+      return {
+        ...rd,
+        icon: matchingDoc?.icon || <FileText className="h-4 w-4" />,
+        iconBg: matchingDoc?.iconBg || 'bg-slate-100 dark:bg-slate-800/50',
+        iconColor: matchingDoc?.iconColor || 'text-slate-600 dark:text-slate-400',
+        onDownload: matchingDoc?.onDownload,
+      };
+    });
+  })();
+
+  if (filteredDocs.length === 0) {
+    return (
+      <Card className="shadow-sm border-dashed">
+        <CardContent className="py-16 flex flex-col items-center text-slate-400 dark:text-slate-500">
+          <div className="h-20 w-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+            <FolderOpen className="h-10 w-10" />
+          </div>
+          <p className="text-base font-medium text-slate-600 dark:text-slate-300">No se encontraron documentos</p>
+          <p className="text-sm mt-1">
+            {docCategory !== 'todos' || docSearch
+              ? 'Intenta con otra categoría o término de búsqueda'
+              : 'Los documentos del empleado aparecerán aquí'}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Stats Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+        {[
+          { key: 'todos', label: 'Total', icon: <FolderOpen className="h-3.5 w-3.5" /> },
+          { key: 'contratos', label: 'Contratos', icon: <FileText className="h-3.5 w-3.5" /> },
+          { key: 'constancias', label: 'Constancias', icon: <Stamp className="h-3.5 w-3.5" /> },
+          { key: 'boletas', label: 'Boletas', icon: <FileSpreadsheet className="h-3.5 w-3.5" /> },
+          { key: 'cartas', label: 'Cartas', icon: <LetterText className="h-3.5 w-3.5" /> },
+          { key: 'otros', label: 'Otros', icon: <FileCheck className="h-3.5 w-3.5" /> },
+        ].map(stat => (
+          <button
+            key={stat.key}
+            onClick={() => {} /* category change is handled by parent */}
+            className={`p-2.5 rounded-lg border text-center transition-all ${
+              docCategory === stat.key
+                ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-900/20'
+                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-600'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-1 text-slate-500 dark:text-slate-400 mb-1">
+              {stat.icon}
+            </div>
+            <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{categoryCounts[stat.key] || 0}</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider">{stat.label}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* Document Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {filteredDocs.map(doc => (
+          <Card key={doc.id} className="shadow-sm hover:shadow-md transition-all group border-slate-200 dark:border-slate-700">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className={`h-10 w-10 rounded-lg ${doc.iconBg} flex items-center justify-center shrink-0`}>
+                  <span className={doc.iconColor}>{doc.icon}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate leading-tight">{doc.title}</p>
+                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${doc.statusColor}`}>
+                      {doc.status}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">{doc.description}</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> {formatDate(doc.date)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50">
+                {doc.onDownload && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
+                    onClick={doc.onDownload}
+                  >
+                    <Download className="h-3.5 w-3.5 mr-1" /> Descargar
+                  </Button>
+                )}
+                {doc.onPrint && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                    onClick={doc.onPrint}
+                  >
+                    <Printer className="h-3.5 w-3.5 mr-1" /> Imprimir
+                  </Button>
+                )}
+                {!doc.onDownload && !doc.onPrint && (
+                  <span className="text-[11px] text-slate-400 italic">Sin acciones disponibles</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Recent Documents Section */}
+      {recentDocItems.length > 0 && (
+        <Card className="shadow-sm border-slate-200 dark:border-slate-700">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+              <Clock className="h-4 w-4" /> Documentos Recientes
+            </CardTitle>
+            <CardDescription className="text-xs">Últimos documentos accedidos o generados</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+              {recentDocItems.map(rd => (
+                <button
+                  key={rd.id}
+                  onClick={rd.onDownload}
+                  className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 hover:border-emerald-200 dark:hover:border-emerald-700 transition-all text-left group"
+                >
+                  <div className={`h-8 w-8 rounded-md ${rd.iconBg} flex items-center justify-center shrink-0`}>
+                    <span className={rd.iconColor}>{rd.icon}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-300">{rd.title}</p>
+                    <p className="text-[10px] text-slate-400">{formatDate(rd.date)}</p>
+                  </div>
+                  <Download className="h-3.5 w-3.5 text-slate-300 group-hover:text-emerald-500 shrink-0" />
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ─── HTML Document Generators ─── */
+function generateConstanciaEmpleoHTML(emp: EmpleadoDetail, formatDate: (d: string | null) => string, formatSalary: (n: number) => string): string {
+  const nombre = `${emp.primer_nombre}${emp.segundo_nombre ? ' ' + emp.segundo_nombre : ''} ${emp.primer_apellido}${emp.segundo_apellido ? ' ' + emp.segundo_apellido : ''}`;
+  const activeContract = emp.contratos.find(c => c.activo);
+  return `
+    <div class="header">
+      <h1>CONSTANCIA DE EMPLEO</h1>
+      <p><strong>Empresa S.A. de C.V.</strong></p>
+    </div>
+    <p>Por medio de la presente, quien suscribe certifica que:</p>
+    <table>
+      <tr><th>Nombre</th><td>${nombre}</td></tr>
+      <tr><th>DUI</th><td>${emp.dui}</td></tr>
+      <tr><th>Código Empleado</th><td>${emp.codigo_empleado}</td></tr>
+      <tr><th>Puesto</th><td>${emp.perfil_puesto?.nombre_puesto || 'N/A'}</td></tr>
+      <tr><th>Departamento</th><td>${emp.area?.nombre || 'N/A'}</td></tr>
+      <tr><th>Fecha de Ingreso</th><td>${formatDate(emp.fecha_ingreso)}</td></tr>
+      <tr><th>Tipo de Contrato</th><td>${activeContract?.tipo_contrato?.replace(/_/g, ' ') || 'N/A'}</td></tr>
+      <tr><th>Salario Base</th><td>${formatSalary(emp.salario_base)}</td></tr>
+      <tr><th>Estado</th><td>${emp.estado}</td></tr>
+    </table>
+    <p>La presente se extiende a solicitud del interesado en la ciudad de San Salvador, El Salvador, a los ${new Date().toLocaleDateString('es-SV', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+    <div class="signature">
+      <div class="sig-line">Firma y Sello<br/>Recursos Humanos</div>
+    </div>
+  `;
+}
+
+function generateConstanciaSalarioHTML(emp: EmpleadoDetail, formatDate: (d: string | null) => string, formatSalary: (n: number) => string): string {
+  const nombre = `${emp.primer_nombre}${emp.segundo_nombre ? ' ' + emp.segundo_nombre : ''} ${emp.primer_apellido}${emp.segundo_apellido ? ' ' + emp.segundo_apellido : ''}`;
+  const activeContract = emp.contratos.find(c => c.activo);
+  const salario = emp.salario_base;
+  const isss = salario * 0.03;
+  const afp = salario * 0.0725;
+  const rentaBase = salario - isss - afp;
+  return `
+    <div class="header">
+      <h1>CONSTANCIA DE SALARIO</h1>
+      <p><strong>Empresa S.A. de C.V.</strong></p>
+    </div>
+    <p>Por medio de la presente, certificamos los ingresos del empleado:</p>
+    <table>
+      <tr><th>Nombre</th><td>${nombre}</td></tr>
+      <tr><th>DUI</th><td>${emp.dui}</td></tr>
+      <tr><th>Código Empleado</th><td>${emp.codigo_empleado}</td></tr>
+      <tr><th>Puesto</th><td>${emp.perfil_puesto?.nombre_puesto || 'N/A'}</td></tr>
+      <tr><th>Departamento</th><td>${emp.area?.nombre || 'N/A'}</td></tr>
+      <tr><th>Fecha de Ingreso</th><td>${formatDate(emp.fecha_ingreso)}</td></tr>
+    </table>
+    <h3>Detalle Salarial Mensual</h3>
+    <table>
+      <tr><th>Salario Base</th><td>${formatSalary(salario)}</td></tr>
+      <tr><th>ISSS Laboral (3%)</th><td>-${formatSalary(isss)}</td></tr>
+      <tr><th>AFP Laboral (7.25%)</th><td>-${formatSalary(afp)}</td></tr>
+      <tr><th>Renta Imponible</th><td>${formatSalary(rentaBase)}</td></tr>
+      <tr><th>Tipo Contrato</th><td>${activeContract?.tipo_contrato?.replace(/_/g, ' ') || 'N/A'}</td></tr>
+    </table>
+    <p>La presente se extiende a solicitud del interesado en la ciudad de San Salvador, El Salvador, a los ${new Date().toLocaleDateString('es-SV', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+    <div class="signature">
+      <div class="sig-line">Firma y Sello<br/>Recursos Humanos</div>
+    </div>
+  `;
+}
+
+function generateCartaReferenciaHTML(emp: EmpleadoDetail, formatDate: (d: string | null) => string, formatSalary: (n: number) => string): string {
+  const nombre = `${emp.primer_nombre}${emp.segundo_nombre ? ' ' + emp.segundo_nombre : ''} ${emp.primer_apellido}${emp.segundo_apellido ? ' ' + emp.segundo_apellido : ''}`;
+  return `
+    <div class="header">
+      <h1>CARTA DE REFERENCIA LABORAL</h1>
+      <p><strong>Empresa S.A. de C.V.</strong></p>
+    </div>
+    <p>A quien corresponda:</p>
+    <p>Por medio de la presente, hacemos constar que <strong>${nombre}</strong>, portador(a) del Documento Único de Identidad número <strong>${emp.dui}</strong>, ha laborado en nuestra institución desde el ${formatDate(emp.fecha_ingreso)} hasta la fecha, desempeñando el cargo de <strong>${emp.perfil_puesto?.nombre_puesto || 'N/A'}</strong> en el departamento de <strong>${emp.area?.nombre || 'N/A'}</strong>.</p>
+    <p>Durante su permanencia en nuestra empresa, el(la) mencionado(a) funcionario(a) ha demostrado responsabilidad, honradez y eficiencia en el cumplimiento de sus labores, razón por la cual nos permitimos dar la más amplia referencia sobre su persona.</p>
+    <p>Y para los usos que estime convenientes, se extiende la presente en la ciudad de San Salvador, El Salvador, a los ${new Date().toLocaleDateString('es-SV', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+    <div class="signature">
+      <div class="sig-line">Firma y Sello<br/>Recursos Humanos</div>
+    </div>
+  `;
+}
+
+/* ─── Document Generator Component (inside dialog) ─── */
+function DocumentGenerator({
+  docGenType,
+  setDocGenType,
+  empleado,
+  planillas,
+  selectedPlanilla,
+  setSelectedPlanilla,
+  aguinaldoAnio,
+  setAguinaldoAnio,
+  accessToken,
+  formatDate,
+  formatSalary,
+  getNombreCompleto,
+  addToRecentDocs,
+  docGenGenerating,
+  setDocGenGenerating,
+  onClose,
+  toast,
+}: {
+  docGenType: string;
+  setDocGenType: (v: string) => void;
+  empleado: EmpleadoDetail;
+  planillas: Array<{ id: string; codigo_planilla: string; tipo: string; estado: string; fecha_inicio_periodo: string; fecha_fin_periodo: string }>;
+  selectedPlanilla: string;
+  setSelectedPlanilla: (v: string) => void;
+  aguinaldoAnio: string;
+  setAguinaldoAnio: (v: string) => void;
+  accessToken: string | null;
+  formatDate: (d: string | null) => string;
+  formatSalary: (n: number) => string;
+  getNombreCompleto: () => string;
+  addToRecentDocs: (doc: { id: string; title: string; type: string; date: string; category: string }) => void;
+  docGenGenerating: boolean;
+  setDocGenGenerating: (v: boolean) => void;
+  onClose: () => void;
+  toast: (opts: { title: string; description?: string; variant?: string }) => void;
+}) {
+  const nombre = getNombreCompleto();
+  const activeContract = empleado.contratos.find(c => c.activo);
+
+  const handleGenerate = async () => {
+    setDocGenGenerating(true);
+    try {
+      if (docGenType === 'boleta_pago') {
+        if (!selectedPlanilla) {
+          toast({ title: 'Error', description: 'Seleccione una planilla', variant: 'destructive' });
+          setDocGenGenerating(false);
+          return;
+        }
+        const p = planillas.find(pl => pl.id === selectedPlanilla);
+        const res = await fetch(`/api/nomina/planillas/${selectedPlanilla}/boleta?empleado_id=${empleado.id}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast({ title: 'Error', description: (data as { error?: string }).error || 'Error al generar boleta', variant: 'destructive' });
+          setDocGenGenerating(false);
+          return;
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `boleta-${empleado.codigo_empleado}-${p?.codigo_planilla || 'planilla'}.pdf`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        addToRecentDocs({
+          id: `boleta-${selectedPlanilla}`,
+          title: `Boleta ${p?.codigo_planilla || ''}`,
+          type: 'Boleta de Pago',
+          date: new Date().toISOString(),
+          category: 'boletas',
+        });
+      } else if (docGenType === 'constancia_aguinaldo') {
+        const res = await fetch(`/api/nomina/aguinaldo/pdf?empleado_id=${empleado.id}&anio=${aguinaldoAnio}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast({ title: 'Error', description: (data as { error?: string }).error || 'Error al generar constancia', variant: 'destructive' });
+          setDocGenGenerating(false);
+          return;
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `aguinaldo-${empleado.codigo_empleado}-${aguinaldoAnio}.pdf`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        addToRecentDocs({
+          id: `aguinaldo-${aguinaldoAnio}`,
+          title: `Constancia Aguinaldo ${aguinaldoAnio}`,
+          type: 'Constancia de Aguinaldo',
+          date: new Date().toISOString(),
+          category: 'constancias',
+        });
+      } else {
+        // Text-based documents
+        let content = '';
+        let filename = '';
+        let title = '';
+        let category = 'constancias';
+
+        if (docGenType === 'constancia_empleo') {
+          content = generateConstanciaEmpleoHTML(empleado, formatDate, formatSalary);
+          filename = `constancia-empleo-${empleado.codigo_empleado}.txt`;
+          title = 'Constancia de Empleo';
+        } else if (docGenType === 'constancia_salario') {
+          content = generateConstanciaSalarioHTML(empleado, formatDate, formatSalary);
+          filename = `constancia-salario-${empleado.codigo_empleado}.txt`;
+          title = 'Constancia de Salario';
+        } else if (docGenType === 'carta_referencia') {
+          content = generateCartaReferenciaHTML(empleado, formatDate, formatSalary);
+          filename = `carta-referencia-${empleado.codigo_empleado}.txt`;
+          title = 'Carta de Referencia';
+          category = 'cartas';
+        }
+
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        addToRecentDocs({
+          id: docGenType,
+          title,
+          type: title,
+          date: new Date().toISOString(),
+          category,
+        });
+      }
+
+      toast({ title: 'Documento generado', description: 'El documento ha sido generado y descargado exitosamente' });
+      onClose();
+    } catch {
+      toast({ title: 'Error', description: 'Error al generar el documento', variant: 'destructive' });
+    } finally {
+      setDocGenGenerating(false);
+    }
+  };
+
+  const renderPreview = () => {
+    if (docGenType === 'constancia_empleo') {
+      return (
+        <div className="space-y-3">
+          <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4">
+            <h4 className="text-sm font-bold text-emerald-700 dark:text-emerald-300 text-center mb-3">CONSTANCIA DE EMPLEO</h4>
+            <Separator className="mb-3" />
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">Nombre:</span><span className="font-medium text-slate-900 dark:text-slate-100">{nombre}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">DUI:</span><span className="font-medium text-slate-900 dark:text-slate-100">{empleado.dui}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Puesto:</span><span className="font-medium text-slate-900 dark:text-slate-100">{empleado.perfil_puesto?.nombre_puesto || 'N/A'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Departamento:</span><span className="font-medium text-slate-900 dark:text-slate-100">{empleado.area?.nombre || 'N/A'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Fecha Ingreso:</span><span className="font-medium text-slate-900 dark:text-slate-100">{formatDate(empleado.fecha_ingreso)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Tipo Contrato:</span><span className="font-medium text-slate-900 dark:text-slate-100">{activeContract?.tipo_contrato?.replace(/_/g, ' ') || 'N/A'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Estado:</span><Badge className={getDocStatusColor(empleado.estado === 'ACTIVO' ? 'Vigente' : 'Expirado')}>{empleado.estado}</Badge></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (docGenType === 'constancia_salario') {
+      const salario = empleado.salario_base;
+      const isss = salario * 0.03;
+      const afp = salario * 0.0725;
+      return (
+        <div className="space-y-3">
+          <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <h4 className="text-sm font-bold text-amber-700 dark:text-amber-300 text-center mb-3">CONSTANCIA DE SALARIO</h4>
+            <Separator className="mb-3" />
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">Nombre:</span><span className="font-medium text-slate-900 dark:text-slate-100">{nombre}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Puesto:</span><span className="font-medium text-slate-900 dark:text-slate-100">{empleado.perfil_puesto?.nombre_puesto || 'N/A'}</span></div>
+              <Separator className="my-2" />
+              <div className="flex justify-between"><span className="text-slate-500">Salario Base:</span><span className="font-semibold text-emerald-700 dark:text-emerald-400">{formatSalary(salario)}</span></div>
+              <div className="flex justify-between text-red-600 dark:text-red-400"><span>ISSS Laboral (3%):</span><span>-{formatSalary(isss)}</span></div>
+              <div className="flex justify-between text-red-600 dark:text-red-400"><span>AFP Laboral (7.25%):</span><span>-{formatSalary(afp)}</span></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (docGenType === 'carta_referencia') {
+      return (
+        <div className="space-y-3">
+          <div className="bg-sky-50 dark:bg-sky-900/10 border border-sky-200 dark:border-sky-800 rounded-lg p-4">
+            <h4 className="text-sm font-bold text-sky-700 dark:text-sky-300 text-center mb-3">CARTA DE REFERENCIA LABORAL</h4>
+            <Separator className="mb-3" />
+            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+              Por medio de la presente, hacemos constar que <strong>{nombre}</strong>, portador(a) del DUI <strong>{empleado.dui}</strong>,
+              ha laborado en nuestra institución desde el {formatDate(empleado.fecha_ingreso)} hasta la fecha,
+              desempeñando el cargo de <strong>{empleado.perfil_puesto?.nombre_puesto || 'N/A'}</strong> en el
+              departamento de <strong>{empleado.area?.nombre || 'N/A'}</strong>.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (docGenType === 'constancia_aguinaldo') {
+      return (
+        <div className="space-y-3">
+          <div className="bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+            <h4 className="text-sm font-bold text-purple-700 dark:text-purple-300 text-center mb-3">CONSTANCIA DE AGUINALDO</h4>
+            <Separator className="mb-3" />
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">Empleado:</span><span className="font-medium text-slate-900 dark:text-slate-100">{nombre}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Año:</span><span className="font-medium text-slate-900 dark:text-slate-100">{aguinaldoAnio}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Salario Base:</span><span className="font-medium text-slate-900 dark:text-slate-100">{formatSalary(empleado.salario_base)}</span></div>
+            </div>
+            <p className="text-xs text-slate-500 mt-3">Se generará un PDF con el cálculo completo de aguinaldo.</p>
+          </div>
+          <div>
+            <Label className="text-xs">Año del Aguinaldo</Label>
+            <Select value={aguinaldoAnio} onValueChange={setAguinaldoAnio}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="2026">2026</SelectItem>
+                <SelectItem value="2025">2025</SelectItem>
+                <SelectItem value="2024">2024</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      );
+    }
+
+    if (docGenType === 'boleta_pago') {
+      return (
+        <div className="space-y-3">
+          <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-lg p-4">
+            <h4 className="text-sm font-bold text-rose-700 dark:text-rose-300 text-center mb-3">BOLETA DE PAGO</h4>
+            <Separator className="mb-3" />
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">Empleado:</span><span className="font-medium text-slate-900 dark:text-slate-100">{nombre}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Código:</span><span className="font-medium text-slate-900 dark:text-slate-100">{empleado.codigo_empleado}</span></div>
+            </div>
+            <p className="text-xs text-slate-500 mt-3">Se generará un PDF con el detalle completo de la boleta.</p>
+          </div>
+          <div>
+            <Label className="text-xs">Seleccionar Planilla</Label>
+            <Select value={selectedPlanilla} onValueChange={setSelectedPlanilla}>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar planilla..." /></SelectTrigger>
+              <SelectContent>
+                {planillas.length === 0 ? (
+                  <SelectItem value="_none" disabled>No hay planillas disponibles</SelectItem>
+                ) : (
+                  planillas.map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.codigo_planilla} — {formatDate(p.fecha_inicio_periodo)} a {formatDate(p.fecha_fin_periodo)}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="space-y-4">
+      <button
+        onClick={() => setDocGenType('')}
+        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-emerald-600 transition-colors"
+      >
+        <ChevronDown className="h-4 w-4 rotate-90" /> Cambiar tipo de documento
+      </button>
+
+      {renderPreview()}
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button
+          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+          onClick={handleGenerate}
+          disabled={docGenGenerating}
+        >
+          {docGenGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
+          Generar y Descargar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── circular progress ring ─── */
 function CircularProgress({ value, max, size = 80, strokeWidth = 6, color = 'emerald' }: {
   value: number; max: number; size?: number; strokeWidth?: number; color?: string;
@@ -122,6 +973,17 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
   const [contractData, setContractData] = useState({ tipo_contrato: 'INDEFINIDO', salario_base_contrato: '', tipo_jornada: 'COMPLETA', fecha_inicio: '', fecha_fin: '', observaciones: '' });
   const { toast } = useToast();
 
+  // Document management state
+  const [docCategory, setDocCategory] = useState<string>('todos');
+  const [docSearch, setDocSearch] = useState('');
+  const [docGenOpen, setDocGenOpen] = useState(false);
+  const [docGenType, setDocGenType] = useState<string>('');
+  const [docGenGenerating, setDocGenGenerating] = useState(false);
+  const [recentDocs, setRecentDocs] = useState<Array<{ id: string; title: string; type: string; date: string; category: string }>>([]);
+  const [planillas, setPlanillas] = useState<Array<{ id: string; codigo_planilla: string; tipo: string; estado: string; fecha_inicio_periodo: string; fecha_fin_periodo: string }>>([]);
+  const [selectedPlanilla, setSelectedPlanilla] = useState<string>('');
+  const [aguinaldoAnio, setAguinaldoAnio] = useState<string>(new Date().getFullYear().toString());
+
   const fetchEmpleado = useCallback(async () => {
     setLoading(true);
     try {
@@ -140,6 +1002,50 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
   }, [empleadoId, accessToken]);
 
   useEffect(() => { fetchEmpleado(); }, [fetchEmpleado]);
+
+  // Fetch planillas for boleta generation
+  useEffect(() => {
+    const fetchPlanillas = async () => {
+      try {
+        const res = await fetch('/api/nomina/planillas?limit=50&estado=CERRADA', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const data = await res.json();
+        if (res.ok && data.data) {
+          setPlanillas(data.data.map((p: { id: string; codigo_planilla: string; tipo: string; estado: string; fecha_inicio_periodo: string; fecha_fin_periodo: string }) => ({
+            id: p.id,
+            codigo_planilla: p.codigo_planilla,
+            tipo: p.tipo,
+            estado: p.estado,
+            fecha_inicio_periodo: p.fecha_inicio_periodo,
+            fecha_fin_periodo: p.fecha_fin_periodo,
+          })));
+        }
+      } catch {
+        // silently ignore
+      }
+    };
+    if (accessToken) fetchPlanillas();
+  }, [accessToken]);
+
+  // Load recent docs from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`recentDocs_${empleadoId}`);
+      if (stored) setRecentDocs(JSON.parse(stored));
+    } catch {
+      // silently ignore
+    }
+  }, [empleadoId]);
+
+  const addToRecentDocs = useCallback((doc: { id: string; title: string; type: string; date: string; category: string }) => {
+    setRecentDocs(prev => {
+      const filtered = prev.filter(d => d.id !== doc.id);
+      const updated = [doc, ...filtered].slice(0, 5);
+      try { localStorage.setItem(`recentDocs_${empleadoId}`, JSON.stringify(updated)); } catch { /* ignore */ }
+      return updated;
+    });
+  }, [empleadoId]);
 
   const canEdit = userRole === 'ADMIN' || userRole === 'ANALISTA';
   const canEditOwn = userRole === 'EMPLEADO';
@@ -956,42 +1862,82 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
         </TabsContent>
 
         {/* ═══════════════════════════════════════════
-            TAB: DOCUMENTOS
+            TAB: DOCUMENTOS — Enhanced Document Management
            ═══════════════════════════════════════════ */}
         <TabsContent value="documentos">
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FolderOpen className="h-4 w-4 text-emerald-600" />
-                Documentos del Empleado
-              </CardTitle>
-              <CardDescription>Documentos y archivos adjuntos del expediente</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {empleado.documentos.length === 0 ? (
-                <div className="flex flex-col items-center py-12 text-slate-400">
-                  <FolderOpen className="h-10 w-10 mb-2" />
-                  <p className="text-sm font-medium">Sin documentos registrados</p>
-                  <p className="text-xs">Los documentos del empleado aparecerán aquí</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {empleado.documentos.map(doc => (
-                    <div key={doc.id} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors">
-                      <div className="h-10 w-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
-                        <FileText className="h-5 w-5 text-emerald-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{doc.nombre_archivo}</p>
-                        <p className="text-xs text-slate-500">{doc.tipo_documento} • {formatDate(doc.fecha_creacion)}</p>
-                      </div>
-                      {doc.descripcion && <p className="text-xs text-slate-400 hidden sm:block max-w-[200px] truncate">{doc.descripcion}</p>}
-                    </div>
-                  ))}
-                </div>
+          <div className="space-y-4">
+            {/* Header with Generate Button */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <FolderOpen className="h-5 w-5 text-emerald-600" />
+                  Gestión de Documentos
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Documentos, constancias y certificaciones del empleado</p>
+              </div>
+              {(canEdit || canEditOwn) && (
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                  onClick={() => { setDocGenType(''); setDocGenOpen(true); }}
+                >
+                  <Sparkles className="h-4 w-4 mr-1.5" /> Generar Documento
+                </Button>
               )}
-            </CardContent>
-          </Card>
+            </div>
+
+            {/* Category Filter Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {[
+                { key: 'todos', label: 'Todos', icon: <FolderOpen className="h-3.5 w-3.5" /> },
+                { key: 'contratos', label: 'Contratos', icon: <FileText className="h-3.5 w-3.5" /> },
+                { key: 'constancias', label: 'Constancias', icon: <Stamp className="h-3.5 w-3.5" /> },
+                { key: 'boletas', label: 'Boletas de Pago', icon: <FileSpreadsheet className="h-3.5 w-3.5" /> },
+                { key: 'cartas', label: 'Cartas', icon: <LetterText className="h-3.5 w-3.5" /> },
+                { key: 'otros', label: 'Otros', icon: <FileCheck className="h-3.5 w-3.5" /> },
+              ].map(cat => (
+                <button
+                  key={cat.key}
+                  onClick={() => setDocCategory(cat.key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+                    docCategory === cat.key
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-700'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {cat.icon} {cat.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Buscar documentos..."
+                value={docSearch}
+                onChange={e => setDocSearch(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+
+            {/* Document Grid */}
+            <DocumentGrid
+              empleado={empleado}
+              docCategory={docCategory}
+              docSearch={docSearch}
+              planillas={planillas}
+              selectedPlanilla={selectedPlanilla}
+              setSelectedPlanilla={setSelectedPlanilla}
+              aguinaldoAnio={aguinaldoAnio}
+              accessToken={accessToken}
+              formatDate={formatDate}
+              formatSalary={formatSalary}
+              addToRecentDocs={addToRecentDocs}
+              getNombreCompleto={getNombreCompleto}
+              toast={toast}
+              recentDocs={recentDocs}
+            />
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -1055,6 +2001,82 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════════════════════════════════════
+          DOCUMENT GENERATION DIALOG
+         ═══════════════════════════════════════════ */}
+      <Dialog open={docGenOpen} onOpenChange={setDocGenOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-emerald-600" />
+              Generar Documento
+            </DialogTitle>
+            <DialogDescription>Seleccione el tipo de documento a generar para {getNombreCompleto()}</DialogDescription>
+          </DialogHeader>
+
+          {!docGenType ? (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-600 dark:text-slate-400">Seleccione el tipo de documento:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { value: 'constancia_empleo', label: 'Constancia de Empleo', icon: <Stamp className="h-5 w-5" />, desc: 'Certifica que la persona labora en la empresa', color: 'emerald' },
+                  { value: 'constancia_salario', label: 'Constancia de Salario', icon: <DollarSign className="h-5 w-5" />, desc: 'Certifica el salario actual del empleado', color: 'amber' },
+                  { value: 'carta_referencia', label: 'Carta de Referencia', icon: <LetterText className="h-5 w-5" />, desc: 'Carta de referencia laboral', color: 'sky' },
+                  { value: 'constancia_aguinaldo', label: 'Constancia de Aguinaldo', icon: <Palmtree className="h-5 w-5" />, desc: 'Constancia de cálculo de aguinaldo', color: 'purple' },
+                  { value: 'boleta_pago', label: 'Boleta de Pago', icon: <FileSpreadsheet className="h-5 w-5" />, desc: 'Boleta de pago de planilla', color: 'rose' },
+                ].map(docType => {
+                  const colorMap: Record<string, string> = {
+                    emerald: 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20',
+                    amber: 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20',
+                    sky: 'border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-900/10 hover:border-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20',
+                    purple: 'border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20',
+                    rose: 'border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-900/10 hover:border-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20',
+                  };
+                  const iconColorMap: Record<string, string> = {
+                    emerald: 'text-emerald-600 dark:text-emerald-400',
+                    amber: 'text-amber-600 dark:text-amber-400',
+                    sky: 'text-sky-600 dark:text-sky-400',
+                    purple: 'text-purple-600 dark:text-purple-400',
+                    rose: 'text-rose-600 dark:text-rose-400',
+                  };
+                  return (
+                    <button
+                      key={docType.value}
+                      onClick={() => setDocGenType(docType.value)}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${colorMap[docType.color] || colorMap.emerald}`}
+                    >
+                      <div className={`${iconColorMap[docType.color] || iconColorMap.emerald} mb-2`}>{docType.icon}</div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{docType.label}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{docType.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <DocumentGenerator
+              docGenType={docGenType}
+              setDocGenType={setDocGenType}
+              empleado={empleado}
+              planillas={planillas}
+              selectedPlanilla={selectedPlanilla}
+              setSelectedPlanilla={setSelectedPlanilla}
+              aguinaldoAnio={aguinaldoAnio}
+              setAguinaldoAnio={setAguinaldoAnio}
+              accessToken={accessToken}
+              formatDate={formatDate}
+              formatSalary={formatSalary}
+              getNombreCompleto={getNombreCompleto}
+              addToRecentDocs={addToRecentDocs}
+              docGenGenerating={docGenGenerating}
+              setDocGenGenerating={setDocGenGenerating}
+              onClose={() => { setDocGenType(''); setDocGenOpen(false); }}
+              toast={toast}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

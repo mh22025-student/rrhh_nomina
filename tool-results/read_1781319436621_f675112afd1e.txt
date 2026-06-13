@@ -1,0 +1,625 @@
+     1→     1→     1→'use client';
+     2→     2→     2→
+     3→     3→     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→     4→     4→import {
+     5→     5→     5→  FileText, Download, Calendar, Loader2, CheckCircle, Clock, AlertCircle,
+     6→     6→     6→  Users, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Receipt,
+     7→     7→     7→  ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Eye,
+     8→     8→     8→  AlertTriangle, Timer, Scale
+     9→     9→     9→} from 'lucide-react';
+    10→    10→    10→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    11→    11→    11→import { Button } from '@/components/ui/button';
+    12→    12→    12→import { Badge } from '@/components/ui/badge';
+    13→    13→    13→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    14→    14→    14→import { Skeleton } from '@/components/ui/skeleton';
+    15→    15→    15→import { useToast } from '@/hooks/use-toast';
+    16→    16→    16→
+    17→    17→    17→interface IsrReportProps {
+    18→    18→    18→  accessToken: string;
+    19→    19→    19→  userRole: string;
+    20→    20→    20→}
+    21→    21→    21→
+    22→    22→    22→const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    23→    23→    23→
+    24→    24→    24→const mockTrendData = [
+    25→    25→    25→  { mes: 'Nov', total: 2920.60 },
+    26→    26→    26→  { mes: 'Dic', total: 2780.40 },
+    27→    27→    27→  { mes: 'Ene', total: 3100.80 },
+    28→    28→    28→  { mes: 'Feb', total: 3250.15 },
+    29→    29→    29→  { mes: 'Mar', total: 3380.90 },
+    30→    30→    30→  { mes: 'Abr', total: 3520.45 },
+    31→    31→    31→];
+    32→    32→    32→
+    33→    33→    33→type SortField = 'nombre' | 'salario_bruto' | 'deducciones' | 'renta_imponible' | 'isr_retenido';
+    34→    34→    34→type SortDir = 'asc' | 'desc';
+    35→    35→    35→
+    36→    36→    36→function getInitials(name: string): string {
+    37→    37→    37→  return name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+    38→    38→    38→}
+    39→    39→    39→
+    40→    40→    40→function fmt(n: number): string {
+    41→    41→    41→  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    42→    42→    42→}
+    43→    43→    43→
+    44→    44→    44→function getDaysUntilDeadline(mes: number, anio: number): number {
+    45→    45→    45→  const deadline = new Date(anio, mes, 10);
+    46→    46→    46→  const today = new Date();
+    47→    47→    47→  today.setHours(0, 0, 0, 0);
+    48→    48→    48→  deadline.setHours(0, 0, 0, 0);
+    49→    49→    49→  return Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    50→    50→    50→}
+    51→    51→    51→
+    52→    52→    52→export default function IsrReport({ accessToken }: IsrReportProps) {
+    53→    53→    53→  const { toast } = useToast();
+    54→    54→    54→  const [mes, setMes] = useState(String(new Date().getMonth() + 1));
+    55→    55→    55→  const [anio, setAnio] = useState(String(new Date().getFullYear()));
+    56→    56→    56→  const [data, setData] = useState<{
+    57→    57→    57→    periodo: { mes: number; anio: number };
+    58→    58→    58→    parametros: { tasa_isss_laboral: number; tasa_afp_laboral: number; tramos_isr: { numero_tramo: number; desde: number; hasta: number | null; porcentaje: number; cuota_fija: number }[] };
+    59→    59→    59→    empleados: { id: string; nombre: string; dui: string; salario_bruto: number; isss_laboral: number; afp_laboral: number; deducciones: number; renta_imponible: number; isr_retenido: number }[];
+    60→    60→    60→    totales: { total_empleados: number; total_salario_bruto: number; total_deducciones: number; total_renta_imponible: number; total_isr_retenido: number };
+    61→    61→    61→    entero: { id: string; estado: string; fecha_entero: string | null; formulario_f910: string | null; total_retenciones: number } | null;
+    62→    62→    62→  } | null>(null);
+    63→    63→    63→  const [loading, setLoading] = useState(false);
+    64→    64→    64→  const [downloading, setDownloading] = useState(false);
+    65→    65→    65→  const [sortField, setSortField] = useState<SortField>('nombre');
+    66→    66→    66→  const [sortDir, setSortDir] = useState<SortDir>('asc');
+    67→    67→    67→  const [showPreview, setShowPreview] = useState(false);
+    68→    68→    68→
+    69→    69→    69→  const fetchData = useCallback(async () => {
+    70→    70→    70→    setLoading(true);
+    71→    71→    71→    try {
+    72→    72→    72→      const res = await fetch(`/api/reportes/isr?mes=${mes}&anio=${anio}`, {
+    73→    73→    73→        headers: { Authorization: `Bearer ${accessToken}` },
+    74→    74→    74→      });
+    75→    75→    75→      if (res.ok) {
+    76→    76→    76→        setData(await res.json());
+    77→    77→    77→      }
+    78→    78→    78→    } catch (err) {
+    79→    79→    79→      console.error(err);
+    80→    80→    80→    } finally {
+    81→    81→    81→      setLoading(false);
+    82→    82→    82→    }
+    83→    83→    83→  }, [accessToken, mes, anio]);
+    84→    84→    84→
+    85→    85→    85→  useEffect(() => { fetchData(); }, [fetchData]);
+    86→    86→    86→
+    87→    87→    87→  const generateF910 = async () => {
+    88→    88→    88→    try {
+    89→    89→    89→      setDownloading(true);
+    90→    90→    90→      const res = await fetch(`/api/reportes/isr/download?mes=${mes}&anio=${anio}`, {
+    91→    91→    91→        headers: { Authorization: `Bearer ${accessToken}` },
+    92→    92→    92→      });
+    93→    93→    93→      if (!res.ok) throw new Error('Error al generar archivo');
+    94→    94→    94→      const blob = await res.blob();
+    95→    95→    95→      const url = URL.createObjectURL(blob);
+    96→    96→    96→      const a = document.createElement('a');
+    97→    97→    97→      a.href = url;
+    98→    98→    98→      a.download = `F910_${mes}_${anio}.csv`;
+    99→    99→    99→      a.click();
+   100→   100→   100→      URL.revokeObjectURL(url);
+   101→   101→   101→      toast({ title: 'Formulario F-910 generado', description: 'El archivo CSV ha sido descargado' });
+   102→   102→   102→    } catch {
+   103→   103→   103→      toast({ title: 'Error', description: 'No se pudo generar el formulario F-910', variant: 'destructive' });
+   104→   104→   104→    } finally {
+   105→   105→   105→      setDownloading(false);
+   106→   106→   106→    }
+   107→   107→   107→  };
+   108→   108→   108→
+   109→   109→   109→  const generateConstancia = (empId: string, empNombre: string) => {
+   110→   110→   110→    if (!data) return;
+   111→   111→   111→    const emp = data.empleados.find((e) => e.id === empId);
+   112→   112→   112→    if (!emp) return;
+   113→   113→   113→
+   114→   114→   114→    const content = `CONSTANCIA DE RETENCIÓN ISR\n\nNombre: ${empNombre}\nDUI: ${emp.dui}\nPeríodo: ${meses[data.periodo.mes - 1]} ${data.periodo.anio}\n\nSalario Bruto: $${emp.salario_bruto.toFixed(2)}\nDeducciones (ISSS+AFP): $${emp.deducciones.toFixed(2)}\nRenta Imponible: $${emp.renta_imponible.toFixed(2)}\nISR Retenido: $${emp.isr_retenido.toFixed(2)}`;
+   115→   115→   115→
+   116→   116→   116→    const blob = new Blob([content], { type: 'text/plain' });
+   117→   117→   117→    const url = URL.createObjectURL(blob);
+   118→   118→   118→    const a = document.createElement('a');
+   119→   119→   119→    a.href = url;
+   120→   120→   120→    a.download = `Constancia_ISR_${emp.dui}.txt`;
+   121→   121→   121→    a.click();
+   122→   122→   122→    URL.revokeObjectURL(url);
+   123→   123→   123→    toast({ title: 'Constancia generada', description: `Constancia ISR de ${empNombre}` });
+   124→   124→   124→  };
+   125→   125→   125→
+   126→   126→   126→  const exportCSV = () => {
+   127→   127→   127→    if (!data) return;
+   128→   128→   128→    const headers = ['Nombre', 'DUI', 'Salario Bruto', 'ISSS Laboral', 'AFP Laboral', 'Deducciones', 'Renta Imponible', 'ISR Retenido'];
+   129→   129→   129→    const rows = data.empleados.map(e => [e.nombre, e.dui, fmt(e.salario_bruto), fmt(e.isss_laboral), fmt(e.afp_laboral), fmt(e.deducciones), fmt(e.renta_imponible), fmt(e.isr_retenido)]);
+   130→   130→   130→    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+   131→   131→   131→    const blob = new Blob([csv], { type: 'text/csv' });
+   132→   132→   132→    const url = URL.createObjectURL(blob);
+   133→   133→   133→    const a = document.createElement('a');
+   134→   134→   134→    a.href = url;
+   135→   135→   135→    a.download = `Retenciones_ISR_${meses[parseInt(mes) - 1]}_${anio}.csv`;
+   136→   136→   136→    a.click();
+   137→   137→   137→    URL.revokeObjectURL(url);
+   138→   138→   138→    toast({ title: 'CSV exportado', description: 'Retenciones ISR exportadas correctamente' });
+   139→   139→   139→  };
+   140→   140→   140→
+   141→   141→   141→  const handleSort = (field: SortField) => {
+   142→   142→   142→    if (sortField === field) {
+   143→   143→   143→      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+   144→   144→   144→    } else {
+   145→   145→   145→      setSortField(field);
+   146→   146→   146→      setSortDir('asc');
+   147→   147→   147→    }
+   148→   148→   148→  };
+   149→   149→   149→
+   150→   150→   150→  const sortedEmpleados = useMemo(() => {
+   151→   151→   151→    if (!data) return [];
+   152→   152→   152→    const sorted = [...data.empleados].sort((a, b) => {
+   153→   153→   153→      let cmp = 0;
+   154→   154→   154→      if (sortField === 'nombre') cmp = a.nombre.localeCompare(b.nombre);
+   155→   155→   155→      else if (sortField === 'salario_bruto') cmp = a.salario_bruto - b.salario_bruto;
+   156→   156→   156→      else if (sortField === 'deducciones') cmp = a.deducciones - b.deducciones;
+   157→   157→   157→      else if (sortField === 'renta_imponible') cmp = a.renta_imponible - b.renta_imponible;
+   158→   158→   158→      else if (sortField === 'isr_retenido') cmp = a.isr_retenido - b.isr_retenido;
+   159→   159→   159→      return sortDir === 'asc' ? cmp : -cmp;
+   160→   160→   160→    });
+   161→   161→   161→    return sorted;
+   162→   162→   162→  }, [data, sortField, sortDir]);
+   163→   163→   163→
+   164→   164→   164→  const SortIcon = ({ field }: { field: SortField }) => {
+   165→   165→   165→    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+   166→   166→   166→    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1 text-emerald-300" /> : <ArrowDown className="h-3 w-3 ml-1 text-emerald-300" />;
+   167→   167→   167→  };
+   168→   168→   168→
+   169→   169→   169→  const goToMesAnterior = () => {
+   170→   170→   170→    const m = parseInt(mes);
+   171→   171→   171→    const a = parseInt(anio);
+   172→   172→   172→    if (m === 1) { setMes('12'); setAnio(String(a - 1)); }
+   173→   173→   173→    else { setMes(String(m - 1)); }
+   174→   174→   174→  };
+   175→   175→   175→
+   176→   176→   176→  const goToMesSiguiente = () => {
+   177→   177→   177→    const m = parseInt(mes);
+   178→   178→   178→    const a = parseInt(anio);
+   179→   179→   179→    if (m === 12) { setMes('1'); setAnio(String(a + 1)); }
+   180→   180→   180→    else { setMes(String(m + 1)); }
+   181→   181→   181→  };
+   182→   182→   182→
+   183→   183→   183→  const daysUntilDeadline = getDaysUntilDeadline(parseInt(mes), parseInt(anio));
+   184→   184→   184→  const isEnterado = data?.entero?.estado === 'PRESENTADA' || data?.entero?.estado === 'ENTERADO';
+   185→   185→   185→
+   186→   186→   186→  // Distribution by ISR tramo for donut chart
+   187→   187→   187→  const tramoDistribution = useMemo(() => {
+   188→   188→   188→    if (!data) return [];
+   189→   189→   189→    const tramos: Record<string, number> = {};
+   190→   190→   190→    data.empleados.forEach(e => {
+   191→   191→   191→      const tramo = data.parametros.tramos_isr.find(t => e.renta_imponible >= t.desde && (t.hasta === null || e.renta_imponible < t.hasta));
+   192→   192→   192→      const label = tramo ? `Tramo ${tramo.numero_tramo}` : 'Exento';
+   193→   193→   193→      tramos[label] = (tramos[label] || 0) + 1;
+   194→   194→   194→    });
+   195→   195→   195→    return Object.entries(tramos).map(([name, value]) => ({ name, value }));
+   196→   196→   196→  }, [data]);
+   197→   197→   197→
+   198→   198→   198→  // Find the most frequent tramo
+   199→   199→   199→  const tramoMasFrecuente = useMemo(() => {
+   200→   200→   200→    if (tramoDistribution.length === 0) return '-';
+   201→   201→   201→    return tramoDistribution.reduce((max, d) => d.value > max.value ? d : max, tramoDistribution[0]).name;
+   202→   202→   202→  }, [tramoDistribution]);
+   203→   203→   203→
+   204→   204→   204→  const donutColors = ['#10b981', '#14b8a6', '#06b6d4', '#059669', '#0d9488', '#0e7490'];
+   205→   205→   205→  const totalDistribution = tramoDistribution.reduce((s, d) => s + d.value, 0);
+   206→   206→   206→
+   207→   207→   207→  const conicGradient = tramoDistribution.length > 0
+   208→   208→   208→    ? tramoDistribution.reduce((acc, d, i) => {
+   209→   209→   209→        const startPct = (acc.cumulative / totalDistribution) * 100;
+   210→   210→   210→        const endPct = ((acc.cumulative + d.value) / totalDistribution) * 100;
+   211→   211→   211→        acc.segments.push(`${donutColors[i % donutColors.length]} ${startPct}% ${endPct}%`);
+   212→   212→   212→        acc.cumulative += d.value;
+   213→   213→   213→        return acc;
+   214→   214→   214→      }, { segments: [] as string[], cumulative: 0 }).segments.join(', ')
+   215→   215→   215→    : 'transparent 0% 100%';
+   216→   216→   216→
+   217→   217→   217→  // Average retention
+   218→   218→   218→  const avgRetencion = data && data.totales.total_empleados > 0
+   219→   219→   219→    ? data.totales.total_isr_retenido / data.empleados.filter(e => e.isr_retenido > 0).length || 0
+   220→   220→   220→    : 0;
+   221→   221→   221→
+   222→   222→   222→  const totalRetenidos = data ? data.empleados.filter(e => e.isr_retenido > 0).length : 0;
+   223→   223→   223→
+   224→   224→   224→  // File preview content
+   225→   225→   225→  const filePreview = data ? [
+   226→   226→   226→    `F910|${data.periodo.mes}|${data.periodo.anio}|${data.totales.total_empleados}`,
+   227→   227→   227→    `TOTAL_RETENCIONES|${fmt(data.totales.total_isr_retenido)}`,
+   228→   228→   228→    `TOTAL_SALARIOS|${fmt(data.totales.total_salario_bruto)}`,
+   229→   229→   229→    `TOTAL_DEDUCCIONES|${fmt(data.totales.total_deducciones)}`,
+   230→   230→   230→    ...data.empleados.slice(0, 2).map(e => `${e.dui}|${e.nombre}|${fmt(e.salario_bruto)}|${fmt(e.deducciones)}|${fmt(e.renta_imponible)}|${fmt(e.isr_retenido)}`),
+   231→   231→   231→  ] : [];
+   232→   232→   232→
+   233→   233→   233→  const trendMax = Math.max(...mockTrendData.map(d => d.total));
+   234→   234→   234→
+   235→   235→   235→  return (
+   236→   236→   236→    <div className="space-y-5">
+   237→   237→   237→      {/* ── Professional Header Banner ── */}
+   238→   238→   238→      <div className="rounded-xl overflow-hidden shadow-lg">
+   239→   239→   239→        <div className="bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600 dark:from-emerald-900 dark:via-emerald-800 dark:to-teal-800 p-5 sm:p-6">
+   240→   240→   240→          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+   241→   241→   241→            <div className="flex items-center gap-4">
+   242→   242→   242→              <div className="p-3 rounded-xl bg-white/15 backdrop-blur-sm">
+   243→   243→   243→                <Receipt className="h-8 w-8 text-white" />
+   244→   244→   244→              </div>
+   245→   245→   245→              <div>
+   246→   246→   246→                <h2 className="text-xl sm:text-2xl font-bold text-white">Retenciones ISR</h2>
+   247→   247→   247→                <p className="text-emerald-100 text-sm">Formulario F-910 — Declaración de Retenciones</p>
+   248→   248→   248→                <p className="text-emerald-200/70 text-xs mt-0.5">Art. 157 Código Tributario</p>
+   249→   249→   249→              </div>
+   250→   250→   250→            </div>
+   251→   251→   251→            {/* Month/Year selector with arrows */}
+   252→   252→   252→            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg p-1.5">
+   253→   253→   253→              <Button variant="ghost" size="icon" onClick={goToMesAnterior} className="h-8 w-8 text-white hover:bg-white/20">
+   254→   254→   254→                <ChevronLeft className="h-4 w-4" />
+   255→   255→   255→              </Button>
+   256→   256→   256→              <div className="flex items-center gap-2">
+   257→   257→   257→                <Select value={mes} onValueChange={setMes}>
+   258→   258→   258→                  <SelectTrigger className="w-28 bg-white/15 border-white/20 text-white text-sm h-8">
+   259→   259→   259→                    <SelectValue />
+   260→   260→   260→                  </SelectTrigger>
+   261→   261→   261→                  <SelectContent>
+   262→   262→   262→                    {meses.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
+   263→   263→   263→                  </SelectContent>
+   264→   264→   264→                </Select>
+   265→   265→   265→                <Select value={anio} onValueChange={setAnio}>
+   266→   266→   266→                  <SelectTrigger className="w-20 bg-white/15 border-white/20 text-white text-sm h-8">
+   267→   267→   267→                    <SelectValue />
+   268→   268→   268→                  </SelectTrigger>
+   269→   269→   269→                  <SelectContent>
+   270→   270→   270→                    {[2024, 2025, 2026].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+   271→   271→   271→                  </SelectContent>
+   272→   272→   272→                </Select>
+   273→   273→   273→              </div>
+   274→   274→   274→              <Button variant="ghost" size="icon" onClick={goToMesSiguiente} className="h-8 w-8 text-white hover:bg-white/20">
+   275→   275→   275→                <ChevronRight className="h-4 w-4" />
+   276→   276→   276→              </Button>
+   277→   277→   277→            </div>
+   278→   278→   278→          </div>
+   279→   279→   279→        </div>
+   280→   280→   280→      </div>
+   281→   281→   281→
+   282→   282→   282→      {/* ── Summary KPI Cards ── */}
+   283→   283→   283→      {data && (
+   284→   284→   284→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+   285→   285→   285→          <Card className="shadow-sm overflow-hidden border-l-4 border-l-emerald-500 dark:border-l-emerald-400 dark:border-slate-700">
+   286→   286→   286→            <CardContent className="p-4">
+   287→   287→   287→              <div className="flex items-center gap-3">
+   288→   288→   288→                <div className="p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/50">
+   289→   289→   289→                  <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   290→   290→   290→                </div>
+   291→   291→   291→                <div>
+   292→   292→   292→                  <p className="text-xs text-slate-500 dark:text-slate-400">Total Retenidos</p>
+   293→   293→   293→                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{totalRetenidos}</p>
+   294→   294→   294→                </div>
+   295→   295→   295→              </div>
+   296→   296→   296→            </CardContent>
+   297→   297→   297→          </Card>
+   298→   298→   298→          <Card className="shadow-sm overflow-hidden border-l-4 border-l-amber-500 dark:border-l-amber-400 dark:border-slate-700">
+   299→   299→   299→            <CardContent className="p-4">
+   300→   300→   300→              <div className="flex items-center gap-3">
+   301→   301→   301→                <div className="p-2.5 rounded-lg bg-amber-100 dark:bg-amber-900/50">
+   302→   302→   302→                  <DollarSign className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+   303→   303→   303→                </div>
+   304→   304→   304→                <div>
+   305→   305→   305→                  <p className="text-xs text-slate-500 dark:text-slate-400">Total ISR Retenido</p>
+   306→   306→   306→                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono">${fmt(data.totales.total_isr_retenido)}</p>
+   307→   307→   307→                </div>
+   308→   308→   308→              </div>
+   309→   309→   309→            </CardContent>
+   310→   310→   310→          </Card>
+   311→   311→   311→          <Card className="shadow-sm overflow-hidden border-l-4 border-l-teal-500 dark:border-l-teal-400 dark:border-slate-700">
+   312→   312→   312→            <CardContent className="p-4">
+   313→   313→   313→              <div className="flex items-center gap-3">
+   314→   314→   314→                <div className="p-2.5 rounded-lg bg-teal-100 dark:bg-teal-900/50">
+   315→   315→   315→                  <TrendingUp className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+   316→   316→   316→                </div>
+   317→   317→   317→                <div>
+   318→   318→   318→                  <p className="text-xs text-slate-500 dark:text-slate-400">Promedio Retención</p>
+   319→   319→   319→                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono">${fmt(avgRetencion)}</p>
+   320→   320→   320→                </div>
+   321→   321→   321→              </div>
+   322→   322→   322→            </CardContent>
+   323→   323→   323→          </Card>
+   324→   324→   324→          <Card className="shadow-sm overflow-hidden border-l-4 border-l-emerald-700 dark:border-l-emerald-500 dark:border-slate-700">
+   325→   325→   325→            <CardContent className="p-4">
+   326→   326→   326→              <div className="flex items-center gap-3">
+   327→   327→   327→                <div className="p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/50">
+   328→   328→   328→                  <Scale className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
+   329→   329→   329→                </div>
+   330→   330→   330→                <div>
+   331→   331→   331→                  <p className="text-xs text-slate-500 dark:text-slate-400">Tramo Más Frecuente</p>
+   332→   332→   332→                  <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{tramoMasFrecuente}</p>
+   333→   333→   333→                </div>
+   334→   334→   334→              </div>
+   335→   335→   335→            </CardContent>
+   336→   336→   336→          </Card>
+   337→   337→   337→        </div>
+   338→   338→   338→      )}
+   339→   339→   339→
+   340→   340→   340→      {/* ── Charts Row: Bar + Donut ── */}
+   341→   341→   341→      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+   342→   342→   342→        {/* Bar Chart - Monthly Trend */}
+   343→   343→   343→        <Card className="shadow-sm lg:col-span-3 dark:border-slate-700">
+   344→   344→   344→          <CardHeader className="pb-2">
+   345→   345→   345→            <CardTitle className="text-sm font-medium text-slate-700 dark:text-slate-300">Tendencia Mensual de Retenciones ISR (6 meses)</CardTitle>
+   346→   346→   346→          </CardHeader>
+   347→   347→   347→          <CardContent className="p-4 pt-2">
+   348→   348→   348→            <div className="flex items-end gap-3 h-36">
+   349→   349→   349→              {mockTrendData.map((item, idx) => {
+   350→   350→   350→                const heightPct = trendMax > 0 ? (item.total / trendMax) * 100 : 0;
+   351→   351→   351→                return (
+   352→   352→   352→                  <div key={idx} className="flex-1 flex flex-col items-center gap-1">
+   353→   353→   353→                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">${(item.total / 1000).toFixed(1)}k</span>
+   354→   354→   354→                    <div className="w-full relative" style={{ height: '90px' }}>
+   355→   355→   355→                      <div
+   356→   356→   356→                        className="absolute bottom-0 w-full rounded-t-md bg-gradient-to-t from-emerald-700 to-teal-400 dark:from-emerald-600 dark:to-teal-400 transition-all duration-500 hover:from-emerald-600 hover:to-emerald-300"
+   357→   357→   357→                        style={{ height: `${heightPct}%` }}
+   358→   358→   358→                      />
+   359→   359→   359→                    </div>
+   360→   360→   360→                    <span className="text-[10px] text-slate-500 dark:text-slate-400">{item.mes}</span>
+   361→   361→   361→                  </div>
+   362→   362→   362→                );
+   363→   363→   363→              })}
+   364→   364→   364→            </div>
+   365→   365→   365→          </CardContent>
+   366→   366→   366→        </Card>
+   367→   367→   367→
+   368→   368→   368→        {/* Donut Chart - Distribution by Tramo */}
+   369→   369→   369→        <Card className="shadow-sm lg:col-span-2 dark:border-slate-700">
+   370→   370→   370→          <CardHeader className="pb-2">
+   371→   371→   371→            <CardTitle className="text-sm font-medium text-slate-700 dark:text-slate-300">Distribución por Tramo ISR</CardTitle>
+   372→   372→   372→          </CardHeader>
+   373→   373→   373→          <CardContent className="p-4 pt-2">
+   374→   374→   374→            {tramoDistribution.length === 0 ? (
+   375→   375→   375→              <div className="flex items-center justify-center h-36 text-sm text-slate-400">Sin datos</div>
+   376→   376→   376→            ) : (
+   377→   377→   377→              <div className="flex items-center gap-4">
+   378→   378→   378→                <div className="relative w-28 h-28 shrink-0">
+   379→   379→   379→                  <div
+   380→   380→   380→                    className="w-full h-full rounded-full"
+   381→   381→   381→                    style={{ background: `conic-gradient(${conicGradient})` }}
+   382→   382→   382→                  />
+   383→   383→   383→                  <div className="absolute inset-3 rounded-full bg-white dark:bg-slate-900 flex items-center justify-center">
+   384→   384→   384→                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{totalRetenidos}</span>
+   385→   385→   385→                  </div>
+   386→   386→   386→                </div>
+   387→   387→   387→                <div className="flex-1 space-y-1.5 min-w-0">
+   388→   388→   388→                  {tramoDistribution.map((d, i) => (
+   389→   389→   389→                    <div key={d.name} className="flex items-center gap-2 text-xs">
+   390→   390→   390→                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: donutColors[i % donutColors.length] }} />
+   391→   391→   391→                      <span className="text-slate-600 dark:text-slate-400">{d.name}</span>
+   392→   392→   392→                      <span className="ml-auto font-mono text-slate-700 dark:text-slate-300 shrink-0">{d.value} emp.</span>
+   393→   393→   393→                    </div>
+   394→   394→   394→                  ))}
+   395→   395→   395→                </div>
+   396→   396→   396→              </div>
+   397→   397→   397→            )}
+   398→   398→   398→          </CardContent>
+   399→   399→   399→        </Card>
+   400→   400→   400→      </div>
+   401→   401→   401→
+   402→   402→   402→      {/* ── Compliance Status Widget ── */}
+   403→   403→   403→      {data && (
+   404→   404→   404→        <Card className="shadow-sm dark:border-slate-700 overflow-hidden">
+   405→   405→   405→          <CardContent className="p-0">
+   406→   406→   406→            <div className="flex flex-col sm:flex-row">
+   407→   407→   407→              {/* Status indicator */}
+   408→   408→   408→              <div className={`p-4 sm:p-5 flex items-center gap-3 sm:w-56 ${isEnterado ? 'bg-emerald-50 dark:bg-emerald-900/20' : daysUntilDeadline < 0 ? 'bg-red-50 dark:bg-red-900/20' : daysUntilDeadline <= 5 ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-emerald-50 dark:bg-emerald-900/20'}`}>
+   409→   409→   409→                <div className={`p-2 rounded-full ${isEnterado ? 'bg-emerald-200 dark:bg-emerald-800' : daysUntilDeadline < 0 ? 'bg-red-200 dark:bg-red-800' : daysUntilDeadline <= 5 ? 'bg-amber-200 dark:bg-amber-800' : 'bg-emerald-200 dark:bg-emerald-800'}`}>
+   410→   410→   410→                  {isEnterado ? <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> : daysUntilDeadline < 0 ? <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" /> : daysUntilDeadline <= 5 ? <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" /> : <Clock className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />}
+   411→   411→   411→                </div>
+   412→   412→   412→                <div>
+   413→   413→   413→                  <Badge className={isEnterado ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300' : daysUntilDeadline < 0 ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300' : daysUntilDeadline <= 5 ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300'}>
+   414→   414→   414→                    {data.entero?.estado || 'PENDIENTE'}
+   415→   415→   415→                  </Badge>
+   416→   416→   416→                </div>
+   417→   417→   417→              </div>
+   418→   418→   418→              {/* Details */}
+   419→   419→   419→              <div className="flex-1 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+   420→   420→   420→                <div className="flex items-center gap-2">
+   421→   421→   421→                  <Timer className="h-4 w-4 text-slate-400" />
+   422→   422→   422→                  <span className="text-sm text-slate-600 dark:text-slate-400">Plazo de declaración:</span>
+   423→   423→   423→                  <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Día 10 del mes siguiente</span>
+   424→   424→   424→                </div>
+   425→   425→   425→                {!isEnterado && (
+   426→   426→   426→                  <div className="flex items-center gap-2">
+   427→   427→   427→                    <Calendar className="h-4 w-4 text-slate-400" />
+   428→   428→   428→                    <span className="text-sm text-slate-600 dark:text-slate-400">Días restantes:</span>
+   429→   429→   429→                    <span className={`text-sm font-bold ${daysUntilDeadline < 0 ? 'text-red-600 dark:text-red-400' : daysUntilDeadline <= 5 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+   430→   430→   430→                      {daysUntilDeadline < 0 ? `Vencido por ${Math.abs(daysUntilDeadline)} días` : `${daysUntilDeadline} días`}
+   431→   431→   431→                    </span>
+   432→   432→   432→                  </div>
+   433→   433→   433→                )}
+   434→   434→   434→                {isEnterado && data.entero?.fecha_entero && (
+   435→   435→   435→                  <div className="flex items-center gap-2">
+   436→   436→   436→                    <CheckCircle className="h-4 w-4 text-emerald-500" />
+   437→   437→   437→                    <span className="text-sm text-slate-600 dark:text-slate-400">Enterado el:</span>
+   438→   438→   438→                    <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+   439→   439→   439→                      {new Date(data.entero.fecha_entero).toLocaleDateString('es-SV')}
+   440→   440→   440→                    </span>
+   441→   441→   441→                  </div>
+   442→   442→   442→                )}
+   443→   443→   443→              </div>
+   444→   444→   444→            </div>
+   445→   445→   445→          </CardContent>
+   446→   446→   446→        </Card>
+   447→   447→   447→      )}
+   448→   448→   448→
+   449→   449→   449→      {/* ── ISR Tramos Table ── */}
+   450→   450→   450→      {data && (
+   451→   451→   451→        <Card className="shadow-sm dark:border-slate-700">
+   452→   452→   452→          <CardHeader className="pb-3">
+   453→   453→   453→            <CardTitle className="text-base flex items-center gap-2 dark:text-slate-200">
+   454→   454→   454→              <Scale className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Tramos ISR Vigentes
+   455→   455→   455→            </CardTitle>
+   456→   456→   456→          </CardHeader>
+   457→   457→   457→          <CardContent className="p-0">
+   458→   458→   458→            <div className="overflow-x-auto">
+   459→   459→   459→              <table className="w-full text-sm">
+   460→   460→   460→                <thead>
+   461→   461→   461→                  <tr className="bg-gradient-to-r from-emerald-700 to-teal-600 dark:from-emerald-900 dark:to-teal-900">
+   462→   462→   462→                    <th className="text-center p-3 font-semibold text-white">Tramo</th>
+   463→   463→   463→                    <th className="text-right p-3 font-semibold text-white">Desde</th>
+   464→   464→   464→                    <th className="text-right p-3 font-semibold text-white">Hasta</th>
+   465→   465→   465→                    <th className="text-right p-3 font-semibold text-white">Porcentaje</th>
+   466→   466→   466→                    <th className="text-right p-3 font-semibold text-white">Cuota Fija</th>
+   467→   467→   467→                  </tr>
+   468→   468→   468→                </thead>
+   469→   469→   469→                <tbody>
+   470→   470→   470→                  {data.parametros.tramos_isr.map((t, idx) => (
+   471→   471→   471→                    <tr key={t.numero_tramo} className={`border-b dark:border-slate-700/50 ${idx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50/70 dark:bg-slate-800/30'}`}>
+   472→   472→   472→                      <td className="p-3 text-center">
+   473→   473→   473→                        <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 dark:border-emerald-600 dark:text-emerald-400">Tramo {t.numero_tramo}</Badge>
+   474→   474→   474→                      </td>
+   475→   475→   475→                      <td className="p-3 text-right font-mono text-slate-800 dark:text-slate-200">${t.desde.toLocaleString()}</td>
+   476→   476→   476→                      <td className="p-3 text-right font-mono text-slate-800 dark:text-slate-200">{t.hasta ? `$${t.hasta.toLocaleString()}` : 'En adelante'}</td>
+   477→   477→   477→                      <td className="p-3 text-right font-mono text-slate-800 dark:text-slate-200">{(t.porcentaje * 100).toFixed(0)}%</td>
+   478→   478→   478→                      <td className="p-3 text-right font-mono text-slate-800 dark:text-slate-200">${fmt(t.cuota_fija)}</td>
+   479→   479→   479→                    </tr>
+   480→   480→   480→                  ))}
+   481→   481→   481→                </tbody>
+   482→   482→   482→              </table>
+   483→   483→   483→            </div>
+   484→   484→   484→          </CardContent>
+   485→   485→   485→        </Card>
+   486→   486→   486→      )}
+   487→   487→   487→
+   488→   488→   488→      {/* ── Enhanced Data Table ── */}
+   489→   489→   489→      <Card className="shadow-sm dark:border-slate-700">
+   490→   490→   490→        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+   491→   491→   491→          <CardTitle className="text-base flex items-center gap-2 dark:text-slate-200">
+   492→   492→   492→            <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Retenciones ISR por Empleado
+   493→   493→   493→          </CardTitle>
+   494→   494→   494→        </CardHeader>
+   495→   495→   495→        <CardContent className="p-0">
+   496→   496→   496→          {loading ? (
+   497→   497→   497→            <div className="p-4 space-y-3">{[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
+   498→   498→   498→          ) : !data || data.empleados.length === 0 ? (
+   499→   499→   499→            <div className="p-8 text-center text-slate-500 dark:text-slate-400">
+   500→   500→   500→              <FileText className="h-10 w-10 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+   501→   501→   501→              <p className="text-sm">No hay datos para el período seleccionado</p>
+   502→   502→   502→            </div>
+   503→   503→   503→          ) : (
+   504→   504→   504→            <div className="overflow-x-auto max-h-96 overflow-y-auto">
+   505→   505→   505→              <table className="w-full text-sm">
+   506→   506→   506→                <thead className="sticky top-0 z-10">
+   507→   507→   507→                  <tr className="bg-gradient-to-r from-emerald-700 to-teal-600 dark:from-emerald-900 dark:to-teal-900">
+   508→   508→   508→                    <th className="text-left p-3 font-semibold text-white cursor-pointer select-none" onClick={() => handleSort('nombre')}>
+   509→   509→   509→                      <span className="flex items-center">Nombre <SortIcon field="nombre" /></span>
+   510→   510→   510→                    </th>
+   511→   511→   511→                    <th className="text-left p-3 font-semibold text-white">DUI</th>
+   512→   512→   512→                    <th className="text-right p-3 font-semibold text-white cursor-pointer select-none" onClick={() => handleSort('salario_bruto')}>
+   513→   513→   513→                      <span className="flex items-center justify-end">Salario Bruto <SortIcon field="salario_bruto" /></span>
+   514→   514→   514→                    </th>
+   515→   515→   515→                    <th className="text-right p-3 font-semibold text-white cursor-pointer select-none" onClick={() => handleSort('deducciones')}>
+   516→   516→   516→                      <span className="flex items-center justify-end">Deducciones <SortIcon field="deducciones" /></span>
+   517→   517→   517→                    </th>
+   518→   518→   518→                    <th className="text-right p-3 font-semibold text-white cursor-pointer select-none" onClick={() => handleSort('renta_imponible')}>
+   519→   519→   519→                      <span className="flex items-center justify-end">Renta Imponible <SortIcon field="renta_imponible" /></span>
+   520→   520→   520→                    </th>
+   521→   521→   521→                    <th className="text-right p-3 font-semibold text-white cursor-pointer select-none" onClick={() => handleSort('isr_retenido')}>
+   522→   522→   522→                      <span className="flex items-center justify-end">ISR Retenido <SortIcon field="isr_retenido" /></span>
+   523→   523→   523→                    </th>
+   524→   524→   524→                    <th className="text-center p-3 font-semibold text-white">Constancia</th>
+   525→   525→   525→                  </tr>
+   526→   526→   526→                </thead>
+   527→   527→   527→                <tbody>
+   528→   528→   528→                  {sortedEmpleados.map((emp, idx) => (
+   529→   529→   529→                    <tr key={emp.id} className={`border-b dark:border-slate-700/50 hover:bg-emerald-50/60 dark:hover:bg-emerald-900/15 transition-colors ${idx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50/70 dark:bg-slate-800/30'}`}>
+   530→   530→   530→                      <td className="p-3">
+   531→   531→   531→                        <div className="flex items-center gap-2.5">
+   532→   532→   532→                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 dark:from-emerald-600 dark:to-teal-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+   533→   533→   533→                            {getInitials(emp.nombre)}
+   534→   534→   534→                          </div>
+   535→   535→   535→                          <span className="text-slate-800 dark:text-slate-200 font-medium">{emp.nombre}</span>
+   536→   536→   536→                        </div>
+   537→   537→   537→                      </td>
+   538→   538→   538→                      <td className="p-3 font-mono text-xs text-slate-600 dark:text-slate-400">{emp.dui}</td>
+   539→   539→   539→                      <td className="p-3 text-right font-mono text-slate-800 dark:text-slate-200">${fmt(emp.salario_bruto)}</td>
+   540→   540→   540→                      <td className="p-3 text-right font-mono text-amber-700 dark:text-amber-400">${fmt(emp.deducciones)}</td>
+   541→   541→   541→                      <td className="p-3 text-right font-mono text-slate-800 dark:text-slate-200">${fmt(emp.renta_imponible)}</td>
+   542→   542→   542→                      <td className="p-3 text-right font-mono text-red-700 dark:text-red-400 font-medium">${fmt(emp.isr_retenido)}</td>
+   543→   543→   543→                      <td className="p-3 text-center">
+   544→   544→   544→                        <Button variant="ghost" size="sm" onClick={() => generateConstancia(emp.id, emp.nombre)} title="Generar constancia" className="dark:text-slate-300 dark:hover:bg-slate-700">
+   545→   545→   545→                          <FileText className="h-3.5 w-3.5" />
+   546→   546→   546→                        </Button>
+   547→   547→   547→                      </td>
+   548→   548→   548→                    </tr>
+   549→   549→   549→                  ))}
+   550→   550→   550→                </tbody>
+   551→   551→   551→                <tfoot>
+   552→   552→   552→                  <tr className="border-t-2 border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 font-semibold">
+   553→   553→   553→                    <td className="p-3 text-slate-800 dark:text-slate-200" colSpan={2}>Totales ({data.totales.total_empleados})</td>
+   554→   554→   554→                    <td className="p-3 text-right font-mono text-slate-800 dark:text-slate-200">${fmt(data.totales.total_salario_bruto)}</td>
+   555→   555→   555→                    <td className="p-3 text-right font-mono text-amber-700 dark:text-amber-400">${fmt(data.totales.total_deducciones)}</td>
+   556→   556→   556→                    <td className="p-3 text-right font-mono text-slate-800 dark:text-slate-200">${fmt(data.totales.total_renta_imponible)}</td>
+   557→   557→   557→                    <td className="p-3 text-right font-mono text-red-700 dark:text-red-400">${fmt(data.totales.total_isr_retenido)}</td>
+   558→   558→   558→                    <td />
+   559→   559→   559→                  </tr>
+   560→   560→   560→                  <tr className="bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-800 dark:to-teal-800">
+   561→   561→   561→                    <td className="p-3 text-white font-bold" colSpan={4}>Total Retenciones ISR — F-910</td>
+   562→   562→   562→                    <td className="p-3 text-right text-white font-bold font-mono" colSpan={3}>
+   563→   563→   563→                      ${fmt(data.totales.total_isr_retenido)}
+   564→   564→   564→                    </td>
+   565→   565→   565→                  </tr>
+   566→   566→   566→                </tfoot>
+   567→   567→   567→              </table>
+   568→   568→   568→            </div>
+   569→   569→   569→          )}
+   570→   570→   570→        </CardContent>
+   571→   571→   571→      </Card>
+   572→   572→   572→
+   573→   573→   573→      {/* ── Download / Export Section ── */}
+   574→   574→   574→      {data && data.empleados.length > 0 && (
+   575→   575→   575→        <Card className="shadow-sm dark:border-slate-700">
+   576→   576→   576→          <CardHeader className="pb-2">
+   577→   577→   577→            <CardTitle className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+   578→   578→   578→              <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Descarga y Exportación
+   579→   579→   579→            </CardTitle>
+   580→   580→   580→          </CardHeader>
+   581→   581→   581→          <CardContent className="p-4 pt-2 space-y-4">
+   582→   582→   582→            <div className="flex flex-wrap gap-3">
+   583→   583→   583→              <Button onClick={generateF910} disabled={downloading} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600">
+   584→   584→   584→                {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+   585→   585→   585→                Descargar F-910
+   586→   586→   586→              </Button>
+   587→   587→   587→              <Button onClick={exportCSV} variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-900/20">
+   588→   588→   588→                <FileSpreadsheet className="h-4 w-4 mr-2" /> Exportar CSV
+   589→   589→   589→              </Button>
+   590→   590→   590→              <Button onClick={() => setShowPreview(p => !p)} variant="ghost" className="text-slate-600 dark:text-slate-400">
+   591→   591→   591→                <Eye className="h-4 w-4 mr-2" /> {showPreview ? 'Ocultar' : 'Vista Previa'}
+   592→   592→   592→              </Button>
+   593→   593→   593→            </div>
+   594→   594→   594→
+   595→   595→   595→            {/* File format info */}
+   596→   596→   596→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   597→   597→   597→              <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+   598→   598→   598→                <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">Formato F-910</p>
+   599→   599→   599→                <p className="text-[11px] text-emerald-700/70 dark:text-emerald-400/70">Declaración de Retenciones — Formulario oficial del Ministerio de Hacienda</p>
+   600→   600→   600→              </div>
+   601→   601→   601→              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+   602→   602→   602→                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Formato CSV</p>
+   603→   603→   603→                <p className="text-[11px] text-slate-500 dark:text-slate-400">Retenciones ISR en formato de valores separados por coma</p>
+   604→   604→   604→              </div>
+   605→   605→   605→            </div>
+   606→   606→   606→
+   607→   607→   607→            {/* Preview */}
+   608→   608→   608→            {showPreview && (
+   609→   609→   609→              <div className="rounded-lg bg-slate-900 dark:bg-slate-950 p-4 overflow-x-auto">
+   610→   610→   610→                <p className="text-[10px] text-slate-400 mb-2">Vista previa — Primeras líneas del formulario F-910</p>
+   611→   611→   611→                <pre className="text-xs text-emerald-400 font-mono leading-relaxed">
+   612→   612→   612→                  {filePreview.map((line, i) => (
+   613→   613→   613→                    <span key={i}>{line}{'\n'}</span>
+   614→   614→   614→                  ))}
+   615→   615→   615→                  <span className="text-slate-500">... ({data.empleados.length - 2} registros más)</span>
+   616→   616→   616→                </pre>
+   617→   617→   617→              </div>
+   618→   618→   618→            )}
+   619→   619→   619→          </CardContent>
+   620→   620→   620→        </Card>
+   621→   621→   621→      )}
+   622→   622→   622→    </div>
+   623→   623→   623→  );
+   624→   624→   624→}
+   625→   625→   625→

@@ -371,3 +371,842 @@
   background: linear-gradient(90deg, transparent, oklch(1 0 0 / 30%), transparent);
   animation: shimmer 2s ease-in-out infinite;
 }
+
+/* ========================================================================
+   1. PAGE TRANSITION ANIMATIONS
+   ======================================================================== */
+
+/* View transition animation for module switching */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes page-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* Content fade-in with upward motion */
+@keyframes content-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Staggered card entrance animation */
+@keyframes card-entrance {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-page-enter {
+  animation: page-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-page-exit {
+  animation: page-exit 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-content-fade-up {
+  animation: content-fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Staggered card entrance container */
+.stagger-cards > * {
+  animation: card-entrance 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger-cards > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-cards > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-cards > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-cards > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-cards > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-cards > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-cards > *:nth-child(7) { animation-delay: 360ms; }
+.stagger-cards > *:nth-child(8) { animation-delay: 420ms; }
+.stagger-cards > *:nth-child(9) { animation-delay: 480ms; }
+.stagger-cards > *:nth-child(10) { animation-delay: 540ms; }
+.stagger-cards > *:nth-child(n+11) { animation-delay: 600ms; }
+
+/* View transition API support */
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root) {
+  animation: page-exit 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+::view-transition-new(root) {
+  animation: page-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ========================================================================
+   2. MICRO-INTERACTION ANIMATIONS
+   ======================================================================== */
+
+/* Button press scale effect */
+.button-press {
+  transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.button-press:active {
+  transform: scale(0.97);
+}
+
+/* Card hover lift with shadow change */
+.card-hover-lift-enhanced {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.card-hover-lift-enhanced:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px -8px oklch(0 0 0 / 12%),
+              0 4px 12px -4px oklch(0 0 0 / 8%);
+}
+.dark .card-hover-lift-enhanced:hover {
+  box-shadow: 0 12px 32px -8px oklch(0 0 0 / 25%),
+              0 4px 12px -4px oklch(0 0 0 / 15%);
+}
+
+/* CSS-only ripple effect */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+.ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: oklch(1 0 0 / 25%);
+  transform: translate(-50%, -50%);
+  transition: width 0.5s ease, height 0.5s ease, opacity 0.5s ease;
+  opacity: 0;
+  pointer-events: none;
+}
+.ripple:active::after {
+  width: 200%;
+  height: 200%;
+  opacity: 1;
+  transition: 0s;
+}
+.dark .ripple::after {
+  background: oklch(1 0 0 / 15%);
+}
+
+/* Smooth color transitions on all interactive elements */
+.interactive-color-transition {
+  transition: color 0.2s ease,
+              background-color 0.2s ease,
+              border-color 0.2s ease,
+              box-shadow 0.2s ease,
+              fill 0.2s ease,
+              stroke 0.2s ease;
+}
+
+/* Pulse animation for live/active indicators */
+@keyframes pulse-live {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+.animate-pulse-live {
+  animation: pulse-live 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Skeleton shimmer with gradient sweep */
+@keyframes shimmer-sweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* ========================================================================
+   3. GLASSMORPHISM UTILITIES
+   ======================================================================== */
+
+/* Shared glass custom properties */
+:root {
+  --glass-blur: 16px;
+  --glass-bg: oklch(1 0 0 / 70%);
+  --glass-border: oklch(1 0 0 / 25%);
+  --glass-shadow: 0 8px 32px oklch(0 0 0 / 8%);
+}
+.dark {
+  --glass-bg: oklch(0.2 0 0 / 65%);
+  --glass-border: oklch(1 0 0 / 10%);
+  --glass-shadow: 0 8px 32px oklch(0 0 0 / 25%);
+}
+
+/* Glass card - frosted glass card */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius-lg);
+}
+/* Fallback for browsers without backdrop-filter */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-card {
+    background: oklch(1 0 0 / 95%);
+  }
+  .dark .glass-card {
+    background: oklch(0.2 0 0 / 95%);
+  }
+}
+
+/* Glass sidebar */
+.glass-sidebar {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-right: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-sidebar {
+    background: oklch(0.985 0 0 / 98%);
+  }
+  .dark .glass-sidebar {
+    background: oklch(0.13 0 0 / 98%);
+  }
+}
+
+/* Glass header */
+.glass-header {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-header {
+    background: oklch(1 0 0 / 97%);
+  }
+  .dark .glass-header {
+    background: oklch(0.17 0 0 / 97%);
+  }
+}
+
+/* Glass modal / dialog */
+.glass-modal {
+  background: var(--glass-bg);
+  backdrop-filter: blur(calc(var(--glass-blur) + 8px));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 8px));
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 16px 48px oklch(0 0 0 / 12%), var(--glass-shadow);
+  border-radius: var(--radius-xl);
+}
+.dark .glass-modal {
+  box-shadow: 0 16px 48px oklch(0 0 0 / 30%), var(--glass-shadow);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-modal {
+    background: oklch(1 0 0 / 98%);
+    box-shadow: 0 16px 48px oklch(0 0 0 / 15%);
+  }
+  .dark .glass-modal {
+    background: oklch(0.2 0 0 / 98%);
+  }
+}
+
+/* ========================================================================
+   4. ADVANCED SCROLLBAR STYLES
+   ======================================================================== */
+
+/* Sidebar scrollbar - thin (4px) with hover-expand */
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: oklch(0.8 0 0 / 50%);
+  border-radius: 4px;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.65 0 0 / 80%);
+  width: 8px;
+}
+.dark .sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: oklch(0.4 0 0 / 50%);
+}
+.dark .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.55 0 0 / 80%);
+}
+
+/* Main content area scrollbar */
+.main-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.main-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px;
+}
+.main-scrollbar::-webkit-scrollbar-thumb {
+  background: oklch(0.75 0 0 / 40%);
+  border-radius: 3px;
+}
+.main-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.6 0 0 / 70%);
+}
+
+/* Hover-expand scrollbar effect */
+.scrollbar-expand::-webkit-scrollbar {
+  width: 4px;
+  transition: width 0.25s ease;
+}
+.scrollbar-expand:hover::-webkit-scrollbar {
+  width: 8px;
+}
+.scrollbar-expand::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+/* Dark mode scrollbar variants */
+.dark .main-scrollbar::-webkit-scrollbar-thumb {
+  background: oklch(0.35 0 0 / 50%);
+}
+.dark .main-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.5 0 0 / 70%);
+}
+
+/* Inverted scrollbar for dark mode (light thumb on dark track) */
+.dark-scrollbar-inverted::-webkit-scrollbar-thumb {
+  background: oklch(0.6 0 0 / 40%);
+}
+.dark-scrollbar-inverted::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.7 0 0 / 60%);
+}
+
+/* Firefox scrollbar styles */
+.sidebar-scrollbar,
+.main-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.75 0 0 / 40%) transparent;
+}
+.dark .sidebar-scrollbar,
+.dark .main-scrollbar {
+  scrollbar-color: oklch(0.35 0 0 / 50%) transparent;
+}
+
+/* ========================================================================
+   5. BADGE & STATUS ANIMATIONS
+   ======================================================================== */
+
+/* Pulsing badge for active states */
+@keyframes badge-pulse-keyframe {
+  0%, 100% {
+    box-shadow: 0 0 0 0 oklch(0.55 0.15 160 / 40%);
+  }
+  50% {
+    box-shadow: 0 0 0 6px oklch(0.55 0.15 160 / 0%);
+  }
+}
+.badge-pulse {
+  animation: badge-pulse-keyframe 2s ease-in-out infinite;
+}
+
+/* Animated status indicator dot */
+.status-dot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: pulse-ring 1.5s ease-out infinite;
+}
+
+/* Green pulsing online indicator */
+.status-online {
+  background-color: oklch(0.72 0.19 155);
+}
+.status-online::after {
+  background: oklch(0.72 0.19 155);
+}
+
+/* Amber warning indicator */
+.status-warning {
+  background-color: oklch(0.75 0.15 85);
+}
+.status-warning::after {
+  background: oklch(0.75 0.15 85);
+  animation: pulse-ring 2.5s ease-out infinite;
+}
+
+/* Red error/offline indicator */
+.status-error {
+  background-color: oklch(0.577 0.245 27.325);
+}
+.status-error::after {
+  background: oklch(0.577 0.245 27.325);
+  animation: none;
+}
+
+/* Neutral/idle indicator */
+.status-idle {
+  background-color: oklch(0.65 0 0);
+}
+.status-idle::after {
+  animation: none;
+}
+
+/* ========================================================================
+   6. LOADING STATE ANIMATIONS
+   ======================================================================== */
+
+/* Base skeleton with shimmer */
+.skeleton {
+  position: relative;
+  color: transparent !important;
+  background: oklch(0.92 0 0) !important;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(1 0 0 / 45%) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+.dark .skeleton {
+  background: oklch(0.25 0 0) !important;
+}
+.dark .skeleton::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(1 0 0 / 8%) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+
+/* Text-like skeleton (explicit - composes not valid in plain CSS) */
+.skeleton-text {
+  position: relative;
+  color: transparent !important;
+  background: oklch(0.92 0 0) !important;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  height: 1em;
+  border-radius: calc(var(--radius-sm) / 2);
+  margin-bottom: 0.5em;
+  width: 100%;
+}
+.skeleton-text::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 45%) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+.dark .skeleton-text {
+  background: oklch(0.25 0 0) !important;
+}
+.dark .skeleton-text::after {
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 8%) 50%, transparent 100%);
+  background-size: 200% 100%;
+}
+
+.skeleton-text-short {
+  position: relative;
+  color: transparent !important;
+  background: oklch(0.92 0 0) !important;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  height: 1em;
+  border-radius: calc(var(--radius-sm) / 2);
+  width: 60%;
+}
+.skeleton-text-short::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 45%) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+.dark .skeleton-text-short {
+  background: oklch(0.25 0 0) !important;
+}
+.dark .skeleton-text-short::after {
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 8%) 50%, transparent 100%);
+  background-size: 200% 100%;
+}
+
+.skeleton-circle {
+  position: relative;
+  color: transparent !important;
+  background: oklch(0.92 0 0) !important;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+.skeleton-circle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 45%) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+.dark .skeleton-circle {
+  background: oklch(0.25 0 0) !important;
+}
+.dark .skeleton-circle::after {
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 8%) 50%, transparent 100%);
+  background-size: 200% 100%;
+}
+
+.skeleton-card {
+  position: relative;
+  color: transparent !important;
+  background: oklch(0.92 0 0) !important;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  height: 140px;
+  border-radius: var(--radius-lg);
+}
+.skeleton-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 45%) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+.dark .skeleton-card {
+  background: oklch(0.25 0 0) !important;
+}
+.dark .skeleton-card::after {
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 8%) 50%, transparent 100%);
+  background-size: 200% 100%;
+}
+
+/* ========================================================================
+   7. TRANSITION UTILITIES
+   ======================================================================== */
+
+/* Custom cubic-bezier timing functions as custom properties */
+:root {
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* Smooth transition utility */
+.transition-smooth {
+  transition-property: all;
+  transition-duration: 300ms;
+  transition-timing-function: var(--ease-smooth);
+}
+
+/* Bouncy spring transition */
+.transition-bounce {
+  transition-property: all;
+  transition-duration: 400ms;
+  transition-timing-function: var(--ease-bounce);
+}
+
+/* Spring-like transition */
+.transition-spring {
+  transition-property: all;
+  transition-duration: 500ms;
+  transition-timing-function: var(--ease-spring);
+}
+
+/* Reduced motion - disable complex transitions */
+@media (prefers-reduced-motion: reduce) {
+  .transition-smooth,
+  .transition-bounce,
+  .transition-spring {
+    transition-duration: 0ms;
+  }
+  .animate-page-enter,
+  .animate-page-exit,
+  .animate-content-fade-up,
+  .stagger-cards > *,
+  .animate-pulse-live,
+  .badge-pulse,
+  .status-dot::after {
+    animation: none !important;
+  }
+}
+
+/* ========================================================================
+   8. FOCUS RING ENHANCEMENTS
+   ======================================================================== */
+
+/* Emerald focus ring for inputs */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid oklch(0.55 0.15 160);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+  transition: outline-offset 0.15s ease;
+}
+
+/* Focus ring for card elements */
+.focus-ring-card {
+  outline: none;
+}
+.focus-ring-card:focus-visible {
+  outline: 2px solid oklch(0.55 0.15 160 / 60%);
+  outline-offset: 3px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 4px oklch(0.55 0.15 160 / 15%);
+}
+
+/* Focus visible only (not on mouse click) - global enhancement */
+.focus-visible-only {
+  outline: none;
+}
+.focus-visible-only:focus-visible {
+  outline: 2px solid oklch(0.55 0.15 160);
+  outline-offset: 2px;
+}
+
+/* ========================================================================
+   9. PRINT STYLES
+   ======================================================================== */
+
+@media print {
+  /* Hide non-essential UI */
+  aside,
+  nav,
+  header,
+  .sidebar,
+  .header-bar,
+  .glass-sidebar,
+  .glass-header,
+  button:not(.print-button),
+  [role="navigation"],
+  [data-print-hide],
+  .no-print {
+    display: none !important;
+  }
+
+  /* Reset main content layout */
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Print-friendly body */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt !important;
+    line-height: 1.5 !important;
+  }
+
+  /* Print-friendly table styles */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  table th,
+  table td {
+    border: 1px solid #333 !important;
+    padding: 6px 8px !important;
+    text-align: left !important;
+    font-size: 10pt !important;
+    color: black !important;
+    background: transparent !important;
+  }
+  table th {
+    background: #f0f0f0 !important;
+    font-weight: 600 !important;
+  }
+
+  /* Remove backgrounds and shadows */
+  *,
+  *::before,
+  *::after {
+    background: transparent !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Restore minimal borders for structure */
+  .card, .glass-card {
+    border: 1px solid #ccc !important;
+    break-inside: avoid;
+  }
+
+  /* Page break hints */
+  .page-break-before {
+    page-break-before: always;
+    break-before: page;
+  }
+  .page-break-after {
+    page-break-after: always;
+    break-after: page;
+  }
+  .page-break-avoid {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Links - show URL in print */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 9pt;
+    color: #666;
+  }
+  a[href^="#"]::after {
+    content: none;
+  }
+
+  /* Ensure images don't overflow */
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+}
+
+/* ========================================================================
+   10. DARK MODE ENHANCEMENTS
+   ======================================================================== */
+
+/* Smooth transition when toggling between light/dark */
+html {
+  transition: color-scheme 0.3s ease;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+/* Dark mode specific shadows */
+.dark .shadow-sm {
+  box-shadow: 0 1px 2px oklch(0 0 0 / 20%);
+}
+.dark .shadow-md {
+  box-shadow: 0 4px 6px -1px oklch(0 0 0 / 25%),
+              0 2px 4px -2px oklch(0 0 0 / 15%);
+}
+.dark .shadow-lg {
+  box-shadow: 0 10px 15px -3px oklch(0 0 0 / 30%),
+              0 4px 6px -4px oklch(0 0 0 / 15%);
+}
+.dark .shadow-xl {
+  box-shadow: 0 20px 25px -5px oklch(0 0 0 / 35%),
+              0 8px 10px -6px oklch(0 0 0 / 15%);
+}
+
+/* Dark mode specific borders (slightly lighter for visibility) */
+.dark-border {
+  border-color: oklch(1 0 0 / 12%);
+}
+.dark .dark-border {
+  border-color: oklch(1 0 0 / 15%);
+}
+
+/* Inverted scrollbar for dark mode */
+.dark {
+  scrollbar-color: oklch(0.4 0 0 / 60%) oklch(0.15 0 0 / 30%);
+  color-scheme: dark;
+}
+.dark::-webkit-scrollbar {
+  width: 8px;
+}
+.dark::-webkit-scrollbar-track {
+  background: oklch(0.12 0 0);
+}
+.dark::-webkit-scrollbar-thumb {
+  background: oklch(0.4 0 0 / 60%);
+  border-radius: 4px;
+}
+.dark::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.55 0 0 / 80%);
+}
+
+/* Dark mode elevated surface */
+.dark-elevated {
+  background: oklch(0.22 0 0);
+  border: 1px solid oklch(1 0 0 / 8%);
+}
+
+/* Dark mode subtle ring for interactive elements */
+.dark .ring-subtle {
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 8%);
+}

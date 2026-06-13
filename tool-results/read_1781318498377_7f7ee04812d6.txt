@@ -1,0 +1,1315 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import {
+     5→  Users, DollarSign, Shield, Clock, AlertTriangle, TrendingUp,
+     6→  TrendingDown, CheckCircle, XCircle, Loader2, RefreshCw,
+     7→  BarChart3, PieChart, ArrowUpRight, ArrowDownRight, Info,
+     8→  CircleDot, AlertOctagon, ChevronRight, Calculator,
+     9→  FileCheck, FileText, Activity, Zap
+    10→} from 'lucide-react';
+    11→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Button } from '@/components/ui/button';
+    14→import { Skeleton } from '@/components/ui/skeleton';
+    15→import { Progress } from '@/components/ui/progress';
+    16→import { Separator } from '@/components/ui/separator';
+    17→
+    18→interface PayrollDashboardProps {
+    19→  accessToken: string;
+    20→  userRole: string;
+    21→  onNavigate?: (view: string) => void;
+    22→}
+    23→
+    24→interface DashboardData {
+    25→  kpis: {
+    26→    total_empleados_activos: number;
+    27→    tendencia_empleados: string;
+    28→    nomina_mes: number;
+    29→    cumplimiento_previsional: number;
+    30→    semaforo: string;
+    31→    planilla_actual: {
+    32→      id: string;
+    33→      codigo: string;
+    34→      estado: string;
+    35→      tipo: string;
+    36→      calculada_por: string | null;
+    37→    } | null;
+    38→  };
+    39→  cumplimientos: Array<{ nombre: string; presentado: boolean; peso: number }>;
+    40→  vencimientos: Array<{ nombre: string; fecha: string; estado: string }>;
+    41→  planillas_recientes: Array<{
+    42→    id: string;
+    43→    codigo: string;
+    44→    tipo: string;
+    45→    estado: string;
+    46→    total_neto: number;
+    47→    total_bruto: number;
+    48→    empleados: number;
+    49→    calculada_por: string | null;
+    50→    aprobada_por: string | null;
+    51→    fecha_creacion: string;
+    52→  }>;
+    53→  tendencia_mensual: Array<{ mes: string; total: number }>;
+    54→  distribucion_areas: Array<{ nombre: string; total: number }>;
+    55→  alertas: Array<{ tipo: string; mensaje: string; severidad: string }>;
+    56→}
+    57→
+    58→const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    59→const fmtShort = (n: number) => {
+    60→  if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`;
+    61→  if (n >= 1000) return `$${(n / 1000).toFixed(1)}K`;
+    62→  return `$${n.toFixed(0)}`;
+    63→};
+    64→const fmtDate = (d: string) => {
+    65→  try {
+    66→    const date = new Date(d);
+    67→    return date.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    68→  } catch {
+    69→    return d;
+    70→  }
+    71→};
+    72→const fmtDateTime = (d: string) => {
+    73→  try {
+    74→    const date = new Date(d);
+    75→    return date.toLocaleDateString('es-SV', { day: '2-digit', month: 'short', year: 'numeric' }) +
+    76→      ' ' + date.toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit' });
+    77→  } catch {
+    78→    return d;
+    79→  }
+    80→};
+    81→const fmtRelativeTime = (d: string) => {
+    82→  try {
+    83→    const date = new Date(d);
+    84→    const now = new Date();
+    85→    const diffMs = now.getTime() - date.getTime();
+    86→    const diffMins = Math.floor(diffMs / 60000);
+    87→    if (diffMins < 1) return 'Justo ahora';
+    88→    if (diffMins < 60) return `Hace ${diffMins} min`;
+    89→    const diffHours = Math.floor(diffMins / 60);
+    90→    if (diffHours < 24) return `Hace ${diffHours}h`;
+    91→    const diffDays = Math.floor(diffHours / 24);
+    92→    if (diffDays < 7) return `Hace ${diffDays}d`;
+    93→    return fmtDate(d);
+    94→  } catch {
+    95→    return d;
+    96→  }
+    97→};
+    98→
+    99→const estadoColors: Record<string, string> = {
+   100→  BORRADOR: 'bg-amber-100 text-amber-800 border-amber-200',
+   101→  CALCULADA: 'bg-amber-100 text-amber-800 border-amber-200',
+   102→  EN_CORRECCION: 'bg-orange-100 text-orange-800 border-orange-200',
+   103→  APROBADA: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+   104→  PAGADA: 'bg-teal-100 text-teal-800 border-teal-200',
+   105→  ANULADA: 'bg-red-100 text-red-800 border-red-200',
+   106→};
+   107→
+   108→const estadoDot: Record<string, string> = {
+   109→  BORRADOR: 'bg-amber-500',
+   110→  CALCULADA: 'bg-amber-500',
+   111→  EN_CORRECCION: 'bg-orange-500',
+   112→  APROBADA: 'bg-emerald-500',
+   113→  PAGADA: 'bg-teal-500',
+   114→  ANULADA: 'bg-red-500',
+   115→};
+   116→
+   117→const estadoChartColors: Record<string, string> = {
+   118→  CALCULADA: '#f59e0b',
+   119→  APROBADA: '#10b981',
+   120→  PAGADA: '#14b8a6',
+   121→  BORRADOR: '#d97706',
+   122→  EN_CORRECCION: '#f97316',
+   123→  ANULADA: '#ef4444',
+   124→};
+   125→
+   126→/* ── Expense Breakdown Data (approximate based on El Salvador law) ── */
+   127→interface ExpenseSlice {
+   128→  label: string;
+   129→  pct: number;
+   130→  color: string;
+   131→  bgClass: string;
+   132→  conicColor: string;
+   133→}
+   134→
+   135→const EXPENSE_SLICES: ExpenseSlice[] = [
+   136→  { label: 'ISSS Laboral',  pct: 1.4,  color: 'text-sky-700 dark:text-sky-400',    bgClass: 'bg-sky-500',    conicColor: '#0ea5e9' },
+   137→  { label: 'AFP Laboral',   pct: 7.25, color: 'text-violet-700 dark:text-violet-400', bgClass: 'bg-violet-500', conicColor: '#8b5cf6' },
+   138→  { label: 'ISR',           pct: 16.1, color: 'text-amber-700 dark:text-amber-400',   bgClass: 'bg-amber-500',  conicColor: '#f59e0b' },
+   139→  { label: 'Salario Neto',  pct: 63.05,color: 'text-emerald-700 dark:text-emerald-400', bgClass: 'bg-emerald-500', conicColor: '#10b981' },
+   140→  { label: 'Cargas Patronales', pct: 12.2, color: 'text-rose-700 dark:text-rose-400', bgClass: 'bg-rose-500', conicColor: '#f43f5e' },
+   141→];
+   142→
+   143→/* ── Payroll Status Timeline Steps ── */
+   144→const TIMELINE_STEPS = ['CALCULADA', 'APROBADA', 'PAGADA'] as const;
+   145→
+   146→function getTimelineStepIndex(estado: string): number {
+   147→  if (estado === 'PAGADA') return 2;
+   148→  if (estado === 'APROBADA') return 1;
+   149→  if (estado === 'CALCULADA' || estado === 'EN_CORRECCION') return 0;
+   150→  if (estado === 'BORRADOR') return -1;
+   151→  return -1;
+   152→}
+   153→
+   154→/* ── Compliance SVG Ring Component ── */
+   155→function ComplianceRing({ percentage, size = 128 }: { percentage: number; size?: number }) {
+   156→  const radius = (size / 2) - 12;
+   157→  const circumference = 2 * Math.PI * radius;
+   158→  const offset = circumference - (percentage / 100) * circumference;
+   159→  const color = percentage >= 80 ? '#10b981' : percentage >= 50 ? '#f59e0b' : '#ef4444';
+   160→  const bgRing = percentage >= 80 ? '#d1fae5' : percentage >= 50 ? '#fef3c7' : '#fee2e2';
+   161→  const center = size / 2;
+   162→
+   163→  return (
+   164→    <div className="relative inline-flex items-center justify-center">
+   165→      <svg width={size} height={size} className="-rotate-90">
+   166→        <circle cx={center} cy={center} r={radius} fill="none" stroke={bgRing} strokeWidth="10" />
+   167→        <circle
+   168→          cx={center} cy={center} r={radius} fill="none"
+   169→          stroke={color}
+   170→          strokeWidth="10"
+   171→          strokeLinecap="round"
+   172→          strokeDasharray={circumference}
+   173→          strokeDashoffset={offset}
+   174→          className="transition-all duration-1000 ease-out"
+   175→        />
+   176→      </svg>
+   177→      <div className="absolute inset-0 flex flex-col items-center justify-center">
+   178→        <span className="text-2xl font-bold" style={{ color }}>{percentage}%</span>
+   179→        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Cumplimiento</span>
+   180→      </div>
+   181→    </div>
+   182→  );
+   183→}
+   184→
+   185→/* ── Status Donut Component ── */
+   186→function StatusDonut({ statusCounts }: { statusCounts: Record<string, number> }) {
+   187→  const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+   188→  if (total === 0) {
+   189→    return (
+   190→      <div className="flex flex-col items-center justify-center py-6 text-slate-400">
+   191→        <PieChart className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
+   192→        <p className="text-sm">Sin planillas</p>
+   193→      </div>
+   194→    );
+   195→  }
+   196→
+   197→  let conicStops: string[] = [];
+   198→  let cumPct = 0;
+   199→  const activeStatuses = Object.entries(statusCounts).filter(([, v]) => v > 0);
+   200→  activeStatuses.forEach(([status, count]) => {
+   201→    const start = cumPct;
+   202→    const pct = (count / total) * 100;
+   203→    cumPct += pct;
+   204→    const color = estadoChartColors[status] || '#94a3b8';
+   205→    conicStops.push(`${color} ${start}% ${cumPct}%`);
+   206→  });
+   207→  const conicGradient = `conic-gradient(${conicStops.join(', ')})`;
+   208→
+   209→  return (
+   210→    <div className="flex flex-col sm:flex-row items-center gap-4">
+   211→      <div className="relative shrink-0">
+   212→        <div
+   213→          className="w-32 h-32 rounded-full shadow-inner"
+   214→          style={{ background: conicGradient }}
+   215→        >
+   216→          <div className="absolute inset-0 flex items-center justify-center">
+   217→            <div className="w-18 h-18 rounded-full bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center" style={{ width: '72px', height: '72px' }}>
+   218→              <div className="text-center">
+   219→                <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{total}</p>
+   220→                <p className="text-[9px] text-slate-400 dark:text-slate-500">Total</p>
+   221→              </div>
+   222→            </div>
+   223→          </div>
+   224→        </div>
+   225→      </div>
+   226→      <div className="flex-1 space-y-2 w-full">
+   227→        {activeStatuses.map(([status, count]) => {
+   228→          const pct = Math.round((count / total) * 100);
+   229→          return (
+   230→            <div key={status} className="flex items-center justify-between">
+   231→              <div className="flex items-center gap-2">
+   232→                <div
+   233→                  className="w-3 h-3 rounded-sm"
+   234→                  style={{ backgroundColor: estadoChartColors[status] || '#94a3b8' }}
+   235→                />
+   236→                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{status}</span>
+   237→              </div>
+   238→              <div className="flex items-center gap-2">
+   239→                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{count}</span>
+   240→                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+   241→                  {pct}%
+   242→                </span>
+   243→              </div>
+   244→            </div>
+   245→          );
+   246→        })}
+   247→      </div>
+   248→    </div>
+   249→  );
+   250→}
+   251→
+   252→/* ── Activity Event type ── */
+   253→interface ActivityEvent {
+   254→  id: string;
+   255→  type: 'creation' | 'calculation' | 'approval' | 'payment' | 'correction';
+   256→  description: string;
+   257→  timestamp: string;
+   258→  status: string;
+   259→  codigo: string;
+   260→}
+   261→
+   262→function buildActivityEvents(planillas: DashboardData['planillas_recientes']): ActivityEvent[] {
+   263→  const events: ActivityEvent[] = [];
+   264→
+   265→  planillas.forEach(p => {
+   266→    // Creation event
+   267→    events.push({
+   268→      id: `${p.id}-creation`,
+   269→      type: 'creation',
+   270→      description: `Planilla ${p.codigo} creada`,
+   271→      timestamp: p.fecha_creacion,
+   272→      status: 'BORRADOR',
+   273→      codigo: p.codigo,
+   274→    });
+   275→
+   276→    // If calculated
+   277→    if (p.estado !== 'BORRADOR') {
+   278→      events.push({
+   279→        id: `${p.id}-calc`,
+   280→        type: 'calculation',
+   281→        description: `Planilla ${p.codigo} calculada — ${p.empleados} empleados, ${fmt(p.total_neto)}`,
+   282→        timestamp: p.fecha_creacion,
+   283→        status: 'CALCULADA',
+   284→        codigo: p.codigo,
+   285→      });
+   286→    }
+   287→
+   288→    // If approved
+   289→    if (p.estado === 'APROBADA' || p.estado === 'PAGADA') {
+   290→      events.push({
+   291→        id: `${p.id}-approval`,
+   292→        type: 'approval',
+   293→        description: `Planilla ${p.codigo} aprobada${p.aprobada_por ? ` por ${p.aprobada_por}` : ''}`,
+   294→        timestamp: p.fecha_creacion,
+   295→        status: 'APROBADA',
+   296→        codigo: p.codigo,
+   297→      });
+   298→    }
+   299→
+   300→    // If paid
+   301→    if (p.estado === 'PAGADA') {
+   302→      events.push({
+   303→        id: `${p.id}-payment`,
+   304→        type: 'payment',
+   305→        description: `Planilla ${p.codigo} pagada — ${fmt(p.total_neto)}`,
+   306→        timestamp: p.fecha_creacion,
+   307→        status: 'PAGADA',
+   308→        codigo: p.codigo,
+   309→      });
+   310→    }
+   311→  });
+   312→
+   313→  // Sort by most recent first
+   314→  events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+   315→  return events.slice(0, 12);
+   316→}
+   317→
+   318→const activityTypeIcon: Record<string, React.ReactNode> = {
+   319→  creation: <FileText className="h-3.5 w-3.5" />,
+   320→  calculation: <Calculator className="h-3.5 w-3.5" />,
+   321→  approval: <FileCheck className="h-3.5 w-3.5" />,
+   322→  payment: <DollarSign className="h-3.5 w-3.5" />,
+   323→  correction: <AlertTriangle className="h-3.5 w-3.5" />,
+   324→};
+   325→
+   326→const activityTypeColor: Record<string, string> = {
+   327→  creation: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+   328→  calculation: 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
+   329→  approval: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
+   330→  payment: 'bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400',
+   331→  correction: 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
+   332→};
+   333→
+   334→const activityTypeBorder: Record<string, string> = {
+   335→  creation: 'border-slate-300 dark:border-slate-600',
+   336→  calculation: 'border-amber-300 dark:border-amber-700',
+   337→  approval: 'border-emerald-300 dark:border-emerald-700',
+   338→  payment: 'border-teal-300 dark:border-teal-700',
+   339→  correction: 'border-orange-300 dark:border-orange-700',
+   340→};
+   341→
+   342→export default function PayrollDashboard({ accessToken, userRole, onNavigate }: PayrollDashboardProps) {
+   343→  const [data, setData] = useState<DashboardData | null>(null);
+   344→  const [loading, setLoading] = useState(true);
+   345→  const [error, setError] = useState<string | null>(null);
+   346→
+   347→  const fetchData = useCallback(async () => {
+   348→    setLoading(true);
+   349→    setError(null);
+   350→    try {
+   351→      const res = await fetch('/api/nomina/dashboard', {
+   352→        headers: { Authorization: `Bearer ${accessToken}` },
+   353→      });
+   354→      if (!res.ok) throw new Error('Error al cargar dashboard');
+   355→      const json = await res.json();
+   356→      setData(json);
+   357→    } catch (err) {
+   358→      setError(err instanceof Error ? err.message : 'Error desconocido');
+   359→    } finally {
+   360→      setLoading(false);
+   361→    }
+   362→  }, [accessToken]);
+   363→
+   364→  useEffect(() => { fetchData(); }, [fetchData]);
+   365→
+   366→  /* ── Derived data (must be before any early returns) ── */
+   367→  const empleadosPagados = useMemo(() => {
+   368→    if (!data) return 0;
+   369→    return data.planillas_recientes
+   370→      .filter(p => p.estado === 'PAGADA')
+   371→      .reduce((sum, p) => sum + p.empleados, 0);
+   372→  }, [data]);
+   373→
+   374→  const planillasActivas = useMemo(() => {
+   375→    if (!data) return 0;
+   376→    return data.planillas_recientes.filter(p => p.estado !== 'PAGADA' && p.estado !== 'ANULADA').length;
+   377→  }, [data]);
+   378→
+   379→  const statusCounts = useMemo(() => {
+   380→    if (!data) return {} as Record<string, number>;
+   381→    const counts: Record<string, number> = {};
+   382→    data.planillas_recientes.forEach(p => {
+   383→      counts[p.estado] = (counts[p.estado] || 0) + 1;
+   384→    });
+   385→    return counts;
+   386→  }, [data]);
+   387→
+   388→  const activityEvents = useMemo(() => {
+   389→    if (!data) return [];
+   390→    return buildActivityEvents(data.planillas_recientes);
+   391→  }, [data]);
+   392→
+   393→  const nominaTrend = useMemo(() => {
+   394→    if (!data) return { value: 0, direction: 'up' as const };
+   395→    if (data.tendencia_mensual.length < 2) return { value: 0, direction: 'up' as const };
+   396→    const last = data.tendencia_mensual[data.tendencia_mensual.length - 1].total;
+   397→    const prev = data.tendencia_mensual[data.tendencia_mensual.length - 2].total;
+   398→    if (prev === 0) return { value: 0, direction: 'up' as const };
+   399→    const pctChange = ((last - prev) / prev) * 100;
+   400→    return { value: Math.abs(pctChange), direction: pctChange >= 0 ? 'up' as const : 'down' as const };
+   401→  }, [data]);
+   402→
+   403→  if (loading && !data) {
+   404→    return (
+   405→      <div className="space-y-4">
+   406→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   407→          {[1, 2, 3, 4].map(i => (
+   408→            <Card key={i} className="shadow-sm">
+   409→              <CardContent className="p-6">
+   410→                <Skeleton className="h-4 w-24 mb-2" />
+   411→                <Skeleton className="h-8 w-32 mb-1" />
+   412→                <Skeleton className="h-3 w-20" />
+   413→              </CardContent>
+   414→            </Card>
+   415→          ))}
+   416→        </div>
+   417→        <Card className="shadow-sm">
+   418→          <CardContent className="p-6">
+   419→            <Skeleton className="h-40 w-full" />
+   420→          </CardContent>
+   421→        </Card>
+   422→      </div>
+   423→    );
+   424→  }
+   425→
+   426→  if (error) {
+   427→    return (
+   428→      <Card className="shadow-sm">
+   429→        <CardContent className="p-8 text-center">
+   430→          <AlertTriangle className="h-10 w-10 text-red-500 mx-auto mb-3" />
+   431→          <p className="text-red-600 font-medium">{error}</p>
+   432→          <button onClick={fetchData} className="mt-3 text-sm text-emerald-600 hover:underline flex items-center gap-1 mx-auto">
+   433→            <RefreshCw className="h-3.5 w-3.5" /> Reintentar
+   434→          </button>
+   435→        </CardContent>
+   436→      </Card>
+   437→    );
+   438→  }
+   439→
+   440→  if (!data) return null;
+   441→
+   442→  const maxTendencia = Math.max(...data.tendencia_mensual.map(m => m.total), 1);
+   443→  const maxArea = Math.max(...data.distribucion_areas.map(a => a.total), 1);
+   444→
+   445→  const semaforoColor = data.kpis.semaforo === 'verde' ? 'bg-emerald-500' : data.kpis.semaforo === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
+   446→  const semaforoLabel = data.kpis.semaforo === 'verde' ? 'En Cumplimiento' : data.kpis.semaforo === 'amarillo' ? 'Atención Requerida' : 'Incumplimiento';
+   447→
+   448→  /* ── Build conic-gradient for donut chart ── */
+   449→  let conicStops: string[] = [];
+   450→  let cumPct = 0;
+   451→  EXPENSE_SLICES.forEach((s) => {
+   452→    const start = cumPct;
+   453→    cumPct += s.pct;
+   454→    conicStops.push(`${s.conicColor} ${start}% ${cumPct}%`);
+   455→  });
+   456→  const conicGradient = `conic-gradient(${conicStops.join(', ')})`;
+   457→
+   458→  /* ── Compute actual dollar amounts from planillas_recientes for donut legend ── */
+   459→  const baseAmount = data.kpis.nomina_mes || (data.planillas_recientes[0]?.total_bruto ?? 50000);
+   460→  const expenseAmounts = EXPENSE_SLICES.map(s => Math.round(baseAmount * (s.pct / 100) * 100) / 100);
+   461→
+   462→  /* ── Find the "current month" index in tendencia_mensual (last non-zero) ── */
+   463→  const currentMonthIdx = data.tendencia_mensual.length - 1;
+   464→
+   465→  /* ── Timeline state from planilla_actual ── */
+   466→  const timelineActiveStep = data.kpis.planilla_actual
+   467→    ? getTimelineStepIndex(data.kpis.planilla_actual.estado)
+   468→    : -1;
+   469→
+   470→  return (
+   471→    <div className="space-y-5 bg-pattern-dots min-h-full">
+   472→      {/* ── Gradient Header with Quick Actions ── */}
+   473→      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 rounded-xl p-5 text-white shadow-lg relative overflow-hidden">
+   474→        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(255,255,255,0.08),transparent_50%)]" />
+   475→        <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/4" />
+   476→        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/4" />
+   477→        <div className="relative z-10">
+   478→          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+   479→            <div>
+   480→              <h2 className="text-lg font-bold flex items-center gap-2">
+   481→                <DollarSign className="h-5 w-5" />
+   482→                Dashboard de Nómina
+   483→              </h2>
+   484→              <p className="text-emerald-100 text-sm mt-0.5">Resumen ejecutivo del sistema de planillas</p>
+   485→            </div>
+   486→            <div className="flex items-center gap-2 flex-wrap">
+   487→              {/* ── Quick Action Buttons ── */}
+   488→              <Button
+   489→                size="sm"
+   490→                className="bg-white/15 hover:bg-white/25 text-white border border-white/20 backdrop-blur-sm transition-all duration-200 shadow-sm hover:shadow-md"
+   491→                onClick={() => onNavigate?.('04-03')}
+   492→              >
+   493→                <Calculator className="h-3.5 w-3.5 mr-1.5" />
+   494→                Calcular Nómina
+   495→              </Button>
+   496→              <Button
+   497→                size="sm"
+   498→                className="bg-white/15 hover:bg-white/25 text-white border border-white/20 backdrop-blur-sm transition-all duration-200 shadow-sm hover:shadow-md"
+   499→                onClick={() => onNavigate?.('04-04')}
+   500→              >
+   501→                <FileCheck className="h-3.5 w-3.5 mr-1.5" />
+   502→                Aprobar Planilla
+   503→              </Button>
+   504→              <Button
+   505→                size="sm"
+   506→                className="bg-white/15 hover:bg-white/25 text-white border border-white/20 backdrop-blur-sm transition-all duration-200 shadow-sm hover:shadow-md"
+   507→                onClick={() => onNavigate?.('05-01')}
+   508→              >
+   509→                <FileText className="h-3.5 w-3.5 mr-1.5" />
+   510→                Ver Reportes
+   511→              </Button>
+   512→              {/* Traffic light */}
+   513→              <div className="flex items-center gap-1 p-1.5 bg-white/10 rounded-full backdrop-blur-sm">
+   514→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'rojo' ? 'bg-red-400 shadow-sm shadow-red-400/50' : 'bg-red-900/40'}`} />
+   515→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
+   516→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
+   517→              </div>
+   518→              <Badge className="bg-white/20 text-white border-0 text-xs">{semaforoLabel}</Badge>
+   519→            </div>
+   520→          </div>
+   521→        </div>
+   522→      </div>
+   523→
+   524→      {/* ── KPI Summary Cards (Enhanced) ── */}
+   525→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   526→        {/* KPI 1: Total Nómina del Mes */}
+   527→        <Card className="shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+   528→          <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-transparent dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-transparent pointer-events-none" />
+   529→          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-emerald-500 to-teal-500" />
+   530→          <CardContent className="p-5 relative">
+   531→            <div className="flex items-center justify-between mb-3">
+   532→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Nómina del Mes</span>
+   533→              <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 group-hover:scale-110 transition-transform duration-300">
+   534→                <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   535→              </div>
+   536→            </div>
+   537→            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono tracking-tight">{fmt(data.kpis.nomina_mes)}</p>
+   538→            {/* Mini sparkline bars */}
+   539→            <div className="flex items-end gap-0.5 h-5 mt-3 mb-1.5">
+   540→              {[30, 45, 55, 40, 60, 70, 50, 65, 80, 75, 85, 95].map((h, i) => (
+   541→                <div
+   542→                  key={i}
+   543→                  className="flex-1 rounded-sm bg-emerald-400/50 dark:bg-emerald-500/30 min-w-[3px] transition-all duration-200 hover:bg-emerald-500/80"
+   544→                  style={{ height: `${h}%` }}
+   545→                />
+   546→              ))}
+   547→            </div>
+   548→            <div className="flex items-center gap-1.5">
+   549→              {nominaTrend.direction === 'up' ? (
+   550→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30">
+   551→                  <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+   552→                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">+{nominaTrend.value.toFixed(1)}%</span>
+   553→                </div>
+   554→              ) : (
+   555→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30">
+   556→                  <ArrowDownRight className="h-3 w-3 text-red-500" />
+   557→                  <span className="text-xs font-semibold text-red-600 dark:text-red-400">-{nominaTrend.value.toFixed(1)}%</span>
+   558→                </div>
+   559→              )}
+   560→              <span className="text-xs text-slate-400 dark:text-slate-500">vs mes anterior</span>
+   561→            </div>
+   562→          </CardContent>
+   563→        </Card>
+   564→
+   565→        {/* KPI 2: Empleados Pagados */}
+   566→        <Card className="shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+   567→          <div className="absolute inset-0 bg-gradient-to-br from-teal-50 via-cyan-50/50 to-transparent dark:from-teal-950/30 dark:via-cyan-950/20 dark:to-transparent pointer-events-none" />
+   568→          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-500 to-cyan-500" />
+   569→          <CardContent className="p-5 relative">
+   570→            <div className="flex items-center justify-between mb-3">
+   571→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Empleados Pagados</span>
+   572→              <div className="p-2.5 rounded-xl bg-teal-100 dark:bg-teal-900/40 group-hover:scale-110 transition-transform duration-300">
+   573→                <Users className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+   574→              </div>
+   575→            </div>
+   576→            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+   577→              {empleadosPagados}
+   578→              <span className="text-sm font-normal text-slate-400 dark:text-slate-500 ml-1.5">de {data.kpis.total_empleados_activos}</span>
+   579→            </p>
+   580→            {/* Mini progress bar */}
+   581→            <div className="mt-3 mb-1.5">
+   582→              <Progress
+   583→                value={data.kpis.total_empleados_activos > 0 ? (empleadosPagados / data.kpis.total_empleados_activos) * 100 : 0}
+   584→                className="h-2 bg-teal-100 dark:bg-teal-900/30"
+   585→              />
+   586→            </div>
+   587→            <div className="flex items-center gap-1.5">
+   588→              {data.kpis.tendencia_empleados.startsWith('-') ? (
+   589→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30">
+   590→                  <ArrowDownRight className="h-3 w-3 text-red-500" />
+   591→                  <span className="text-xs font-semibold text-red-600 dark:text-red-400">{data.kpis.tendencia_empleados}%</span>
+   592→                </div>
+   593→              ) : (
+   594→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/30">
+   595→                  <ArrowUpRight className="h-3 w-3 text-teal-500" />
+   596→                  <span className="text-xs font-semibold text-teal-600 dark:text-teal-400">+{data.kpis.tendencia_empleados}%</span>
+   597→                </div>
+   598→              )}
+   599→              <span className="text-xs text-slate-400 dark:text-slate-500">vs mes anterior</span>
+   600→            </div>
+   601→          </CardContent>
+   602→        </Card>
+   603→
+   604→        {/* KPI 3: Planillas Activas */}
+   605→        <Card className="shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+   606→          <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-transparent dark:from-amber-950/30 dark:via-orange-950/20 dark:to-transparent pointer-events-none" />
+   607→          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-500 to-orange-500" />
+   608→          <CardContent className="p-5 relative">
+   609→            <div className="flex items-center justify-between mb-3">
+   610→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Planillas Activas</span>
+   611→              <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 group-hover:scale-110 transition-transform duration-300">
+   612→                <Activity className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+   613→              </div>
+   614→            </div>
+   615→            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+   616→              {planillasActivas}
+   617→              <span className="text-sm font-normal text-slate-400 dark:text-slate-500 ml-1.5">en proceso</span>
+   618→            </p>
+   619→            {/* Status dots for active planillas */}
+   620→            <div className="flex items-center gap-1.5 mt-3 mb-1.5">
+   621→              {data.planillas_recientes
+   622→                .filter(p => p.estado !== 'PAGADA' && p.estado !== 'ANULADA')
+   623→                .slice(0, 5)
+   624→                .map((p, i) => (
+   625→                  <div key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/20">
+   626→                    <span className={`w-1.5 h-1.5 rounded-full ${estadoDot[p.estado]}`} />
+   627→                    <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400">{p.estado.slice(0, 4)}</span>
+   628→                  </div>
+   629→                ))
+   630→              }
+   631→              {planillasActivas === 0 && (
+   632→                <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+   633→                  <CheckCircle className="h-3 w-3" /> Todas pagadas
+   634→                </span>
+   635→              )}
+   636→            </div>
+   637→            <div className="flex items-center gap-1.5">
+   638→              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/30">
+   639→                <Zap className="h-3 w-3 text-amber-500" />
+   640→                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{data.planillas_recientes.length} total</span>
+   641→              </div>
+   642→            </div>
+   643→          </CardContent>
+   644→        </Card>
+   645→
+   646→        {/* KPI 4: Cumplimiento % */}
+   647→        <Card className="shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+   648→          <div className={`absolute inset-0 pointer-events-none ${
+   649→            data.kpis.semaforo === 'verde'
+   650→              ? 'bg-gradient-to-br from-emerald-50 via-green-50/50 to-transparent dark:from-emerald-950/30 dark:via-green-950/20 dark:to-transparent'
+   651→              : data.kpis.semaforo === 'amarillo'
+   652→                ? 'bg-gradient-to-br from-amber-50 via-yellow-50/50 to-transparent dark:from-amber-950/30 dark:via-yellow-950/20 dark:to-transparent'
+   653→                : 'bg-gradient-to-br from-red-50 via-rose-50/50 to-transparent dark:from-red-950/30 dark:via-rose-950/20 dark:to-transparent'
+   654→          }`} />
+   655→          <div className={`absolute top-0 left-0 w-1.5 h-full ${
+   656→            data.kpis.semaforo === 'verde' ? 'bg-gradient-to-b from-emerald-500 to-green-500' :
+   657→            data.kpis.semaforo === 'amarillo' ? 'bg-gradient-to-b from-amber-500 to-yellow-500' :
+   658→            'bg-gradient-to-b from-red-500 to-rose-500'
+   659→          }`} />
+   660→          <CardContent className="p-5 relative">
+   661→            <div className="flex items-center justify-between mb-3">
+   662→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Cumplimiento</span>
+   663→              <div className="flex items-center gap-1 p-1 bg-slate-900 dark:bg-slate-800 rounded-full">
+   664→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'rojo' ? 'bg-red-500 shadow-sm shadow-red-500/50' : 'bg-red-900/40'}`} />
+   665→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
+   666→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
+   667→              </div>
+   668→            </div>
+   669→            <div className="flex items-center gap-4">
+   670→              <ComplianceRing percentage={data.kpis.cumplimiento_previsional} size={96} />
+   671→              <div className="flex-1 space-y-2">
+   672→                <Badge variant="outline" className={`text-[10px] px-2 border ${
+   673→                  data.kpis.semaforo === 'verde' ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-700' :
+   674→                  data.kpis.semaforo === 'amarillo' ? 'border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700' :
+   675→                  'border-red-300 text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700'
+   676→                }`}>
+   677→                  {semaforoLabel}
+   678→                </Badge>
+   679→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30">
+   680→                  <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+   681→                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">+1.2%</span>
+   682→                </div>
+   683→              </div>
+   684→            </div>
+   685→          </CardContent>
+   686→        </Card>
+   687→      </div>
+   688→
+   689→      {/* ── Current Planilla Banner + Status Timeline ── */}
+   690→      {data.kpis.planilla_actual && (
+   691→        <Card className="shadow-sm border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-50 to-white dark:from-emerald-950/30 dark:to-card hover:shadow-md transition-shadow duration-300">
+   692→          <CardContent className="p-4">
+   693→            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+   694→              <div className="flex items-center gap-3">
+   695→                <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
+   696→                  <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   697→                </div>
+   698→                <div>
+   699→                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Planilla en Progreso</p>
+   700→                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+   701→                    <span className="font-mono font-medium">{data.kpis.planilla_actual.codigo}</span>
+   702→                    <span className="mx-1.5">·</span>
+   703→                    {data.kpis.planilla_actual.tipo}
+   704→                    {data.kpis.planilla_actual.calculada_por && (
+   705→                      <>
+   706→                        <span className="mx-1.5">·</span>
+   707→                        Calculada por: {data.kpis.planilla_actual.calculada_por}
+   708→                      </>
+   709→                    )}
+   710→                  </p>
+   711→                </div>
+   712→              </div>
+   713→              <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium`}>
+   714→                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${estadoDot[data.kpis.planilla_actual.estado] || 'bg-slate-400'}`} />
+   715→                {data.kpis.planilla_actual.estado}
+   716→              </Badge>
+   717→            </div>
+   718→
+   719→            {/* ── Payroll Status Timeline ── */}
+   720→            <div className="mt-4 pt-4 border-t border-emerald-200/60 dark:border-emerald-800/40">
+   721→              <div className="flex items-center justify-between relative">
+   722→                <div className="absolute top-4 left-[12.5%] right-[12.5%] h-0.5 bg-slate-200 dark:bg-slate-700" />
+   723→                <div
+   724→                  className="absolute top-4 left-[12.5%] h-0.5 bg-emerald-500 transition-all duration-700 ease-out"
+   725→                  style={{ width: timelineActiveStep >= 2 ? '75%' : timelineActiveStep >= 1 ? '37.5%' : '0%' }}
+   726→                />
+   727→                {TIMELINE_STEPS.map((step, idx) => {
+   728→                  const isActive = idx === timelineActiveStep;
+   729→                  const isCompleted = idx < timelineActiveStep;
+   730→                  return (
+   731→                    <div key={step} className="flex flex-col items-center relative z-10" style={{ width: '25%' }}>
+   732→                      <div className={`
+   733→                        w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-500
+   734→                        ${isCompleted
+   735→                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/30'
+   736→                          : isActive
+   737→                            ? 'bg-amber-400 border-amber-400 text-white shadow-md shadow-amber-400/30 ring-4 ring-amber-100 dark:ring-amber-900/40'
+   738→                            : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-400'
+   739→                        }
+   740→                      `}>
+   741→                        {isCompleted ? (
+   742→                          <CheckCircle className="h-4 w-4" />
+   743→                        ) : (
+   744→                          idx + 1
+   745→                        )}
+   746→                      </div>
+   747→                      <span className={`text-[10px] mt-1.5 font-semibold uppercase tracking-wider ${
+   748→                        isCompleted ? 'text-emerald-600 dark:text-emerald-400' :
+   749→                        isActive ? 'text-amber-600 dark:text-amber-400' :
+   750→                        'text-slate-400 dark:text-slate-500'
+   751→                      }`}>
+   752→                        {step === 'CALCULADA' ? 'Calculada' : step === 'APROBADA' ? 'Aprobada' : 'Pagada'}
+   753→                      </span>
+   754→                    </div>
+   755→                  );
+   756→                })}
+   757→              </div>
+   758→            </div>
+   759→          </CardContent>
+   760→        </Card>
+   761→      )}
+   762→
+   763→      {/* ── Main content grid: Planillas Table + Status Donut ── */}
+   764→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   765→        {/* Recent planillas - improved table */}
+   766→        <Card className="shadow-sm lg:col-span-2 hover:shadow-md transition-shadow duration-300">
+   767→          <CardHeader className="pb-3">
+   768→            <CardTitle className="text-base flex items-center gap-2">
+   769→              <BarChart3 className="h-4 w-4 text-slate-500" /> Planillas Recientes
+   770→            </CardTitle>
+   771→            <CardDescription>Últimas planillas procesadas</CardDescription>
+   772→          </CardHeader>
+   773→          <CardContent className="p-0">
+   774→            <div className="overflow-x-auto">
+   775→              <table className="w-full text-sm">
+   776→                <thead>
+   777→                  <tr className="border-t border-b bg-slate-50/80 dark:bg-slate-800/50">
+   778→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Código</th>
+   779→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Tipo</th>
+   780→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Estado</th>
+   781→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Total Neto</th>
+   782→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Empleados</th>
+   783→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Fecha</th>
+   784→                  </tr>
+   785→                </thead>
+   786→                <tbody>
+   787→                  {data.planillas_recientes.length === 0 ? (
+   788→                    <tr>
+   789→                      <td colSpan={6} className="p-8 text-center text-slate-400">
+   790→                        <div className="flex flex-col items-center">
+   791→                          <Info className="h-8 w-8 mb-2 text-slate-300" />
+   792→                          <p className="font-medium">No hay planillas registradas</p>
+   793→                          <p className="text-xs">Las planillas aparecerán aquí al calcularlas</p>
+   794→                        </div>
+   795→                      </td>
+   796→                    </tr>
+   797→                  ) : (
+   798→                    data.planillas_recientes.map(p => (
+   799→                      <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-emerald-50/30 dark:hover:bg-slate-800/50 transition-colors">
+   800→                        <td className="p-3 font-mono text-xs font-medium text-slate-700 dark:text-slate-300">{p.codigo}</td>
+   801→                        <td className="p-3 text-slate-600 dark:text-slate-400">{p.tipo}</td>
+   802→                        <td className="p-3">
+   803→                          <Badge className={`text-[10px] border ${estadoColors[p.estado] || 'bg-slate-100 text-slate-700'}`} variant="secondary">
+   804→                            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${estadoDot[p.estado] || 'bg-slate-400'}`} />
+   805→                            {p.estado}
+   806→                          </Badge>
+   807→                        </td>
+   808→                        <td className="p-3 text-right font-mono font-medium text-slate-900 dark:text-slate-100">{fmt(p.total_neto)}</td>
+   809→                        <td className="p-3 text-right text-slate-600 dark:text-slate-400">{p.empleados}</td>
+   810→                        <td className="p-3 text-right text-xs text-slate-500 dark:text-slate-500">{fmtDate(p.fecha_creacion)}</td>
+   811→                      </tr>
+   812→                    ))
+   813→                  )}
+   814→                </tbody>
+   815→              </table>
+   816→            </div>
+   817→          </CardContent>
+   818→        </Card>
+   819→
+   820→        {/* ── Status Summary Donut Widget ── */}
+   821→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+   822→          <CardHeader className="pb-3">
+   823→            <CardTitle className="text-base flex items-center gap-2">
+   824→              <PieChart className="h-4 w-4 text-slate-500" /> Estado de Planillas
+   825→            </CardTitle>
+   826→            <CardDescription>Distribución por estado</CardDescription>
+   827→          </CardHeader>
+   828→          <CardContent>
+   829→            <StatusDonut statusCounts={statusCounts} />
+   830→          </CardContent>
+   831→        </Card>
+   832→      </div>
+   833→
+   834→      {/* ── Charts row: Enhanced Trend + Donut Breakdown ── */}
+   835→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   836→        {/* ── Enhanced Monthly Trend Chart ── */}
+   837→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+   838→          <CardHeader className="pb-3">
+   839→            <CardTitle className="text-base flex items-center gap-2">
+   840→              <BarChart3 className="h-4 w-4 text-slate-500" /> Tendencia Mensual
+   841→            </CardTitle>
+   842→            <CardDescription>Total salarios brutos por mes</CardDescription>
+   843→          </CardHeader>
+   844→          <CardContent>
+   845→            {data.tendencia_mensual.every(m => m.total === 0) ? (
+   846→              <div className="flex items-center justify-center py-8 text-slate-400">
+   847→                <p className="text-sm">Sin datos históricos</p>
+   848→              </div>
+   849→            ) : (
+   850→              <div className="relative">
+   851→                {/* Y-axis labels */}
+   852→                <div className="absolute left-0 top-0 bottom-6 w-14 flex flex-col justify-between text-[9px] text-slate-400 dark:text-slate-500 font-mono pr-1">
+   853→                  <span>{fmtShort(maxTendencia)}</span>
+   854→                  <span>{fmtShort(maxTendencia * 0.75)}</span>
+   855→                  <span>{fmtShort(maxTendencia * 0.5)}</span>
+   856→                  <span>{fmtShort(maxTendencia * 0.25)}</span>
+   857→                  <span>$0</span>
+   858→                </div>
+   859→                {/* Chart area */}
+   860→                <div className="ml-14 relative">
+   861→                  {/* Horizontal grid lines */}
+   862→                  <div className="absolute inset-0 bottom-6 flex flex-col justify-between pointer-events-none">
+   863→                    {[0, 1, 2, 3, 4].map(i => (
+   864→                      <div key={i} className="border-t border-dashed border-slate-200 dark:border-slate-700/50" />
+   865→                    ))}
+   866→                  </div>
+   867→                  {/* Bars container */}
+   868→                  <div className="relative flex items-end gap-2 h-48 pt-2 pb-0">
+   869→                    {/* Gradient area behind bars */}
+   870→                    <div className="absolute inset-0 bottom-0 overflow-hidden rounded-b-lg">
+   871→                      <div
+   872→                        className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-emerald-100/40 via-teal-50/20 to-transparent dark:from-emerald-900/20 dark:via-teal-900/10 dark:to-transparent"
+   873→                        style={{ height: '85%' }}
+   874→                      />
+   875→                    </div>
+   876→                    {data.tendencia_mensual.map((m, i) => {
+   877→                      const height = Math.max((m.total / maxTendencia) * 160, 6);
+   878→                      const isMax = m.total === maxTendencia;
+   879→                      const isCurrentMonth = i === currentMonthIdx;
+   880→                      return (
+   881→                        <div key={i} className="flex-1 flex flex-col items-center gap-1.5 group relative z-10">
+   882→                          {/* Tooltip */}
+   883→                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap bg-white dark:bg-slate-800 px-2 py-1 rounded shadow-sm border border-slate-200 dark:border-slate-700">
+   884→                            {m.total > 0 ? fmt(m.total) : '-'}
+   885→                          </span>
+   886→                          {/* Bar with animation */}
+   887→                          <div
+   888→                            className={`w-full rounded-t-md transition-all duration-700 ease-out min-h-[6px] group-hover:opacity-90 group-hover:brightness-110 relative cursor-pointer ${
+   889→                              isCurrentMonth
+   890→                                ? 'bg-gradient-to-t from-emerald-700 to-emerald-400 shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-300/50 dark:ring-emerald-700/50'
+   891→                                : isMax
+   892→                                  ? 'bg-gradient-to-t from-emerald-600 to-emerald-400'
+   893→                                  : 'bg-gradient-to-t from-teal-500 to-teal-300 dark:from-teal-600 dark:to-teal-400'
+   894→                            }`}
+   895→                            style={{
+   896→                              height: `${height}px`,
+   897→                              animation: `barGrow 0.8s ease-out ${i * 0.08}s both`,
+   898→                            }}
+   899→                          />
+   900→                          {/* Current month indicator */}
+   901→                          {isCurrentMonth && (
+   902→                            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+   903→                          )}
+   904→                          <span className={`text-[10px] capitalize font-medium ${
+   905→                            isCurrentMonth ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500 dark:text-slate-400'
+   906→                          }`}>{m.mes}</span>
+   907→                        </div>
+   908→                      );
+   909→                    })}
+   910→                  </div>
+   911→                </div>
+   912→              </div>
+   913→            )}
+   914→          </CardContent>
+   915→        </Card>
+   916→
+   917→        {/* ── Expense Breakdown Donut Chart ── */}
+   918→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+   919→          <CardHeader className="pb-3">
+   920→            <CardTitle className="text-base flex items-center gap-2">
+   921→              <PieChart className="h-4 w-4 text-slate-500" /> Desglose de Nómina
+   922→            </CardTitle>
+   923→            <CardDescription>Distribución de deducciones y pago neto</CardDescription>
+   924→          </CardHeader>
+   925→          <CardContent>
+   926→            <div className="flex flex-col sm:flex-row items-center gap-6">
+   927→              {/* Donut chart */}
+   928→              <div className="relative shrink-0">
+   929→                <div
+   930→                  className="w-36 h-36 rounded-full shadow-inner"
+   931→                  style={{ background: conicGradient }}
+   932→                >
+   933→                  <div className="absolute inset-0 flex items-center justify-center">
+   934→                    <div className="w-20 h-20 rounded-full bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center">
+   935→                      <div className="text-center">
+   936→                        <p className="text-xs font-bold text-slate-900 dark:text-slate-100 font-mono">{fmt(baseAmount)}</p>
+   937→                        <p className="text-[9px] text-slate-400 dark:text-slate-500">Total</p>
+   938→                      </div>
+   939→                    </div>
+   940→                  </div>
+   941→                </div>
+   942→              </div>
+   943→              {/* Legend */}
+   944→              <div className="flex-1 space-y-2.5 w-full">
+   945→                {EXPENSE_SLICES.map((s, i) => (
+   946→                  <div key={s.label} className="flex items-center justify-between group">
+   947→                    <div className="flex items-center gap-2">
+   948→                      <div className={`w-3 h-3 rounded-sm ${s.bgClass}`} />
+   949→                      <span className={`text-xs font-medium ${s.color} group-hover:underline`}>{s.label}</span>
+   950→                    </div>
+   951→                    <div className="flex items-center gap-2">
+   952→                      <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{fmt(expenseAmounts[i])}</span>
+   953→                      <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+   954→                        {s.pct}%
+   955→                      </span>
+   956→                    </div>
+   957→                  </div>
+   958→                ))}
+   959→              </div>
+   960→            </div>
+   961→          </CardContent>
+   962→        </Card>
+   963→      </div>
+   964→
+   965→      {/* ── Department Distribution + Activity Timeline ── */}
+   966→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   967→        {/* Department Distribution with percentages */}
+   968→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+   969→          <CardHeader className="pb-3">
+   970→            <CardTitle className="text-base flex items-center gap-2">
+   971→              <BarChart3 className="h-4 w-4 text-slate-500" /> Distribución por Área
+   972→            </CardTitle>
+   973→            <CardDescription>Costo salarial por departamento</CardDescription>
+   974→          </CardHeader>
+   975→          <CardContent>
+   976→            {data.distribucion_areas.length === 0 ? (
+   977→              <div className="flex items-center justify-center py-8 text-slate-400">
+   978→                <p className="text-sm">Sin datos de distribución</p>
+   979→              </div>
+   980→            ) : (
+   981→              <div className="space-y-3 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+   982→                {data.distribucion_areas.slice(0, 8).map((a, i) => {
+   983→                  const pct = (a.total / maxArea) * 100;
+   984→                  const totalAllAreas = data.distribucion_areas.reduce((s, x) => s + x.total, 0);
+   985→                  const pctOfTotal = totalAllAreas > 0 ? ((a.total / totalAllAreas) * 100).toFixed(1) : '0';
+   986→                  const colors = [
+   987→                    'from-emerald-500 to-emerald-400', 'from-teal-500 to-teal-400', 'from-cyan-500 to-cyan-400', 'from-amber-500 to-amber-400',
+   988→                    'from-orange-500 to-orange-400', 'from-rose-500 to-rose-400', 'from-violet-500 to-violet-400', 'from-slate-500 to-slate-400',
+   989→                  ];
+   990→                  const bgColors = [
+   991→                    'bg-emerald-500', 'bg-teal-500', 'bg-cyan-500', 'bg-amber-500',
+   992→                    'bg-orange-500', 'bg-rose-500', 'bg-violet-500', 'bg-slate-500',
+   993→                  ];
+   994→                  return (
+   995→                    <div key={i} className="space-y-1.5 group">
+   996→                      <div className="flex items-center justify-between text-xs">
+   997→                        <div className="flex items-center gap-2">
+   998→                          <div className={`w-2.5 h-2.5 rounded-sm ${bgColors[i % bgColors.length]}`} />
+   999→                          <span className="font-medium text-slate-700 dark:text-slate-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">{a.nombre}</span>
+  1000→                        </div>
+  1001→                        <div className="flex items-center gap-2">
+  1002→                          <span className="font-mono text-slate-500 dark:text-slate-400 text-[11px]">{fmt(a.total)}</span>
+  1003→                          <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+  1004→                            {pctOfTotal}%
+  1005→                          </span>
+  1006→                        </div>
+  1007→                      </div>
+  1008→                      <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+  1009→                        <div
+  1010→                          className={`h-full rounded-full transition-all duration-700 bg-gradient-to-r ${colors[i % colors.length]}`}
+  1011→                          style={{ width: `${pct}%` }}
+  1012→                        />
+  1013→                      </div>
+  1014→                    </div>
+  1015→                  );
+  1016→                })}
+  1017→              </div>
+  1018→            )}
+  1019→          </CardContent>
+  1020→        </Card>
+  1021→
+  1022→        {/* ── Recent Activity Timeline ── */}
+  1023→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1024→          <CardHeader className="pb-3">
+  1025→            <CardTitle className="text-base flex items-center gap-2">
+  1026→              <Activity className="h-4 w-4 text-slate-500" /> Actividad Reciente
+  1027→            </CardTitle>
+  1028→            <CardDescription>Eventos de planillas recientes</CardDescription>
+  1029→          </CardHeader>
+  1030→          <CardContent>
+  1031→            {activityEvents.length === 0 ? (
+  1032→              <div className="flex items-center justify-center py-8 text-slate-400">
+  1033→                <p className="text-sm">Sin actividad reciente</p>
+  1034→              </div>
+  1035→            ) : (
+  1036→              <div className="relative max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+  1037→                {/* Timeline line */}
+  1038→                <div className="absolute left-[15px] top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700" />
+  1039→                <div className="space-y-0">
+  1040→                  {activityEvents.map((event, idx) => (
+  1041→                    <div key={event.id} className="relative flex items-start gap-3 py-2.5 group">
+  1042→                      {/* Timeline dot */}
+  1043→                      <div className={`relative z-10 w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 border-2 ${activityTypeBorder[event.type]} ${activityTypeColor[event.type]} transition-transform duration-200 group-hover:scale-110`}>
+  1044→                        {activityTypeIcon[event.type]}
+  1045→                      </div>
+  1046→                      {/* Content */}
+  1047→                      <div className="flex-1 min-w-0 pt-0.5">
+  1048→                        <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-snug">{event.description}</p>
+  1049→                        <div className="flex items-center gap-2 mt-1">
+  1050→                          <Badge className={`text-[9px] border px-1.5 py-0 ${estadoColors[event.status] || 'bg-slate-100 text-slate-700'}`} variant="secondary">
+  1051→                            {event.status}
+  1052→                          </Badge>
+  1053→                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{fmtRelativeTime(event.timestamp)}</span>
+  1054→                        </div>
+  1055→                      </div>
+  1056→                    </div>
+  1057→                  ))}
+  1058→                </div>
+  1059→              </div>
+  1060→            )}
+  1061→          </CardContent>
+  1062→        </Card>
+  1063→      </div>
+  1064→
+  1065→      {/* ── Compliance Semaphore + Planilla Detail ── */}
+  1066→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1067→        {/* Compliance semaphore - Enhanced with SVG ring */}
+  1068→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1069→          <CardHeader className="pb-3">
+  1070→            <CardTitle className="text-base flex items-center gap-2">
+  1071→              <Shield className="h-4 w-4 text-slate-500" /> Semáforo Previsional
+  1072→            </CardTitle>
+  1073→          </CardHeader>
+  1074→          <CardContent className="space-y-3">
+  1075→            {/* SVG Circular Progress + Traffic light */}
+  1076→            <div className="flex items-center justify-center gap-6 mb-4">
+  1077→              <ComplianceRing percentage={data.kpis.cumplimiento_previsional} />
+  1078→              <div>
+  1079→                <div className="flex flex-col items-center gap-1.5 p-3 bg-slate-900 dark:bg-slate-800 rounded-2xl shadow-inner">
+  1080→                  <div className={`w-6 h-6 rounded-full transition-all ${
+  1081→                    data.kpis.semaforo === 'rojo'
+  1082→                      ? 'bg-red-500 shadow-lg shadow-red-500/50'
+  1083→                      : 'bg-red-900/30'
+  1084→                  }`} />
+  1085→                  <div className={`w-6 h-6 rounded-full transition-all ${
+  1086→                    data.kpis.semaforo === 'amarillo'
+  1087→                      ? 'bg-amber-400 shadow-lg shadow-amber-400/50'
+  1088→                      : 'bg-amber-900/30'
+  1089→                  }`} />
+  1090→                  <div className={`w-6 h-6 rounded-full transition-all ${
+  1091→                    data.kpis.semaforo === 'verde'
+  1092→                      ? 'bg-emerald-400 shadow-lg shadow-emerald-400/50'
+  1093→                      : 'bg-emerald-900/30'
+  1094→                  }`} />
+  1095→                </div>
+  1096→                <p className={`text-sm font-bold text-center mt-2 ${
+  1097→                  data.kpis.semaforo === 'verde' ? 'text-emerald-600' :
+  1098→                  data.kpis.semaforo === 'amarillo' ? 'text-amber-600' :
+  1099→                  'text-red-600'
+  1100→                }`}>{semaforoLabel}</p>
+  1101→              </div>
+  1102→            </div>
+  1103→
+  1104→            <Separator />
+  1105→
+  1106→            {/* Compliance items */}
+  1107→            {data.cumplimientos.map(c => (
+  1108→              <div key={c.nombre} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100/80 dark:hover:bg-slate-700/50 transition-colors">
+  1109→                <div className="flex items-center gap-2">
+  1110→                  {c.presentado ? (
+  1111→                    <CheckCircle className="h-4 w-4 text-emerald-500" />
+  1112→                  ) : (
+  1113→                    <XCircle className="h-4 w-4 text-red-500" />
+  1114→                  )}
+  1115→                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{c.nombre}</span>
+  1116→                </div>
+  1117→                <Badge variant={c.presentado ? 'default' : 'destructive'} className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 'bg-red-100 text-red-700'}`}>
+  1118→                  {c.presentado ? 'Presentado' : 'Pendiente'}
+  1119→                </Badge>
+  1120→              </div>
+  1121→            ))}
+  1122→
+  1123→            <Separator className="my-2" />
+  1124→
+  1125→            {/* Deadlines */}
+  1126→            <div className="space-y-2">
+  1127→              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Vencimientos</p>
+  1128→              {data.vencimientos.map(v => (
+  1129→                <div key={v.nombre} className="flex items-center justify-between text-xs bg-orange-50/50 dark:bg-orange-900/20 rounded px-2 py-1.5">
+  1130→                  <span className="text-slate-700 dark:text-slate-300 font-medium">{v.nombre}</span>
+  1131→                  <span className="font-semibold text-orange-600">{v.fecha}</span>
+  1132→                </div>
+  1133→              ))}
+  1134→              {data.vencimientos.length === 0 && (
+  1135→                <p className="text-xs text-emerald-600 text-center py-1 flex items-center justify-center gap-1">
+  1136→                  <CheckCircle className="h-3 w-3" /> Todos los pagos al día
+  1137→                </p>
+  1138→              )}
+  1139→            </div>
+  1140→          </CardContent>
+  1141→        </Card>
+  1142→
+  1143→        {/* ── Planilla Detail Card ── */}
+  1144→        {data.kpis.planilla_actual ? (
+  1145→          <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1146→            <CardHeader className="pb-3">
+  1147→              <CardTitle className="text-base flex items-center gap-2">
+  1148→                <CircleDot className="h-4 w-4 text-slate-500" /> Detalle de Estado
+  1149→              </CardTitle>
+  1150→              <CardDescription>Información de la planilla actual</CardDescription>
+  1151→            </CardHeader>
+  1152→            <CardContent>
+  1153→              <div className="space-y-3">
+  1154→                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1155→                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Código</span>
+  1156→                  <span className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.codigo}</span>
+  1157→                </div>
+  1158→                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1159→                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tipo</span>
+  1160→                  <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.tipo}</span>
+  1161→                </div>
+  1162→                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1163→                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Estado</span>
+  1164→                  <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium`}>
+  1165→                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${estadoDot[data.kpis.planilla_actual.estado] || 'bg-slate-400'}`} />
+  1166→                    {data.kpis.planilla_actual.estado}
+  1167→                  </Badge>
+  1168→                </div>
+  1169→                {data.kpis.planilla_actual.calculada_por && (
+  1170→                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1171→                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Calculada por</span>
+  1172→                    <span className="text-sm text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.calculada_por}</span>
+  1173→                  </div>
+  1174→                )}
+  1175→
+  1176→                <Separator className="my-2" />
+  1177→
+  1178→                {/* Compact timeline */}
+  1179→                <div className="flex items-center gap-1 pt-1">
+  1180→                  {TIMELINE_STEPS.map((step, idx) => {
+  1181→                    const isActive = idx === timelineActiveStep;
+  1182→                    const isCompleted = idx < timelineActiveStep;
+  1183→                    return (
+  1184→                      <React.Fragment key={step}>
+  1185→                        {idx > 0 && (
+  1186→                          <ChevronRight className={`h-3 w-3 ${
+  1187→                            idx <= timelineActiveStep ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'
+  1188→                          }`} />
+  1189→                        )}
+  1190→                        <div className="flex items-center gap-1">
+  1191→                          <div className={`w-2 h-2 rounded-full ${
+  1192→                            isCompleted ? 'bg-emerald-500' :
+  1193→                            isActive ? 'bg-amber-400 animate-pulse' :
+  1194→                            'bg-slate-300 dark:bg-slate-600'
+  1195→                          }`} />
+  1196→                          <span className={`text-[10px] font-semibold uppercase tracking-wider ${
+  1197→                            isCompleted ? 'text-emerald-600 dark:text-emerald-400' :
+  1198→                            isActive ? 'text-amber-600 dark:text-amber-400' :
+  1199→                            'text-slate-400 dark:text-slate-500'
+  1200→                          }`}>
+  1201→                            {step === 'CALCULADA' ? 'Calculada' : step === 'APROBADA' ? 'Aprobada' : 'Pagada'}
+  1202→                          </span>
+  1203→                        </div>
+  1204→                      </React.Fragment>
+  1205→                    );
+  1206→                  })}
+  1207→                </div>
+  1208→              </div>
+  1209→            </CardContent>
+  1210→          </Card>
+  1211→        ) : (
+  1212→          <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1213→            <CardHeader className="pb-3">
+  1214→              <CardTitle className="text-base flex items-center gap-2">
+  1215→                <CircleDot className="h-4 w-4 text-slate-500" /> Flujo de Planilla
+  1216→              </CardTitle>
+  1217→              <CardDescription>Progreso de la planilla actual</CardDescription>
+  1218→            </CardHeader>
+  1219→            <CardContent>
+  1220→              <div className="flex items-center justify-center py-8 text-slate-400">
+  1221→                <div className="text-center">
+  1222→                  <CircleDot className="h-8 w-8 mb-2 mx-auto text-slate-300 dark:text-slate-600" />
+  1223→                  <p className="text-sm font-medium">No hay planilla en proceso</p>
+  1224→                  {onNavigate && (
+  1225→                    <Button
+  1226→                      size="sm"
+  1227→                      className="mt-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+  1228→                      onClick={() => onNavigate('04-03')}
+  1229→                    >
+  1230→                      <Calculator className="h-3.5 w-3.5 mr-1.5" />
+  1231→                      Crear Planilla
+  1232→                    </Button>
+  1233→                  )}
+  1234→                </div>
+  1235→              </div>
+  1236→            </CardContent>
+  1237→          </Card>
+  1238→        )}
+  1239→      </div>
+  1240→
+  1241→      {/* Alerts with severity icons */}
+  1242→      {data.alertas.length > 0 && (
+  1243→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1244→          <CardHeader className="pb-3">
+  1245→            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
+  1246→              <AlertTriangle className="h-4 w-4 text-amber-500" /> Alertas del Sistema
+  1247→              <Badge variant="secondary" className="ml-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px]">
+  1248→                {data.alertas.length}
+  1249→              </Badge>
+  1250→            </CardTitle>
+  1251→          </CardHeader>
+  1252→          <CardContent>
+  1253→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+  1254→              {data.alertas.map((a, i) => {
+  1255→                const isHigh = a.severidad === 'ALTA';
+  1256→                const isMedium = a.severidad === 'MEDIA';
+  1257→                return (
+  1258→                  <div
+  1259→                    key={i}
+  1260→                    className={`flex items-start gap-2.5 p-3 rounded-lg border transition-all duration-200 hover:shadow-sm ${
+  1261→                      isHigh ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300' :
+  1262→                      isMedium ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300' :
+  1263→                      'bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300'
+  1264→                    }`}
+  1265→                  >
+  1266→                    {isHigh ? (
+  1267→                      <AlertOctagon className="h-4 w-4 shrink-0 mt-0.5 text-red-500 dark:text-red-400" />
+  1268→                    ) : isMedium ? (
+  1269→                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500 dark:text-amber-400" />
+  1270→                    ) : (
+  1271→                      <Info className="h-4 w-4 shrink-0 mt-0.5 text-sky-500 dark:text-sky-400" />
+  1272→                    )}
+  1273→                    <div className="min-w-0">
+  1274→                      <p className="text-xs font-medium">{a.mensaje}</p>
+  1275→                      <p className={`text-[10px] mt-0.5 font-semibold uppercase ${
+  1276→                        isHigh ? 'text-red-500' : isMedium ? 'text-amber-500' : 'text-sky-500'
+  1277→                      }`}>{a.severidad}</p>
+  1278→                    </div>
+  1279→                  </div>
+  1280→                );
+  1281→              })}
+  1282→            </div>
+  1283→          </CardContent>
+  1284→        </Card>
+  1285→      )}
+  1286→
+  1287→      {/* CSS Keyframes for bar animation + custom scrollbar */}
+  1288→      <style jsx>{`
+  1289→        @keyframes barGrow {
+  1290→          from {
+  1291→            height: 0;
+  1292→            opacity: 0;
+  1293→          }
+  1294→          to {
+  1295→            opacity: 1;
+  1296→          }
+  1297→        }
+  1298→        .custom-scrollbar::-webkit-scrollbar {
+  1299→          width: 4px;
+  1300→        }
+  1301→        .custom-scrollbar::-webkit-scrollbar-track {
+  1302→          background: transparent;
+  1303→        }
+  1304→        .custom-scrollbar::-webkit-scrollbar-thumb {
+  1305→          background: #cbd5e1;
+  1306→          border-radius: 2px;
+  1307→        }
+  1308→        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  1309→          background: #94a3b8;
+  1310→        }
+  1311→      `}</style>
+  1312→    </div>
+  1313→  );
+  1314→}
+  1315→

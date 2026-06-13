@@ -5,7 +5,7 @@ import {
   Plus, Calendar, Loader2, RefreshCw, AlertCircle, Clock,
   FileText, CheckCircle, DollarSign, Users, Filter, TrendingUp,
   CalendarDays, ChevronLeft, ChevronRight, Eye, ThumbsUp, SendHorizonal,
-  CircleDot, CircleCheck, Circle
+  CircleDot, CircleCheck, Circle, Printer
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +43,8 @@ interface Planilla {
 }
 
 const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const fmtPrint = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const estadoColors: Record<string, string> = {
   BORRADOR: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300',
@@ -113,6 +115,7 @@ export default function PayrollPeriods({ accessToken, userRole }: PayrollPeriods
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<number | null>(null);
+  const [printLoading, setPrintLoading] = useState<string | null>(null);
 
   const fetchPlanillas = useCallback(async () => {
     setLoading(true);
@@ -249,6 +252,153 @@ export default function PayrollPeriods({ accessToken, userRole }: PayrollPeriods
   const selectedDatePlanillas = selectedCalendarDate !== null
     ? (planillaDates[selectedCalendarDate] || [])
     : [];
+
+  // Print summary handler
+  const handlePrintSummary = async (planilla: Planilla) => {
+    setPrintLoading(planilla.id);
+    try {
+      const res = await fetch(`/api/nomina/planillas/${planilla.id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error('Error al cargar detalle');
+      const data = await res.json();
+      const detalles = data.planilla?.detalles_planilla || [];
+      const deducciones = planilla.total_deducciones || (planilla.total_salarios_brutos - planilla.total_neto_a_pagar);
+      const cargasPatronales = planilla.total_cargas_patronales || Math.round(planilla.total_salarios_brutos * 0.1725);
+      const totalIsssLaboral = detalles.reduce((s: number, d: { isss_laboral: number }) => s + d.isss_laboral, 0);
+      const totalAfpLaboral = detalles.reduce((s: number, d: { afp_laboral: number }) => s + d.afp_laboral, 0);
+      const totalIsr = detalles.reduce((s: number, d: { isr_retenido: number }) => s + d.isr_retenido, 0);
+      const totalIsssPatronal = detalles.reduce((s: number, d: { isss_patronal: number }) => s + d.isss_patronal, 0);
+      const totalAfpPatronal = detalles.reduce((s: number, d: { afp_patronal: number }) => s + d.afp_patronal, 0);
+
+      const printContainer = document.getElementById('print-container');
+      if (!printContainer) return;
+
+      printContainer.innerHTML = `
+        <div style="font-family: 'Inter', Arial, sans-serif; color: #1a1a1a; max-width: 100%; padding: 20px;">
+          <!-- Header -->
+          <div style="text-align: center; margin-bottom: 24px; border-bottom: 3px solid #059669; padding-bottom: 16px;">
+            <h1 style="font-size: 16pt; margin: 0 0 4px 0; color: #065f46; letter-spacing: 0.5px;">Ministerio de Hacienda — República de El Salvador</h1>
+            <h2 style="font-size: 13pt; margin: 0 0 8px 0; color: #047857;">Resumen de Planilla de Nómina</h2>
+            <p style="font-size: 9pt; color: #6b7280; margin: 0;">Generado: ${new Date().toLocaleDateString('es-SV', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+          </div>
+
+          <!-- Planilla Details -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt;">
+            <tr>
+              <td style="padding: 4px 8px; width: 25%;"><strong>Código:</strong> ${planilla.codigo_planilla}</td>
+              <td style="padding: 4px 8px; width: 25%;"><strong>Tipo:</strong> ${planilla.tipo === 'MENSUAL' ? 'Mensual' : 'Quincenal'}</td>
+              <td style="padding: 4px 8px; width: 25%;"><strong>Estado:</strong> ${estadoLabels[planilla.estado] || planilla.estado}</td>
+              <td style="padding: 4px 8px; width: 25%;"><strong>Empleados:</strong> ${planilla.total_empleados}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 8px;"><strong>Período:</strong> ${new Date(planilla.fecha_inicio_periodo).toLocaleDateString('es-SV')} — ${new Date(planilla.fecha_fin_periodo).toLocaleDateString('es-SV')}</td>
+              <td style="padding: 4px 8px;"><strong>Fecha Cálculo:</strong> ${planilla.fecha_calculo ? new Date(planilla.fecha_calculo).toLocaleDateString('es-SV') : '—'}</td>
+              <td style="padding: 4px 8px;"><strong>Calculada por:</strong> ${planilla.calculada_por || '—'}</td>
+              <td style="padding: 4px 8px;"><strong>Aprobada por:</strong> ${planilla.aprobada_por || '—'}</td>
+            </tr>
+          </table>
+
+          <!-- Employee Table -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt;">
+            <thead>
+              <tr style="background-color: #059669 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: center; width: 30px; color: white !important;">#</th>
+                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: left; color: white !important;">Nombre</th>
+                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: left; color: white !important;">Puesto</th>
+                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">Salario Bruto</th>
+                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">ISSS</th>
+                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">AFP</th>
+                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">ISR</th>
+                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">Salario Neto</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${detalles.map((d: { empleado: { primer_nombre: string; segundo_nombre: string | null; primer_apellido: string; segundo_apellido: string | null; area: { nombre: string } | null }; salario_bruto: number; isss_laboral: number; afp_laboral: number; isr_retenido: number; salario_neto: number }, i: number) => {
+                const nombre = `${d.empleado.primer_nombre}${d.empleado.segundo_nombre ? ' ' + d.empleado.segundo_nombre : ''} ${d.empleado.primer_apellido}${d.empleado.segundo_apellido ? ' ' + d.empleado.segundo_apellido : ''}`;
+                return `<tr style="background-color: ${i % 2 === 0 ? '#ffffff' : '#f0fdf4'} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: center;">${i + 1}</td>
+                  <td style="padding: 6px; border: 1px solid #d1d5db;">${nombre}</td>
+                  <td style="padding: 6px; border: 1px solid #d1d5db;">${d.empleado.area?.nombre || '—'}</td>
+                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(d.salario_bruto)}</td>
+                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(d.isss_laboral)}</td>
+                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(d.afp_laboral)}</td>
+                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(d.isr_retenido)}</td>
+                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace; font-weight: 700;">${fmtPrint(d.salario_neto)}</td>
+                </tr>`;
+              }).join('')}
+              <!-- Totals Row -->
+              <tr style="background-color: #ecfdf5 !important; font-weight: 700 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <td style="padding: 8px; border: 1px solid #047857;" colspan="3">TOTALES</td>
+                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(planilla.total_salarios_brutos)}</td>
+                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(totalIsssLaboral)}</td>
+                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(totalAfpLaboral)}</td>
+                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(totalIsr)}</td>
+                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(planilla.total_neto_a_pagar)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Cargas Patronales Summary -->
+          <div style="margin-bottom: 20px;">
+            <h3 style="font-size: 11pt; color: #065f46; margin: 0 0 8px 0; border-bottom: 1px solid #059669; padding-bottom: 4px;">Cargas Patronales</h3>
+            <table style="width: 60%; border-collapse: collapse; font-size: 10pt;">
+              <tr style="background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <td style="padding: 6px 10px; border: 1px solid #d1d5db;">ISSS Patronal (7.5%)</td>
+                <td style="padding: 6px 10px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(totalIsssPatronal)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 10px; border: 1px solid #d1d5db;">AFP Patronal (7.75%)</td>
+                <td style="padding: 6px 10px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(totalAfpPatronal)}</td>
+              </tr>
+              <tr style="background-color: #ecfdf5 !important; font-weight: 700 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <td style="padding: 6px 10px; border: 1px solid #047857;">Total Cargas Patronales</td>
+                <td style="padding: 6px 10px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(cargasPatronales)}</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Summary Box -->
+          <div style="margin-bottom: 20px; padding: 12px; border: 2px solid #059669; border-radius: 4px; background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+            <table style="width: 100%; font-size: 11pt;">
+              <tr>
+                <td style="padding: 4px;"><strong>Total Salarios Brutos:</strong></td>
+                <td style="padding: 4px; text-align: right; font-family: monospace;">${fmtPrint(planilla.total_salarios_brutos)}</td>
+                <td style="padding: 4px; padding-left: 20px;"><strong>Total Deducciones:</strong></td>
+                <td style="padding: 4px; text-align: right; font-family: monospace;">${fmtPrint(deducciones)}</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px;"><strong>Total Neto a Pagar:</strong></td>
+                <td style="padding: 4px; text-align: right; font-family: monospace; font-size: 13pt; color: #065f46;">${fmtPrint(planilla.total_neto_a_pagar)}</td>
+                <td style="padding: 4px; padding-left: 20px;"><strong>Cargas Patronales:</strong></td>
+                <td style="padding: 4px; text-align: right; font-family: monospace;">${fmtPrint(cargasPatronales)}</td>
+              </tr>
+            </table>
+          </div>
+
+          <!-- Legal Footer -->
+          <div style="text-align: center; margin-top: 24px; padding-top: 12px; border-top: 1px solid #d1d5db; font-size: 8pt; color: #6b7280;">
+            <p style="margin: 0;">Documento generado conforme a la legislación laboral de El Salvador</p>
+            <p style="margin: 2px 0 0 0;">Código de Trabajo, Ley del ISSS, Ley del Sistema de Ahorro para Pensiones — Ministerio de Hacienda</p>
+          </div>
+        </div>
+      `;
+
+      // Show print container and trigger print
+      printContainer.style.display = 'block';
+      setTimeout(() => {
+        window.print();
+        // Hide after print dialog closes
+        setTimeout(() => {
+          printContainer.style.display = 'none';
+        }, 500);
+      }, 300);
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo cargar el detalle para imprimir', variant: 'destructive' });
+    } finally {
+      setPrintLoading(null);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -804,6 +954,16 @@ export default function PayrollPeriods({ accessToken, userRole }: PayrollPeriods
                         <SendHorizonal className="h-3 w-3 mr-1" /> Dispersar
                       </Button>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[10px] px-2 text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 no-print"
+                      disabled={printLoading === p.id}
+                      onClick={(e) => { e.stopPropagation(); handlePrintSummary(p); }}
+                    >
+                      {printLoading === p.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Printer className="h-3 w-3 mr-1" />}
+                      Imprimir Resumen
+                    </Button>
                   </div>
 
                   {/* Expanded detail */}
@@ -828,6 +988,12 @@ export default function PayrollPeriods({ accessToken, userRole }: PayrollPeriods
           })}
         </div>
       )}
+
+      {/* Hidden Print Container */}
+      <div
+        id="print-container"
+        style={{ display: 'none', position: 'fixed', top: 0, left: 0, width: '100%', background: 'white', zIndex: 9999, padding: '20px' }}
+      />
     </div>
   );
 }

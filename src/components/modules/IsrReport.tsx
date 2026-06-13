@@ -62,6 +62,7 @@ export default function IsrReport({ accessToken }: IsrReportProps) {
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [constanciaLoading, setConstanciaLoading] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>('nombre');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [showPreview, setShowPreview] = useState(false);
@@ -106,21 +107,27 @@ export default function IsrReport({ accessToken }: IsrReportProps) {
     }
   };
 
-  const generateConstancia = (empId: string, empNombre: string) => {
+  const generateConstancia = async (empId: string, empNombre: string) => {
     if (!data) return;
-    const emp = data.empleados.find((e) => e.id === empId);
-    if (!emp) return;
-
-    const content = `CONSTANCIA DE RETENCIÓN ISR\n\nNombre: ${empNombre}\nDUI: ${emp.dui}\nPeríodo: ${meses[data.periodo.mes - 1]} ${data.periodo.anio}\n\nSalario Bruto: $${emp.salario_bruto.toFixed(2)}\nDeducciones (ISSS+AFP): $${emp.deducciones.toFixed(2)}\nRenta Imponible: $${emp.renta_imponible.toFixed(2)}\nISR Retenido: $${emp.isr_retenido.toFixed(2)}`;
-
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Constancia_ISR_${emp.dui}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: 'Constancia generada', description: `Constancia ISR de ${empNombre}` });
+    setConstanciaLoading(empId);
+    try {
+      const res = await fetch(`/api/reportes/isr/constancia?empleado_id=${empId}&mes=${data.periodo.mes}&anio=${data.periodo.anio}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) throw new Error('Error al generar constancia');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Constancia_ISR_${empId}_${meses[data.periodo.mes - 1]}_${data.periodo.anio}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: 'Constancia ISR generada', description: `PDF de constancia ISR de ${empNombre}` });
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo generar la constancia ISR', variant: 'destructive' });
+    } finally {
+      setConstanciaLoading(null);
+    }
   };
 
   const exportCSV = () => {
@@ -541,8 +548,8 @@ export default function IsrReport({ accessToken }: IsrReportProps) {
                       <td className="p-3 text-right font-mono text-slate-800 dark:text-slate-200">${fmt(emp.renta_imponible)}</td>
                       <td className="p-3 text-right font-mono text-red-700 dark:text-red-400 font-medium">${fmt(emp.isr_retenido)}</td>
                       <td className="p-3 text-center">
-                        <Button variant="ghost" size="sm" onClick={() => generateConstancia(emp.id, emp.nombre)} title="Generar constancia" className="dark:text-slate-300 dark:hover:bg-slate-700">
-                          <FileText className="h-3.5 w-3.5" />
+                        <Button variant="ghost" size="sm" onClick={() => generateConstancia(emp.id, emp.nombre)} title="Generar Constancia ISR PDF" disabled={constanciaLoading === emp.id} className="dark:text-slate-300 dark:hover:bg-slate-700">
+                          {constanciaLoading === emp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
                         </Button>
                       </td>
                     </tr>
