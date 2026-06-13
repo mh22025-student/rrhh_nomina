@@ -2,14 +2,13 @@
 
 import React, { useState } from 'react';
 import {
-  Gift, Calculator, Loader2, BookOpen, Download, Info
+  Gift, Calculator, Loader2, BookOpen, Download, Info, FileText
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 
@@ -56,6 +55,7 @@ export default function AguinaldoView({ accessToken }: AguinaldoViewProps) {
   const [anio, setAnio] = useState(new Date().getFullYear().toString());
   const [calculating, setCalculating] = useState(false);
   const [result, setResult] = useState<AguinaldoResult | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
 
   const handleCalculate = async () => {
     if (!anio) {
@@ -96,6 +96,31 @@ export default function AguinaldoView({ accessToken }: AguinaldoViewProps) {
     a.download = `aguinaldo_${anio}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleGeneratePdf = async (empleadoId: string, codigoEmpleado: string) => {
+    setGeneratingPdf(empleadoId);
+    try {
+      const res = await fetch(`/api/nomina/aguinaldo/pdf?empleado_id=${empleadoId}&anio=${anio}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Error al generar PDF');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aguinaldo-${codigoEmpleado}-${anio}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: 'PDF Generado', description: `Constancia de aguinaldo para ${codigoEmpleado}` });
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al generar PDF', variant: 'destructive' });
+    } finally {
+      setGeneratingPdf(null);
+    }
   };
 
   const getDiasAguinaldo = (anios: number) => {
@@ -206,9 +231,9 @@ export default function AguinaldoView({ accessToken }: AguinaldoViewProps) {
                       <th className="text-center font-medium text-slate-500 p-3">Días Aguinaldo</th>
                       <th className="text-right font-medium text-slate-500 p-3">Salario Base</th>
                       <th className="text-right font-medium text-slate-500 p-3">Bruto</th>
-                      <th className="text-right font-medium text-slate-500 p-3">Exención ISR</th>
                       <th className="text-right font-medium text-slate-500 p-3">ISR</th>
                       <th className="text-right font-medium text-slate-500 p-3">Neto</th>
+                      <th className="text-center font-medium text-slate-500 p-3">PDF</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -223,9 +248,24 @@ export default function AguinaldoView({ accessToken }: AguinaldoViewProps) {
                         </td>
                         <td className="p-3 text-right">{fmt(r.salario_base)}</td>
                         <td className="p-3 text-right font-medium">{fmt(r.aguinaldo_bruto)}</td>
-                        <td className="p-3 text-right text-xs text-slate-400">{fmt(r.exencion_isr)}</td>
                         <td className="p-3 text-right text-red-600">{r.isr_aguinaldo > 0 ? `-${fmt(r.isr_aguinaldo)}` : '-'}</td>
                         <td className="p-3 text-right font-bold text-emerald-700">{fmt(r.aguinaldo_neto)}</td>
+                        <td className="p-3 text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                            onClick={() => handleGeneratePdf(r.empleado_id, r.codigo_empleado)}
+                            disabled={generatingPdf === r.empleado_id}
+                            title="Generar Constancia de Aguinaldo PDF"
+                          >
+                            {generatingPdf === r.empleado_id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <FileText className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

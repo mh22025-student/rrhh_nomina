@@ -92,8 +92,14 @@ export default function ProfileCatalog({ accessToken, userRole }: ProfileCatalog
         fetch('/api/areas', { headers: { Authorization: `Bearer ${accessToken}` } }),
         fetch('/api/bandas', { headers: { Authorization: `Bearer ${accessToken}` } }),
       ]);
-      if (areasRes.ok) setAreas(await areasRes.json());
-      if (bandasRes.ok) setBandas(await bandasRes.json());
+      if (areasRes.ok) {
+        const areasData = await areasRes.json();
+        setAreas(Array.isArray(areasData) ? areasData : areasData.data || []);
+      }
+      if (bandasRes.ok) {
+        const bandasData = await bandasRes.json();
+        setBandas(Array.isArray(bandasData) ? bandasData : bandasData.data || []);
+      }
     } catch (err) {
       console.error(err);
     }

@@ -304,6 +304,9 @@ model Planilla {
   aprobada_por_id       String?
   fecha_calculo         DateTime?
   fecha_aprobacion      DateTime?
+  fecha_pago            DateTime?
+  referencia_pago       String?
+  motivo_rechazo        String?
   observaciones         String?
   planilla_original_id  String?
   fecha_creacion        DateTime  @default(now())

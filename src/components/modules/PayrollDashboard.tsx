@@ -151,19 +151,43 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
   const semaforoRing = data.kpis.semaforo === 'verde' ? 'ring-emerald-200' : data.kpis.semaforo === 'amarillo' ? 'ring-amber-200' : 'ring-red-200';
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 bg-pattern-dots min-h-full">
+      {/* Gradient Header Card with company branding */}
+      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 rounded-xl p-5 text-white shadow-lg relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(255,255,255,0.08),transparent_50%)]" />
+        <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/4" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/3 -translate-x-1/4" />
+        <div className="relative z-10 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Dashboard de Nómina
+            </h2>
+            <p className="text-emerald-100 text-sm mt-0.5">Resumen ejecutivo del sistema de planillas</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 p-1.5 bg-white/10 rounded-full backdrop-blur-sm">
+              <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'rojo' ? 'bg-red-400 shadow-sm shadow-red-400/50' : 'bg-red-900/40'}`} />
+              <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
+              <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
+            </div>
+            <Badge className="bg-white/20 text-white border-0 text-xs">{semaforoLabel}</Badge>
+          </div>
+        </div>
+      </div>
+
       {/* Current Planilla Banner - Prominent if active */}
       {data.kpis.planilla_actual && (
-        <Card className="shadow-sm border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-50 to-white">
+        <Card className="shadow-sm border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-50 to-white dark:from-emerald-950/30 dark:to-card">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-emerald-100">
-                  <DollarSign className="h-5 w-5 text-emerald-600" />
+                <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
+                  <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Planilla en Progreso</p>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Planilla en Progreso</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     <span className="font-mono font-medium">{data.kpis.planilla_actual.codigo}</span>
                     <span className="mx-1.5">·</span>
                     {data.kpis.planilla_actual.tipo}
@@ -176,7 +200,7 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
                   </p>
                 </div>
               </div>
-              <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium`}>
+              <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium badge-animated-border`}>
                 <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${estadoDot[data.kpis.planilla_actual.estado] || 'bg-slate-400'}`} />
                 {data.kpis.planilla_actual.estado}
               </Badge>
@@ -185,19 +209,29 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
         </Card>
       )}
 
-      {/* KPI Cards - ERP style */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI Cards - ERP style with sparklines */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
         {/* Total Empleados */}
-        <Card className="shadow-sm hover:shadow-md transition-shadow">
+        <Card className="shadow-sm card-hover-lift">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-slate-500">Empleados Activos</span>
-              <div className="p-2 rounded-lg bg-teal-50">
-                <Users className="h-4 w-4 text-teal-600" />
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Empleados Activos</span>
+              <div className="p-2 rounded-lg bg-teal-50 dark:bg-teal-900/30">
+                <Users className="h-4 w-4 text-teal-600 dark:text-teal-400" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900">{data.kpis.total_empleados_activos}</p>
-            <div className="flex items-center gap-1 mt-2">
+            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{data.kpis.total_empleados_activos}</p>
+            {/* Mini sparkline bars */}
+            <div className="flex items-end gap-0.5 h-5 mt-2 mb-1">
+              {[40, 65, 50, 80, 55, 70, 60, 75, 85, 90, 70, 80].map((h, i) => (
+                <div
+                  key={i}
+                  className="sparkline-bar flex-1 rounded-sm bg-teal-400/60 dark:bg-teal-500/40 min-w-[3px]"
+                  style={{ height: `${h}%` }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-1">
               {data.kpis.tendencia_empleados.startsWith('-') ? (
                 <>
                   <ArrowDownRight className="h-3.5 w-3.5 text-red-500" />
@@ -216,41 +250,51 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
         </Card>
 
         {/* Nómina del Mes */}
-        <Card className="shadow-sm hover:shadow-md transition-shadow">
+        <Card className="shadow-sm card-hover-lift">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-slate-500">Nómina del Mes</span>
-              <div className="p-2 rounded-lg bg-emerald-50">
-                <DollarSign className="h-4 w-4 text-emerald-600" />
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Nómina del Mes</span>
+              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/30">
+                <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900 font-mono">{fmt(data.kpis.nomina_mes)}</p>
-            <span className="text-xs text-slate-400 mt-2 block">Total neto pagado</span>
+            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono">{fmt(data.kpis.nomina_mes)}</p>
+            {/* Mini sparkline bars */}
+            <div className="flex items-end gap-0.5 h-5 mt-2 mb-1">
+              {[30, 45, 55, 40, 60, 70, 50, 65, 80, 75, 85, 95].map((h, i) => (
+                <div
+                  key={i}
+                  className="sparkline-bar flex-1 rounded-sm bg-emerald-400/60 dark:bg-emerald-500/40 min-w-[3px]"
+                  style={{ height: `${h}%` }}
+                />
+              ))}
+            </div>
+            <span className="text-xs text-slate-400 dark:text-slate-500 mt-2 block">Total neto pagado</span>
           </CardContent>
         </Card>
 
         {/* Cumplimiento Previsional with Traffic Light */}
-        <Card className="shadow-sm hover:shadow-md transition-shadow">
+        <Card className="shadow-sm card-hover-lift">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-slate-500">Cumplimiento</span>
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Cumplimiento</span>
               {/* Traffic light visual */}
-              <div className="flex items-center gap-1 p-1 bg-slate-900 rounded-full">
+              <div className="flex items-center gap-1 p-1 bg-slate-900 dark:bg-slate-800 rounded-full">
                 <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'rojo' ? 'bg-red-500 shadow-sm shadow-red-500/50' : 'bg-red-900/40'}`} />
                 <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
                 <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
               </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900">{data.kpis.cumplimiento_previsional}%</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{data.kpis.cumplimiento_previsional}%</p>
             <div className="flex items-center gap-2 mt-2">
               <Progress
                 value={data.kpis.cumplimiento_previsional}
-                className="h-2 flex-1"
+                className="h-2 flex-1 progress-animate"
               />
               <Badge variant="outline" className={`text-[10px] px-2 border ${
-                data.kpis.semaforo === 'verde' ? 'border-emerald-300 text-emerald-700 bg-emerald-50' :
-                data.kpis.semaforo === 'amarillo' ? 'border-amber-300 text-amber-700 bg-amber-50' :
-                'border-red-300 text-red-700 bg-red-50'
+                data.kpis.semaforo === 'verde' ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-700' :
+                data.kpis.semaforo === 'amarillo' ? 'border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700' :
+                'border-red-300 text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700'
               }`}>
                 {semaforoLabel}
               </Badge>
@@ -259,26 +303,26 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
         </Card>
 
         {/* Próximo Vencimiento */}
-        <Card className="shadow-sm hover:shadow-md transition-shadow">
+        <Card className="shadow-sm card-hover-lift">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-slate-500">Próximo Vencimiento</span>
-              <div className="p-2 rounded-lg bg-orange-50">
-                <Clock className="h-4 w-4 text-orange-600" />
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Próximo Vencimiento</span>
+              <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-900/30">
+                <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400" />
               </div>
             </div>
             {data.vencimientos.length > 0 ? (
               <>
-                <p className="text-lg font-bold text-slate-900">{data.vencimientos[0].nombre}</p>
+                <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{data.vencimientos[0].nombre}</p>
                 <div className="flex items-center gap-1.5 mt-2">
                   <span className="inline-block w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-                  <span className="text-xs font-semibold text-orange-600">{data.vencimientos[0].fecha}</span>
+                  <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">{data.vencimientos[0].fecha}</span>
                 </div>
               </>
             ) : (
               <>
-                <p className="text-lg font-bold text-emerald-600">Al día</p>
-                <span className="text-xs text-slate-400 mt-2 block">Sin vencimientos pendientes</span>
+                <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">Al día</p>
+                <span className="text-xs text-slate-400 dark:text-slate-500 mt-2 block">Sin vencimientos pendientes</span>
               </>
             )}
           </CardContent>
@@ -299,13 +343,13 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-t border-b bg-slate-50/80">
-                    <th className="text-left font-medium text-slate-500 p-3">Código</th>
-                    <th className="text-left font-medium text-slate-500 p-3">Tipo</th>
-                    <th className="text-left font-medium text-slate-500 p-3">Estado</th>
-                    <th className="text-right font-medium text-slate-500 p-3">Total Neto</th>
-                    <th className="text-right font-medium text-slate-500 p-3">Empleados</th>
-                    <th className="text-right font-medium text-slate-500 p-3">Fecha</th>
+                  <tr className="border-t border-b bg-slate-50/80 dark:bg-slate-800/50">
+                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Código</th>
+                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Tipo</th>
+                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Estado</th>
+                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Total Neto</th>
+                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Empleados</th>
+                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Fecha</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -321,18 +365,18 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
                     </tr>
                   ) : (
                     data.planillas_recientes.map(p => (
-                      <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                        <td className="p-3 font-mono text-xs font-medium text-slate-700">{p.codigo}</td>
-                        <td className="p-3 text-slate-600">{p.tipo}</td>
+                      <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-emerald-50/30 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="p-3 font-mono text-xs font-medium text-slate-700 dark:text-slate-300">{p.codigo}</td>
+                        <td className="p-3 text-slate-600 dark:text-slate-400">{p.tipo}</td>
                         <td className="p-3">
                           <Badge className={`text-[10px] border ${estadoColors[p.estado] || 'bg-slate-100 text-slate-700'}`} variant="secondary">
                             <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${estadoDot[p.estado] || 'bg-slate-400'}`} />
                             {p.estado}
                           </Badge>
                         </td>
-                        <td className="p-3 text-right font-mono font-medium text-slate-900">{fmt(p.total_neto)}</td>
-                        <td className="p-3 text-right text-slate-600">{p.empleados}</td>
-                        <td className="p-3 text-right text-xs text-slate-500">{fmtDate(p.fecha_creacion)}</td>
+                        <td className="p-3 text-right font-mono font-medium text-slate-900 dark:text-slate-100">{fmt(p.total_neto)}</td>
+                        <td className="p-3 text-right text-slate-600 dark:text-slate-400">{p.empleados}</td>
+                        <td className="p-3 text-right text-xs text-slate-500 dark:text-slate-500">{fmtDate(p.fecha_creacion)}</td>
                       </tr>
                     ))
                   )}
@@ -383,14 +427,14 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
 
             {/* Compliance items */}
             {data.cumplimientos.map(c => (
-              <div key={c.nombre} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/80">
+              <div key={c.nombre} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
                 <div className="flex items-center gap-2">
                   {c.presentado ? (
                     <CheckCircle className="h-4 w-4 text-emerald-500" />
                   ) : (
                     <XCircle className="h-4 w-4 text-red-500" />
                   )}
-                  <span className="text-sm font-medium text-slate-700">{c.nombre}</span>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{c.nombre}</span>
                 </div>
                 <Badge variant={c.presentado ? 'default' : 'destructive'} className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 'bg-red-100 text-red-700'}`}>
                   {c.presentado ? 'Presentado' : 'Pendiente'}
@@ -404,8 +448,8 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
             <div className="space-y-2">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Vencimientos</p>
               {data.vencimientos.map(v => (
-                <div key={v.nombre} className="flex items-center justify-between text-xs bg-orange-50/50 rounded px-2 py-1.5">
-                  <span className="text-slate-700 font-medium">{v.nombre}</span>
+                <div key={v.nombre} className="flex items-center justify-between text-xs bg-orange-50/50 dark:bg-orange-900/20 rounded px-2 py-1.5">
+                  <span className="text-slate-700 dark:text-slate-300 font-medium">{v.nombre}</span>
                   <span className="font-semibold text-orange-600">{v.fecha}</span>
                 </div>
               ))}
@@ -485,11 +529,11 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">
                           <div className={`w-2.5 h-2.5 rounded-sm ${colors[i % colors.length]}`} />
-                          <span className="font-medium text-slate-700">{a.nombre}</span>
+                          <span className="font-medium text-slate-700 dark:text-slate-300">{a.nombre}</span>
                         </div>
-                        <span className="font-mono text-slate-500 text-[11px]">{fmt(a.total)}</span>
+                        <span className="font-mono text-slate-500 dark:text-slate-400 text-[11px]">{fmt(a.total)}</span>
                       </div>
-                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-700 ${colors[i % colors.length]}`}
                           style={{ width: `${pct}%` }}
@@ -508,9 +552,9 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
       {data.alertas.length > 0 && (
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2 text-slate-900">
+            <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
               <AlertTriangle className="h-4 w-4 text-amber-500" /> Alertas del Sistema
-              <Badge variant="secondary" className="ml-1 bg-slate-100 text-slate-600 text-[10px]">
+              <Badge variant="secondary" className="ml-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px]">
                 {data.alertas.length}
               </Badge>
             </CardTitle>
@@ -524,17 +568,17 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
                   <div
                     key={i}
                     className={`flex items-start gap-2.5 p-3 rounded-lg border ${
-                      isHigh ? 'bg-red-50 border-red-200 text-red-800' :
-                      isMedium ? 'bg-amber-50 border-amber-200 text-amber-800' :
-                      'bg-sky-50 border-sky-200 text-sky-800'
+                      isHigh ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300' :
+                      isMedium ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300' :
+                      'bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300'
                     }`}
                   >
                     {isHigh ? (
-                      <AlertOctagon className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+                      <AlertOctagon className="h-4 w-4 shrink-0 mt-0.5 text-red-500 dark:text-red-400" />
                     ) : isMedium ? (
-                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500 dark:text-amber-400" />
                     ) : (
-                      <Info className="h-4 w-4 shrink-0 mt-0.5 text-sky-500" />
+                      <Info className="h-4 w-4 shrink-0 mt-0.5 text-sky-500 dark:text-sky-400" />
                     )}
                     <div className="min-w-0">
                       <p className="text-xs font-medium">{a.mensaje}</p>

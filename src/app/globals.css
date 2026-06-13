@@ -215,3 +215,159 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* Smooth theme transition */
+* {
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+/* Exclude animations from theme transition */
+.animate-fade-in,
+.animate-slide-in-right,
+.animate-slide-in-left,
+.animate-scale-in,
+.animate-pulse-ring,
+.animate-shimmer,
+.animate-float {
+  transition: none;
+}
+
+/* Better focus rings for accessibility */
+:focus-visible {
+  outline: 2px solid oklch(0.55 0.15 160);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Custom gradient utilities for cards */
+.card-gradient-emerald {
+  background: linear-gradient(135deg, oklch(0.97 0.02 160), oklch(0.55 0.15 160));
+}
+.card-gradient-teal {
+  background: linear-gradient(135deg, oklch(0.97 0.02 180), oklch(0.5 0.12 180));
+}
+.card-gradient-amber {
+  background: linear-gradient(135deg, oklch(0.97 0.02 85), oklch(0.75 0.15 85));
+}
+.card-gradient-slate {
+  background: linear-gradient(135deg, oklch(0.97 0 0), oklch(0.7 0 0));
+}
+
+/* Gradient border utility */
+.gradient-border {
+  position: relative;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: linear-gradient(135deg, oklch(0.55 0.15 160), oklch(0.5 0.12 180));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Shimmer animation */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 25%, oklch(1 0 0 / 40%) 50%, transparent 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* Float animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Animated gradient border for active badges */
+@keyframes border-rotate {
+  0% { --border-angle: 0deg; }
+  100% { --border-angle: 360deg; }
+}
+.badge-animated-border {
+  position: relative;
+  overflow: hidden;
+}
+.badge-animated-border::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(from 0deg, oklch(0.55 0.15 160), oklch(0.5 0.12 180), oklch(0.6 0.2 160));
+  z-index: -1;
+  animation: spin 3s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Subtle background pattern */
+.bg-pattern-dots {
+  background-image: radial-gradient(circle, oklch(0.7 0 0 / 8%) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Dark mode specific styles */
+.dark .bg-pattern-dots {
+  background-image: radial-gradient(circle, oklch(0.5 0 0 / 6%) 1px, transparent 1px);
+}
+
+/* Header bar dark mode */
+.dark header,
+.dark .header-bar {
+  background-color: oklch(0.17 0 0);
+  border-bottom-color: oklch(1 0 0 / 10%);
+}
+
+/* Sidebar stays dark in both modes */
+.dark aside {
+  background-color: oklch(0.13 0 0);
+}
+
+/* Main content area */
+.dark main {
+  background-color: oklch(0.145 0 0);
+}
+
+/* Sparkline mini bars */
+.sparkline-bar {
+  transition: height 0.5s ease;
+}
+
+/* Card hover effect */
+.card-hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px oklch(0 0 0 / 10%), 0 4px 10px -6px oklch(0 0 0 / 10%);
+}
+
+/* Progress bar animation */
+.progress-animate {
+  position: relative;
+  overflow: hidden;
+}
+.progress-animate::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 30%), transparent);
+  animation: shimmer 2s ease-in-out infinite;
+}

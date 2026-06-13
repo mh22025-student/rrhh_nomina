@@ -168,10 +168,12 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
 
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
-      {/* Header card with gradient */}
-      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 rounded-xl p-5 text-white shadow-lg relative overflow-hidden">
+      {/* Header card with gradient overlay pattern */}
+      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 rounded-xl p-5 text-white shadow-lg relative overflow-hidden gradient-border">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.08),transparent_50%)]" />
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
         <div className="absolute bottom-0 left-0 w-20 h-20 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+        <div className="absolute top-1/2 right-1/3 w-12 h-12 bg-white/[0.03] rounded-lg rotate-12 animate-float" style={{ animationDelay: '1.5s' }} />
         <div className="flex items-center gap-4 relative z-10">
           <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl font-bold ring-2 ring-white/30">
             {emp.primer_nombre[0]}{emp.primer_apellido[0]}
@@ -208,25 +210,25 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
           <div className="flex items-center gap-4">
             <div className="flex-1">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-slate-500">Días utilizados</span>
-                <span className="text-xs font-semibold text-slate-700">{totalDiasTomados} / {totalDiasDerecho}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">Días utilizados</span>
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{totalDiasTomados} / {totalDiasDerecho}</span>
               </div>
-              <Progress value={vacationProgress} className="h-3" />
+              <Progress value={vacationProgress} className="h-3 progress-animate" />
             </div>
           </div>
           {/* Stat cards */}
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-emerald-50 rounded-lg p-3 text-center border border-emerald-100">
-              <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Pendientes</p>
-              <p className="text-2xl font-bold text-emerald-700 mt-0.5">{totalDiasPendientes}</p>
+            <div className="bg-emerald-50 dark:bg-emerald-900/30 rounded-lg p-3 text-center border border-emerald-100 dark:border-emerald-800">
+              <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">Pendientes</p>
+              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">{totalDiasPendientes}</p>
             </div>
-            <div className="bg-slate-50 rounded-lg p-3 text-center border border-slate-100">
-              <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Tomados</p>
-              <p className="text-2xl font-bold text-slate-700 mt-0.5">{totalDiasTomados}</p>
+            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 text-center border border-slate-100 dark:border-slate-700">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">Tomados</p>
+              <p className="text-2xl font-bold text-slate-700 dark:text-slate-300 mt-0.5">{totalDiasTomados}</p>
             </div>
-            <div className="bg-teal-50 rounded-lg p-3 text-center border border-teal-100">
-              <p className="text-[10px] text-teal-600 font-semibold uppercase tracking-wider">Derecho</p>
-              <p className="text-2xl font-bold text-teal-700 mt-0.5">{totalDiasDerecho}</p>
+            <div className="bg-teal-50 dark:bg-teal-900/30 rounded-lg p-3 text-center border border-teal-100 dark:border-teal-800">
+              <p className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold uppercase tracking-wider">Derecho</p>
+              <p className="text-2xl font-bold text-teal-700 dark:text-teal-300 mt-0.5">{totalDiasDerecho}</p>
             </div>
           </div>
           {/* Per year breakdown */}
@@ -235,12 +237,12 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
               {data.vacaciones.map((v) => {
                 const yearProgress = v.dias_derecho > 0 ? Math.round((v.dias_tomados / v.dias_derecho) * 100) : 0;
                 return (
-                  <div key={v.id} className="bg-slate-50/80 rounded-lg p-2.5 border border-slate-100">
+                  <div key={v.id} className="bg-slate-50/80 dark:bg-slate-800/50 rounded-lg p-2.5 border border-slate-100 dark:border-slate-700">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold text-slate-700">Año {v.anio}</span>
-                      <span className="text-[10px] text-slate-500">{v.dias_pendientes} pendientes</span>
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Año {v.anio}</span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">{v.dias_pendientes} pendientes</span>
                     </div>
-                    <Progress value={yearProgress} className="h-1.5" />
+                    <Progress value={yearProgress} className="h-1.5 progress-animate" />
                   </div>
                 );
               })}
@@ -265,19 +267,19 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
           ) : (
             <div className="space-y-2">
               {data.recibos.map((recibo) => (
-                <div key={recibo.id} className="flex items-center justify-between p-3 bg-slate-50/80 rounded-lg border border-slate-100 hover:bg-slate-100/50 transition-colors">
+                <div key={recibo.id} className="flex items-center justify-between p-3 bg-slate-50/80 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-slate-800">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                         {new Date(recibo.periodo_inicio).toLocaleDateString('es-SV', { month: 'short', year: 'numeric' })}
                       </p>
-                      <Badge variant="secondary" className="text-[9px] bg-slate-100 text-slate-600">
+                      <Badge variant="secondary" className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
                         {recibo.tipo}
                       </Badge>
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                      <span>Bruto: <span className="font-mono font-medium text-slate-700">{fmt(recibo.salario_bruto)}</span></span>
-                      <span>Neto: <span className="font-mono font-semibold text-emerald-700">{fmt(recibo.salario_neto)}</span></span>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      <span>Bruto: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{fmt(recibo.salario_bruto)}</span></span>
+                      <span>Neto: <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">{fmt(recibo.salario_neto)}</span></span>
                     </div>
                   </div>
                   <Button variant="outline" size="sm" className="shrink-0 ml-2 h-8 text-xs gap-1.5"
@@ -310,14 +312,14 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
             {solicitudTipos.map((tipo) => (
               <button
                 key={tipo.value}
-                className="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 transition-all cursor-pointer text-left group"
+                className="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all cursor-pointer text-left group card-hover-lift"
                 onClick={() => { setRequestType(tipo.value); setShowRequestDialog(true); }}
               >
-                <div className={`p-2 rounded-lg ${tipo.bg} group-hover:scale-110 transition-transform`}>
+                <div className={`p-2 rounded-lg ${tipo.bg} dark:opacity-80 group-hover:scale-110 transition-transform`}>
                   <tipo.icon className={`h-4 w-4 ${tipo.color}`} />
                 </div>
-                <span className="text-xs font-medium text-slate-700">{tipo.label}</span>
-                <ChevronRight className="h-3.5 w-3.5 text-slate-400 ml-auto" />
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{tipo.label}</span>
+                <ChevronRight className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 ml-auto" />
               </button>
             ))}
           </div>
@@ -338,10 +340,10 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
           <CardContent>
             <div className="space-y-2">
               {data.solicitudes.map((sol) => (
-                <div key={sol.id} className="flex items-center justify-between p-2.5 bg-slate-50/80 rounded-lg border border-slate-100 text-sm">
+                <div key={sol.id} className="flex items-center justify-between p-2.5 bg-slate-50/80 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700 text-sm">
                   <div className="min-w-0">
-                    <p className="font-medium text-slate-800 truncate">{sol.tipo.replace(/_/g, ' ')}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{fmtDate(sol.fecha_solicitud)}</p>
+                    <p className="font-medium text-slate-800 dark:text-slate-200 truncate">{sol.tipo.replace(/_/g, ' ')}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{fmtDate(sol.fecha_solicitud)}</p>
                   </div>
                   <Badge className={`text-[10px] border shrink-0 ml-2 ${getSolicitudBadge(sol.estado)}`}>
                     {sol.estado}
@@ -353,43 +355,43 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
         </Card>
       )}
 
-      {/* Personal Info Card */}
-      <Card className="shadow-sm">
+      {/* Personal Info Card with gradient border */}
+      <Card className="shadow-sm gradient-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <User className="h-4 w-4 text-emerald-600" /> Información Personal
+            <User className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Información Personal
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Código</p>
-              <p className="font-medium text-slate-800 font-mono text-xs">{emp.codigo_empleado}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Código</p>
+              <p className="font-medium text-slate-800 dark:text-slate-200 font-mono text-xs">{emp.codigo_empleado}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Área</p>
-              <p className="font-medium text-slate-800">{data.area?.nombre || 'Sin área'}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Área</p>
+              <p className="font-medium text-slate-800 dark:text-slate-200">{data.area?.nombre || 'Sin área'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Puesto</p>
-              <p className="font-medium text-slate-800">{data.perfil_puesto?.nombre_puesto || 'Sin puesto'}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Puesto</p>
+              <p className="font-medium text-slate-800 dark:text-slate-200">{data.perfil_puesto?.nombre_puesto || 'Sin puesto'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Fecha Ingreso</p>
-              <p className="font-medium text-slate-800">{fmtDate(emp.fecha_ingreso)}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Fecha Ingreso</p>
+              <p className="font-medium text-slate-800 dark:text-slate-200">{fmtDate(emp.fecha_ingreso)}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">DUI</p>
-              <p className="font-medium text-slate-800">{emp.dui}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">DUI</p>
+              <p className="font-medium text-slate-800 dark:text-slate-200">{emp.dui}</p>
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Teléfono</p>
-              <p className="font-medium text-slate-800">{emp.telefono || '—'}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Teléfono</p>
+              <p className="font-medium text-slate-800 dark:text-slate-200">{emp.telefono || '—'}</p>
             </div>
             {data.perfil_puesto?.banda_salarial && (
               <div className="col-span-2">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Banda Salarial</p>
-                <p className="font-medium text-slate-800">{data.perfil_puesto.banda_salarial.nombre} (Grado {data.perfil_puesto.banda_salarial.grado})</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Banda Salarial</p>
+                <p className="font-medium text-slate-800 dark:text-slate-200">{data.perfil_puesto.banda_salarial.nombre} (Grado {data.perfil_puesto.banda_salarial.grado})</p>
               </div>
             )}
           </div>

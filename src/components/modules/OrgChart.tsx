@@ -44,10 +44,11 @@ export default function OrgChart({ accessToken, userRole }: OrgChartProps) {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (res.ok) {
-        const data = await res.json();
-        setAreas(data);
+        const rawData = await res.json();
+        const areasList = Array.isArray(rawData) ? rawData : rawData.data || [];
+        setAreas(areasList);
         // Auto-expand root level
-        const rootIds = new Set(data.filter((a: Area) => !a.area_padre_id).map((a: Area) => a.id));
+        const rootIds = new Set(areasList.filter((a: Area) => !a.area_padre_id).map((a: Area) => a.id));
         setExpandedIds(rootIds);
       }
     } catch (err) {

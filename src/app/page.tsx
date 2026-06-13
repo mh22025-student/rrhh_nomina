@@ -6,7 +6,8 @@ import {
   ChevronDown, ChevronRight, LogOut, Lock, Menu, X, LayoutDashboard,
   DollarSign, CheckCircle, Send, Gift, ClipboardList, ListChecks,
   BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye,
-  AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle, Clock
+  AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle, Clock,
+  Sun, Moon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
+import { useTheme } from 'next-themes';
 
 // Module components
 import EmployeeDirectory from '@/components/modules/EmployeeDirectory';
@@ -297,6 +299,7 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showRecovery, setShowRecovery] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -304,16 +307,19 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 p-4">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20 p-4">
       {/* Background decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-100/40 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-100/30 rounded-full blur-3xl" />
-        <div className="absolute top-1/4 right-1/4 w-2 h-2 bg-emerald-400/30 rounded-full" />
-        <div className="absolute top-1/3 left-1/3 w-1.5 h-1.5 bg-teal-400/20 rounded-full" />
-        <div className="absolute bottom-1/4 right-1/3 w-1 h-1 bg-emerald-300/30 rounded-full" />
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-100/40 dark:bg-emerald-900/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '0s' }} />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-teal-100/30 dark:bg-teal-900/15 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/4 right-1/4 w-2 h-2 bg-emerald-400/30 dark:bg-emerald-500/20 rounded-full" />
+        <div className="absolute top-1/3 left-1/3 w-1.5 h-1.5 bg-teal-400/20 dark:bg-teal-500/15 rounded-full" />
+        <div className="absolute bottom-1/4 right-1/3 w-1 h-1 bg-emerald-300/30 dark:bg-emerald-500/10 rounded-full" />
+        {/* Animated floating shapes */}
+        <div className="absolute top-20 left-20 w-12 h-12 border border-emerald-200/30 dark:border-emerald-700/20 rounded-lg rotate-12 animate-float" style={{ animationDelay: '1s' }} />
+        <div className="absolute bottom-32 right-32 w-8 h-8 border border-teal-200/30 dark:border-teal-700/20 rounded-full animate-float" style={{ animationDelay: '3s' }} />
         {/* Subtle grid pattern */}
-        <div className="absolute inset-0 opacity-[0.015]" style={{
+        <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.03]" style={{
           backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)',
           backgroundSize: '24px 24px'
         }} />
@@ -322,7 +328,7 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
       <div className="w-full max-w-md relative z-10 animate-fade-in">
         {/* Logo & Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20 mb-4 relative">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20 dark:shadow-emerald-800/30 mb-4 relative animate-float">
             <svg viewBox="0 0 40 40" className="w-10 h-10 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
               <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
@@ -332,24 +338,24 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
             {/* Decorative ring */}
             <div className="absolute inset-0 rounded-2xl border-2 border-emerald-400/30 scale-110" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
             Sistema de Nómina y Perfiles de Puestos
           </h1>
-          <p className="text-slate-500 mt-1 text-sm flex items-center justify-center gap-1.5">
-            <span className="inline-block w-4 h-[1px] bg-slate-300" />
+          <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm flex items-center justify-center gap-1.5">
+            <span className="inline-block w-4 h-[1px] bg-slate-300 dark:bg-slate-600" />
             República de El Salvador
-            <span className="inline-block w-4 h-[1px] bg-slate-300" />
+            <span className="inline-block w-4 h-[1px] bg-slate-300 dark:bg-slate-600" />
           </p>
         </div>
 
         {/* Login Card */}
-        <Card className="shadow-xl border-0 shadow-slate-200/60 animate-scale-in">
+        <Card className="shadow-xl border-0 shadow-slate-200/60 dark:shadow-slate-900/40 dark:bg-slate-900 animate-scale-in">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="text-lg flex items-center gap-2 dark:text-slate-100">
               <div className="w-1.5 h-5 rounded-full bg-emerald-500" />
               Iniciar Sesión
             </CardTitle>
-            <CardDescription>Ingrese sus credenciales para acceder al sistema</CardDescription>
+            <CardDescription className="dark:text-slate-400">Ingrese sus credenciales para acceder al sistema</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -370,8 +376,8 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password" className="flex items-center gap-1.5">
-                  <svg className="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <Label htmlFor="password" className="flex items-center gap-1.5 dark:text-slate-300">
+                  <svg className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                   Contraseña
                 </Label>
                 <Input
@@ -382,8 +388,20 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={isLoading}
-                  className="h-11 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                  className="h-11 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 dark:bg-slate-800 dark:border-slate-700"
                 />
+              </div>
+
+              {/* Remember me checkbox */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="remember"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 focus:ring-2"
+                />
+                <Label htmlFor="remember" className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer select-none">Recordarme</Label>
               </div>
 
               {error && (
@@ -414,7 +432,7 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
               <button
                 type="button"
                 onClick={() => setShowRecovery(true)}
-                className="w-full text-sm text-emerald-700 hover:text-emerald-800 hover:underline transition-colors flex items-center justify-center gap-1"
+                className="w-full text-sm text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:underline transition-colors flex items-center justify-center gap-1"
               >
                 <Lock className="h-3 w-3" />
                 ¿Olvidó su contraseña?
@@ -424,9 +442,9 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
         </Card>
 
         {/* Demo Credentials */}
-        <Card className="mt-4 bg-amber-50/80 border-amber-200/60 shadow-sm animate-fade-in" style={{ animationDelay: '200ms' }}>
+        <Card className="mt-4 bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/60 dark:border-amber-800/40 shadow-sm animate-fade-in" style={{ animationDelay: '200ms' }}>
           <CardContent className="p-4">
-            <p className="text-xs font-semibold text-amber-800 mb-2.5 flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-2.5 flex items-center gap-1.5">
               <KeyRound className="h-3.5 w-3.5" />
               Credenciales de Demostración
             </p>
@@ -443,10 +461,10 @@ function LoginScreen({ onLogin, isLoading, error }: LoginScreenProps) {
                   key={cred.email}
                   type="button"
                   onClick={() => { setEmail(cred.email); setPassword(cred.pass); }}
-                  className="flex items-center gap-1.5 p-1.5 rounded-md hover:bg-amber-100/60 transition-colors text-left group"
+                  className="flex items-center gap-1.5 p-1.5 rounded-md hover:bg-amber-100/60 dark:hover:bg-amber-900/30 transition-colors text-left group"
                 >
-                  <span className="text-amber-700 group-hover:text-amber-900 truncate">{cred.email}</span>
-                  <span className="text-amber-400 ml-auto shrink-0 tabular-nums">{cred.pass}</span>
+                  <span className="text-amber-700 dark:text-amber-400 group-hover:text-amber-900 dark:group-hover:text-amber-300 truncate">{cred.email}</span>
+                  <span className="text-amber-400 dark:text-amber-500 ml-auto shrink-0 tabular-nums">{cred.pass}</span>
                 </button>
               ))}
             </div>
@@ -880,6 +898,7 @@ interface HeaderBarProps {
 function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onLogout, onNavigate }: HeaderBarProps) {
   const { toast } = useToast();
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   const handleLogout = async () => {
     try {
@@ -891,7 +910,7 @@ function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onLogout, 
   };
 
   return (
-    <header className="h-14 bg-white border-b border-slate-200/80 shadow-sm flex items-center px-4 gap-3 shrink-0 z-30">
+    <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-700/50 shadow-sm dark:shadow-slate-900/50 flex items-center px-4 gap-3 shrink-0 z-30">
       {/* Mobile menu toggle */}
       <button
         onClick={onToggleSidebar}
@@ -928,6 +947,23 @@ function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onLogout, 
           )}
         </div>
       </div>
+
+      {/* Dark mode toggle */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+              aria-label="Cambiar tema"
+            >
+              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
       {/* Notification bell */}
       <NotificationBell accessToken={accessToken} onNavigate={onNavigate} />
@@ -1071,11 +1107,15 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
 
   return (
     <div className="space-y-6 stagger-children">
-      {/* Welcome banner */}
-      <div className="bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
-        {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+      {/* Welcome banner - Animated gradient with decorative shapes */}
+      <div className="bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg relative overflow-hidden animate-fade-in">
+        {/* Animated floating shapes */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3 animate-float" />
+        <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" style={{ animationDelay: '1s' }} />
+        <div className="absolute top-1/2 right-1/4 w-16 h-16 bg-white/[0.03] rounded-lg rotate-12 animate-float" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/4 left-1/3 w-8 h-8 bg-white/[0.04] rounded-full animate-float" style={{ animationDelay: '0.5s' }} />
+        {/* Shimmer overlay */}
+        <div className="absolute inset-0 animate-shimmer opacity-30" />
         <div className="relative z-10">
           <h1 className="text-2xl font-bold">
             Bienvenido, {user.nombre}
@@ -1109,14 +1149,14 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
           ))
         ) : (
           kpis.map(kpi => (
-            <Card key={kpi.label} className="shadow-sm hover:shadow-md transition-shadow">
+            <Card key={kpi.label} className="shadow-sm card-hover-lift">
               <CardContent className="p-4 sm:p-5">
                 <div className="flex items-center justify-between">
                   <div className="min-w-0">
-                    <p className="text-xs sm:text-sm text-slate-500">{kpi.label}</p>
-                    <p className="text-xl sm:text-3xl font-bold text-slate-900 mt-1 truncate">{kpi.value}</p>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{kpi.label}</p>
+                    <p className="text-xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1 truncate">{kpi.value}</p>
                   </div>
-                  <div className={`p-2 sm:p-3 rounded-xl ${kpi.bg} shrink-0`}>
+                  <div className={`p-2 sm:p-3 rounded-xl ${kpi.bg} dark:opacity-80 shrink-0`}>
                     <kpi.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${kpi.color}`} />
                   </div>
                 </div>
@@ -1144,14 +1184,14 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
             </CardHeader>
             <CardContent className="space-y-2.5">
               {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => (
-                <div key={c.nombre} className="flex items-center justify-between p-2 rounded-lg bg-slate-50/80">
+                <div key={c.nombre} className="flex items-center justify-between p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
                   <div className="flex items-center gap-2">
                     {c.presentado ? (
                       <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
                     ) : (
                       <XCircle className="h-4 w-4 text-red-500 shrink-0" />
                     )}
-                    <span className="text-sm text-slate-700">{c.nombre}</span>
+                    <span className="text-sm text-slate-700 dark:text-slate-300">{c.nombre}</span>
                   </div>
                   <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                     {c.presentado ? 'Presentado' : 'Pendiente'}
@@ -1212,14 +1252,14 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
                 <button
                   key={action.viewId + action.label}
                   onClick={() => onNavigate(action.viewId)}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/80 hover:bg-slate-100 transition-all cursor-pointer text-left border border-transparent hover:border-slate-200 group"
+                  className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-all cursor-pointer text-left border border-transparent hover:border-slate-200 dark:hover:border-slate-600 group card-hover-lift"
                 >
-                  <div className={`p-2 rounded-lg ${action.bg} group-hover:scale-110 transition-transform`}>
-                    <action.icon className={`h-4 w-4 ${action.color}`} />
+                  <div className={`p-2.5 rounded-lg ${action.bg} dark:opacity-80 group-hover:scale-110 transition-transform`}>
+                    <action.icon className={`h-5 w-5 ${action.color}`} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-800">{action.label}</p>
-                    <p className="text-xs text-slate-500 truncate">{action.desc}</p>
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{action.label}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{action.desc}</p>
                   </div>
                 </button>
               ))}
@@ -1243,18 +1283,18 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
             ) : (
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {auditEntries.map((entry) => (
-                  <div key={entry.id} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50/80 border border-slate-100">
+                  <div key={entry.id} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
                     <div className={`p-1.5 rounded-md shrink-0 mt-0.5 ${getAuditColor(entry.nivel_criticidad)}`}>
                       {getAuditIcon(entry.accion)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-slate-700 truncate">
+                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
                         {entry.accion.replace(/_/g, ' ')}
                         {entry.tabla_afectada && (
-                          <span className="text-slate-400 font-normal"> · {entry.tabla_afectada}</span>
+                          <span className="text-slate-400 dark:text-slate-500 font-normal"> · {entry.tabla_afectada}</span>
                         )}
                       </p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                         {entry.usuario?.nombre ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : entry.usuario_email || 'Sistema'}
                         <span className="mx-1">·</span>
                         {new Date(entry.fecha_accion).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -1367,7 +1407,7 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-gray-50 dark:bg-slate-950 overflow-hidden">
       <Sidebar
         user={user}
         currentView={currentView}
@@ -1386,7 +1426,7 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
           onNavigate={setCurrentView}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6" key={currentView}>
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 dark:bg-slate-950" key={currentView}>
           <div className="animate-fade-in">
             {renderView()}
           </div>

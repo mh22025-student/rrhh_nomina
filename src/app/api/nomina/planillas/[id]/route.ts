@@ -3,6 +3,29 @@ import { db } from '@/lib/db';
 import { verifyAuth, requireRoles } from '@/lib/auth-middleware';
 
 // ============================================================
+// Valid state transitions per role (Segregation of Duties)
+// ============================================================
+const WORKFLOW_TRANSITIONS: Record<string, Record<string, string[]>> = {
+  ANALISTA: {
+    CALCULADA: ['EN_CORRECCION'],  // Analyst can only send for correction (not approve)
+  },
+  APROBADOR: {
+    CALCULADA: ['APROBADA', 'EN_CORRECCION'],  // Approver can approve or reject
+    EN_CORRECCION: ['APROBADA', 'EN_CORRECCION'], // After correction, can approve or re-reject
+    APROBADA: ['PAGADA'],  // Approver can mark as paid
+  },
+  ADMIN: {
+    CALCULADA: ['APROBADA', 'EN_CORRECCION'],
+    EN_CORRECCION: ['APROBADA', 'EN_CORRECCION', 'CALCULADA'],
+    APROBADA: ['PAGADA', 'EN_CORRECCION'],
+  },
+  GERENCIA: {
+    CALCULADA: ['APROBADA', 'EN_CORRECCION'],
+    APROBADA: ['PAGADA'],
+  },
+};
+
+// ============================================================
 // GET /api/nomina/planillas/[id]
 // Get planilla with all detalles
 // ============================================================
@@ -73,7 +96,26 @@ export async function GET(
       });
     }
 
-    return NextResponse.json({ planilla });
+    // For non-EMPLEADO, also fetch the workflow timeline from bitacora
+    const timeline = await db.bitacoraAuditoria.findMany({
+      where: {
+        tabla_afectada: 'planillas',
+        registro_id: id,
+        accion: { in: ['APROBACION_PLANILLA', 'PAGO_PLANILLA', 'RECHAZO_PLANILLA', 'CORRECCION_PLANILLA', 'CALCULO_PLANILLA', 'CALCULO_AGUINALDO', 'ENVIO_APROBACION'] },
+      },
+      orderBy: { fecha_accion: 'asc' },
+      select: {
+        id: true,
+        accion: true,
+        usuario_email: true,
+        valor_anterior: true,
+        valor_nuevo: true,
+        detalle_adicional: true,
+        fecha_accion: true,
+      },
+    });
+
+    return NextResponse.json({ planilla, timeline });
   } catch (error) {
     console.error('Error getting planilla:', error);
     return NextResponse.json({ error: 'Error al obtener planilla' }, { status: 500 });
@@ -82,7 +124,8 @@ export async function GET(
 
 // ============================================================
 // PUT /api/nomina/planillas/[id]
-// Update planilla estado
+// Update planilla estado — Full workflow with RBAC
+// CALCULADA → EN_CORRECCION → APROBADA → PAGADA
 // ============================================================
 export async function PUT(
   request: NextRequest,
@@ -91,10 +134,18 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { estado, observaciones } = body as {
+    const { estado, observaciones, motivo_rechazo, referencia_pago } = body as {
       estado?: string;
       observaciones?: string;
+      motivo_rechazo?: string;
+      referencia_pago?: string;
     };
+
+    // Verify auth
+    const user = verifyAuth(request);
+    if (!user) {
+      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    }
 
     // Get current planilla
     const planilla = await db.planilla.findUnique({ where: { id } });
@@ -102,74 +153,149 @@ export async function PUT(
       return NextResponse.json({ error: 'Planilla no encontrada' }, { status: 404 });
     }
 
-    // Inmutabilidad: Cannot modify APROBADA or PAGADA
-    if (['APROBADA', 'PAGADA'].includes(planilla.estado) && estado !== planilla.estado) {
-      // Only allow transition from APROBADA to PAGADA
-      if (!(planilla.estado === 'APROBADA' && estado === 'PAGADA')) {
-        return NextResponse.json(
-          { error: `No se puede modificar una planilla en estado ${planilla.estado}` },
-          { status: 400 }
-        );
+    const currentEstado = planilla.estado;
+
+    // If no estado change requested, just update observaciones
+    if (!estado || estado === currentEstado) {
+      if (observaciones) {
+        const updated = await db.planilla.update({
+          where: { id },
+          data: { observaciones },
+        });
+        return NextResponse.json({ planilla: updated });
       }
+      return NextResponse.json({ error: 'No se proporcionaron cambios válidos' }, { status: 400 });
     }
 
-    // Role-based transitions
-    if (estado === 'APROBADA') {
-      const authCheck = requireRoles('ADMIN', 'APROBADOR')(request);
-      if ('error' in authCheck) return authCheck.error;
-      const { user } = authCheck;
+    // Validate state transition for user role
+    const allowedTransitions = WORKFLOW_TRANSITIONS[user.rol];
+    if (!allowedTransitions) {
+      return NextResponse.json(
+        { error: 'Su rol no tiene permisos para cambiar el estado de planillas' },
+        { status: 403 }
+      );
+    }
 
-      // Verify all checklist items are completed
-      const checklist = await db.checklistAprobacionPlanilla.findMany({
-        where: { planilla_id: id },
-      });
-      const allCompleted = checklist.every(item => item.completado);
-      if (!allCompleted) {
+    const allowedNextStates = allowedTransitions[currentEstado];
+    if (!allowedNextStates || !allowedNextStates.includes(estado)) {
+      return NextResponse.json(
+        { error: `Transición no permitida: ${currentEstado} → ${estado} para rol ${user.rol}` },
+        { status: 403 }
+      );
+    }
+
+    // ============================================================
+    // Transition: CALCULADA/EN_CORRECCION → EN_CORRECCION (Rejection)
+    // ============================================================
+    if (estado === 'EN_CORRECCION') {
+      const authCheck = requireRoles('ADMIN', 'APROBADOR', 'GERENCIA')(request);
+      if ('error' in authCheck) return authCheck.error;
+
+      if (!motivo_rechazo && currentEstado === 'CALCULADA') {
         return NextResponse.json(
-          { error: 'Debe completar todos los items del checklist antes de aprobar' },
+          { error: 'Debe indicar el motivo de rechazo/corrección' },
           { status: 400 }
         );
       }
 
-      // Segregation: analyst who calculated cannot approve
-      if (planilla.calculada_por_id === user.userId) {
-        return NextResponse.json(
-          { error: 'El analista que calculó la planilla no puede aprobarla (segregación de funciones)' },
-          { status: 403 }
-        );
-      }
-
-      const updated = await db.planilla.update({
-        where: { id },
-        data: {
-          estado: 'APROBADA',
-          aprobada_por_id: user.userId,
-          fecha_aprobacion: new Date(),
-          observaciones: observaciones || planilla.observaciones,
-        },
-      });
+      // Use raw SQL since cached Prisma client may not have motivo_rechazo
+      await db.$executeRaw`
+        UPDATE planilla
+        SET estado = 'EN_CORRECCION',
+            motivo_rechazo = COALESCE(${motivo_rechazo || null}, motivo_rechazo),
+            observaciones = COALESCE(${observaciones || null}, observaciones),
+            fecha_actualizacion = ${new Date()}
+        WHERE id = ${id}
+      `;
+      const updated = await db.planilla.findUnique({ where: { id } });
 
       // Log to bitacora
       await db.bitacoraAuditoria.create({
         data: {
           usuario_id: user.userId,
           usuario_email: user.email,
-          accion: 'APROBACION_PLANILLA',
+          accion: 'RECHAZO_PLANILLA',
           tabla_afectada: 'planillas',
           registro_id: id,
-          valor_anterior: `estado: ${planilla.estado}`,
-          valor_nuevo: 'estado: APROBADA',
+          valor_anterior: `estado: ${currentEstado}`,
+          valor_nuevo: 'estado: EN_CORRECCION',
           resultado: 'EXITOSO',
           nivel_criticidad: 'ALTO',
-          detalle_adicional: `Planilla ${planilla.codigo_planilla} aprobada`,
+          detalle_adicional: `Planilla ${planilla.codigo_planilla} devuelta para corrección. Motivo: ${motivo_rechazo || 'N/A'}`,
         },
       });
 
       return NextResponse.json({ planilla: updated });
     }
 
+    // ============================================================
+    // Transition: CALCULADA/EN_CORRECCION → APROBADA
+    // ============================================================
+    if (estado === 'APROBADA') {
+      const authCheck = requireRoles('ADMIN', 'APROBADOR', 'GERENCIA')(request);
+      if ('error' in authCheck) return authCheck.error;
+      const { user: authUser } = authCheck;
+
+      // Verify all checklist items are completed
+      const checklist = await db.checklistAprobacionPlanilla.findMany({
+        where: { planilla_id: id },
+      });
+      if (checklist.length > 0) {
+        const allCompleted = checklist.every(item => item.completado);
+        if (!allCompleted) {
+          return NextResponse.json(
+            { error: 'Debe completar todos los items del checklist antes de aprobar' },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Segregation: analyst who calculated cannot approve (unless ADMIN)
+      if (user.rol !== 'ADMIN' && planilla.calculada_por_id === authUser.userId) {
+        return NextResponse.json(
+          { error: 'El analista que calculó la planilla no puede aprobarla (segregación de funciones)' },
+          { status: 403 }
+        );
+      }
+
+      // Use raw SQL since cached Prisma client may not have new fields
+      await db.$executeRaw`
+        UPDATE planilla
+        SET estado = 'APROBADA',
+            aprobada_por_id = ${authUser.userId},
+            fecha_aprobacion = ${new Date()},
+            motivo_rechazo = NULL,
+            observaciones = COALESCE(${observaciones || null}, observaciones),
+            fecha_actualizacion = ${new Date()}
+        WHERE id = ${id}
+      `;
+
+      const updated = await db.planilla.findUnique({ where: { id } });
+
+      // Log to bitacora
+      await db.bitacoraAuditoria.create({
+        data: {
+          usuario_id: authUser.userId,
+          usuario_email: authUser.email,
+          accion: 'APROBACION_PLANILLA',
+          tabla_afectada: 'planillas',
+          registro_id: id,
+          valor_anterior: `estado: ${currentEstado}`,
+          valor_nuevo: 'estado: APROBADA',
+          resultado: 'EXITOSO',
+          nivel_criticidad: 'ALTO',
+          detalle_adicional: `Planilla ${planilla.codigo_planilla} aprobada por ${authUser.email}`,
+        },
+      });
+
+      return NextResponse.json({ planilla: updated });
+    }
+
+    // ============================================================
+    // Transition: APROBADA → PAGADA
+    // ============================================================
     if (estado === 'PAGADA') {
-      const authCheck = requireRoles('ADMIN', 'APROBADOR')(request);
+      const authCheck = requireRoles('ADMIN', 'APROBADOR', 'GERENCIA')(request);
       if ('error' in authCheck) return authCheck.error;
 
       if (planilla.estado !== 'APROBADA') {
@@ -179,13 +305,17 @@ export async function PUT(
         );
       }
 
-      const updated = await db.planilla.update({
-        where: { id },
-        data: {
-          estado: 'PAGADA',
-          observaciones: observaciones || planilla.observaciones,
-        },
-      });
+      // Use raw SQL since cached Prisma client may not have fecha_pago/referencia_pago
+      await db.$executeRaw`
+        UPDATE planilla
+        SET estado = 'PAGADA',
+            fecha_pago = ${new Date()},
+            referencia_pago = ${referencia_pago || null},
+            observaciones = COALESCE(${observaciones || null}, observaciones),
+            fecha_actualizacion = ${new Date()}
+        WHERE id = ${id}
+      `;
+      const updated = await db.planilla.findUnique({ where: { id } });
 
       await db.bitacoraAuditoria.create({
         data: {
@@ -198,37 +328,50 @@ export async function PUT(
           valor_nuevo: 'estado: PAGADA',
           resultado: 'EXITOSO',
           nivel_criticidad: 'ALTO',
+          detalle_adicional: `Planilla ${planilla.codigo_planilla} marcada como pagada. Referencia: ${referencia_pago || 'N/A'}`,
         },
       });
 
       return NextResponse.json({ planilla: updated });
     }
 
-    if (estado === 'EN_CORRECCION') {
-      const authCheck = requireRoles('ADMIN', 'APROBADOR')(request);
+    // ============================================================
+    // Transition: EN_CORRECCION → CALCULADA (re-calculate, ADMIN only)
+    // ============================================================
+    if (estado === 'CALCULADA') {
+      const authCheck = requireRoles('ADMIN')(request);
       if ('error' in authCheck) return authCheck.error;
 
-      const updated = await db.planilla.update({
-        where: { id },
+      // Use raw SQL since cached Prisma client may not have motivo_rechazo
+      await db.$executeRaw`
+        UPDATE planilla
+        SET estado = 'CALCULADA',
+            motivo_rechazo = NULL,
+            observaciones = COALESCE(${observaciones || null}, observaciones),
+            fecha_actualizacion = ${new Date()}
+        WHERE id = ${id}
+      `;
+      const updated = await db.planilla.findUnique({ where: { id } });
+
+      await db.bitacoraAuditoria.create({
         data: {
-          estado: 'EN_CORRECCION',
-          observaciones: observaciones || planilla.observaciones,
+          usuario_id: authCheck.user.userId,
+          usuario_email: authCheck.user.email,
+          accion: 'CORRECCION_PLANILLA',
+          tabla_afectada: 'planillas',
+          registro_id: id,
+          valor_anterior: `estado: ${currentEstado}`,
+          valor_nuevo: 'estado: CALCULADA',
+          resultado: 'EXITOSO',
+          nivel_criticidad: 'ALTO',
+          detalle_adicional: `Planilla ${planilla.codigo_planilla} devuelta a CALCULADA por ADMIN`,
         },
       });
 
       return NextResponse.json({ planilla: updated });
     }
 
-    // Generic update (observaciones only)
-    if (observaciones) {
-      const updated = await db.planilla.update({
-        where: { id },
-        data: { observaciones },
-      });
-      return NextResponse.json({ planilla: updated });
-    }
-
-    return NextResponse.json({ error: 'No se proporcionaron cambios válidos' }, { status: 400 });
+    return NextResponse.json({ error: 'Transición no reconocida' }, { status: 400 });
   } catch (error) {
     console.error('Error updating planilla:', error);
     return NextResponse.json({ error: 'Error al actualizar planilla' }, { status: 500 });

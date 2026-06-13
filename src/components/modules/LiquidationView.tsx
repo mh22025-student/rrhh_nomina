@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  ClipboardList, Plus, Loader2, BookOpen, ArrowLeft, Scale,
-  AlertTriangle, CheckCircle, Download, X, Calculator
+  ClipboardList, Plus, Loader2, BookOpen, Scale,
+  Download, X, Calculator, FileText
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,8 +12,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 
 interface LiquidationViewProps {
@@ -91,7 +89,7 @@ export default function LiquidationView({ accessToken }: LiquidationViewProps) {
   const [selectedFecha, setSelectedFecha] = useState('');
   const [detailResult, setDetailResult] = useState<LiquidacionResult | null>(null);
   const [showDetail, setShowDetail] = useState(false);
-  const [empleados, setEmpleados] = useState<Array<{ id: string; codigo: string; nombre: string }>>([]);
+  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
 
   const fetchLiquidaciones = useCallback(async () => {
     setLoading(true);
@@ -108,19 +106,6 @@ export default function LiquidationView({ accessToken }: LiquidationViewProps) {
       setLoading(false);
     }
   }, [accessToken, toast]);
-
-  const fetchEmpleados = useCallback(async () => {
-    try {
-      // Fetch from the planillas API as a proxy for employee list
-      // In production this would be a dedicated employee API
-      const res = await fetch('/api/nomina/planillas?limit=1', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      // For now, we'll use a simpler approach
-    } catch {
-      // ignore
-    }
-  }, [accessToken]);
 
   useEffect(() => { fetchLiquidaciones(); }, [fetchLiquidaciones]);
 
@@ -154,6 +139,31 @@ export default function LiquidationView({ accessToken }: LiquidationViewProps) {
     }
   };
 
+  const handleGeneratePdf = async (empleadoId: string, codigoEmpleado: string) => {
+    setGeneratingPdf(empleadoId);
+    try {
+      const res = await fetch(`/api/nomina/liquidaciones/pdf?empleado_id=${empleadoId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Error al generar PDF');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `liquidacion-${codigoEmpleado}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: 'PDF Generado', description: `Constancia de liquidación para ${codigoEmpleado}` });
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al generar PDF', variant: 'destructive' });
+    } finally {
+      setGeneratingPdf(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -178,7 +188,7 @@ export default function LiquidationView({ accessToken }: LiquidationViewProps) {
         </CardContent>
       </Card>
 
-      {/* Liquidation detail dialog */}
+      {/* Liquidation detail */}
       {showDetail && detailResult && (
         <Card className="shadow-sm border-emerald-200">
           <CardHeader className="pb-3">
@@ -275,7 +285,9 @@ export default function LiquidationView({ accessToken }: LiquidationViewProps) {
       <Card className="shadow-sm">
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-6 space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+            <div className="p-6 space-y-3">{[1, 2, 3].map(i => (
+              <div key={i} className="h-10 bg-slate-100 rounded animate-pulse" />
+            ))}</div>
           ) : liquidaciones.length === 0 ? (
             <div className="p-12 text-center text-slate-400">
               <ClipboardList className="h-10 w-10 mx-auto mb-2" />
@@ -293,6 +305,7 @@ export default function LiquidationView({ accessToken }: LiquidationViewProps) {
                     <th className="text-right font-medium text-slate-500 p-3">Aguinaldo</th>
                     <th className="text-right font-medium text-slate-500 p-3">Total</th>
                     <th className="text-left font-medium text-slate-500 p-3">Estado</th>
+                    <th className="text-center font-medium text-slate-500 p-3">PDF</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -311,6 +324,22 @@ export default function LiquidationView({ accessToken }: LiquidationViewProps) {
                         <Badge className={`text-[10px] ${estadoColors[l.estado] || 'bg-slate-100'}`} variant="secondary">
                           {l.estado}
                         </Badge>
+                      </td>
+                      <td className="p-3 text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                          onClick={() => handleGeneratePdf(l.empleado_id, l.empleado_codigo)}
+                          disabled={generatingPdf === l.empleado_id}
+                          title="Generar Constancia de Liquidación PDF"
+                        >
+                          {generatingPdf === l.empleado_id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <FileText className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
                       </td>
                     </tr>
                   ))}

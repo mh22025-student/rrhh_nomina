@@ -167,12 +167,12 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
 
   // Empty state component
   const EmptyState = () => (
-    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-      <div className="p-4 rounded-2xl bg-slate-50 mb-4">
-        <SearchX className="h-10 w-10 text-slate-300" />
+    <div className="flex flex-col items-center justify-center py-16 text-slate-400 dark:text-slate-500">
+      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 mb-4 animate-float">
+        <SearchX className="h-10 w-10 text-slate-300 dark:text-slate-600" />
       </div>
-      <p className="text-sm font-semibold text-slate-500">No se encontraron empleados</p>
-      <p className="text-xs text-slate-400 mt-1">Intente ajustar los filtros de búsqueda</p>
+      <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No se encontraron empleados</p>
+      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Intente ajustar los filtros de búsqueda</p>
       {(search || areaFilter !== 'all' || estadoFilter !== 'all' || perfilFilter !== 'all') && (
         <Button
           variant="outline"
@@ -197,14 +197,14 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Users className="h-5 w-5 text-emerald-600" />
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             Directorio de Empleados
-            <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 text-xs font-semibold ml-1">
+            <Badge variant="secondary" className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold ml-1">
               {pagination.total}
             </Badge>
           </h2>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             {pagination.total} empleado{pagination.total !== 1 ? 's' : ''} registrado{pagination.total !== 1 ? 's' : ''}
           </p>
         </div>
@@ -230,7 +230,7 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
                 placeholder="Buscar por nombre, DUI, código..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
-                className="pl-9 h-9 border-slate-200 focus:border-emerald-400 focus:ring-emerald-400"
+                className="pl-9 h-9 border-slate-200 dark:border-slate-700 focus:border-emerald-400 focus:ring-emerald-400 bg-white dark:bg-slate-800"
               />
             </div>
             <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
@@ -264,7 +264,7 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50/80">
+              <TableRow className="bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-700/30">
                 <TableHead className="w-[120px]">Código</TableHead>
                 <TableHead>Nombre Completo</TableHead>
                 <TableHead>Área</TableHead>
@@ -293,14 +293,14 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
                 employees.map(emp => (
                   <TableRow
                     key={emp.id}
-                    className="cursor-pointer hover:bg-emerald-50/50 transition-colors border-b border-slate-100"
+                    className="cursor-pointer hover:bg-emerald-50/50 dark:hover:bg-emerald-900/20 transition-colors border-b border-slate-100 dark:border-slate-800"
                     onClick={() => onNavigateToDetail(emp.id)}
                   >
                     <TableCell className="font-mono text-xs">{emp.codigo_empleado}</TableCell>
-                    <TableCell className="font-medium text-slate-900">{getNombreCompleto(emp)}</TableCell>
-                    <TableCell className="text-sm text-slate-600">{emp.area?.nombre || '—'}</TableCell>
-                    <TableCell className="text-sm text-slate-600">{emp.perfil_puesto?.nombre_puesto || '—'}</TableCell>
-                    <TableCell className="text-right font-mono text-sm text-slate-900">{formatSalary(emp.salario_base)}</TableCell>
+                    <TableCell className="font-medium text-slate-900 dark:text-slate-100">{getNombreCompleto(emp)}</TableCell>
+                    <TableCell className="text-sm text-slate-600 dark:text-slate-400">{emp.area?.nombre || '—'}</TableCell>
+                    <TableCell className="text-sm text-slate-600 dark:text-slate-400">{emp.perfil_puesto?.nombre_puesto || '—'}</TableCell>
+                    <TableCell className="text-right font-mono text-sm text-slate-900 dark:text-slate-100">{formatSalary(emp.salario_base)}</TableCell>
                     <TableCell>
                       <Badge className={`text-[10px] border ${getEstadoBadge(emp.estado)}`} variant="secondary">
                         <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${getEstadoDot(emp.estado)}`} />
@@ -334,22 +334,22 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
           </Card>
         ) : (
           employees.map(emp => (
-            <Card key={emp.id} className="shadow-sm cursor-pointer hover:shadow-md transition-shadow border border-slate-200" onClick={() => onNavigateToDetail(emp.id)}>
+            <Card key={emp.id} className="shadow-sm cursor-pointer hover:shadow-md transition-shadow border border-slate-200 dark:border-slate-700 dark:bg-slate-800/50" onClick={() => onNavigateToDetail(emp.id)}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="min-w-0">
-                    <p className="font-semibold text-slate-900 truncate">{getNombreCompleto(emp)}</p>
-                    <p className="text-xs text-slate-500 font-mono mt-0.5">{emp.codigo_empleado} · DUI: {emp.dui}</p>
-                    <p className="text-sm text-slate-600 mt-1.5">{emp.area?.nombre || 'Sin área'} — {emp.perfil_puesto?.nombre_puesto || 'Sin puesto'}</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">{getNombreCompleto(emp)}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{emp.codigo_empleado} · DUI: {emp.dui}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1.5">{emp.area?.nombre || 'Sin área'} — {emp.perfil_puesto?.nombre_puesto || 'Sin puesto'}</p>
                   </div>
                   <Badge className={`text-[10px] border shrink-0 ml-2 ${getEstadoBadge(emp.estado)}`} variant="secondary">
                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${getEstadoDot(emp.estado)}`} />
                     {emp.estado}
                   </Badge>
                 </div>
-                <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
-                  <span className="text-sm font-bold font-mono text-slate-900">{formatSalary(emp.salario_base)}</span>
-                  <Button variant="ghost" size="sm" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                  <span className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">{formatSalary(emp.salario_base)}</span>
+                  <Button variant="ghost" size="sm" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30">
                     Ver detalle →
                   </Button>
                 </div>
@@ -363,7 +363,7 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
       <div className="flex items-center justify-between px-1">
         {pagination.totalPages > 1 ? (
           <>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Mostrando {((pagination.page - 1) * pagination.pageSize) + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} de {pagination.total}
             </p>
             <div className="flex items-center gap-1">
@@ -371,7 +371,7 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
                 variant="outline" size="sm"
                 disabled={pagination.page <= 1}
                 onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
-                className="h-8 w-8 p-0"
+                className="h-8 w-8 p-0 dark:border-slate-700"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -392,7 +392,7 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
                       key={pageNum}
                       variant={pagination.page === pageNum ? 'default' : 'outline'}
                       size="sm"
-                      className={`h-8 w-8 p-0 ${pagination.page === pageNum ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+                      className={`h-8 w-8 p-0 ${pagination.page === pageNum ? 'bg-emerald-600 hover:bg-emerald-700' : 'dark:border-slate-700'}`}
                       onClick={() => setPagination(p => ({ ...p, page: pageNum }))}
                     >
                       {pageNum}
@@ -404,14 +404,14 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
                 variant="outline" size="sm"
                 disabled={pagination.page >= pagination.totalPages}
                 onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
-                className="h-8 w-8 p-0"
+                className="h-8 w-8 p-0 dark:border-slate-700"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </>
         ) : (
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-slate-400 dark:text-slate-500">
             {pagination.total > 0 && `${pagination.total} empleado${pagination.total !== 1 ? 's' : ''}`}
           </p>
         )}

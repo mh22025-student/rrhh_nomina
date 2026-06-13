@@ -1,0 +1,752 @@
+     1→// ============================================================
+     2→// Sistema de Nómina - El Salvador
+     3→// Prisma Schema with SQLite
+     4→// 35 Tables - Payroll Management System
+     5→// ============================================================
+     6→
+     7→generator client {
+     8→  provider = "prisma-client-js"
+     9→}
+    10→
+    11→datasource db {
+    12→  provider = "sqlite"
+    13→  url      = env("DATABASE_URL")
+    14→}
+    15→
+    16→// ============================================================
+    17→// Table 1: bancos
+    18→// ============================================================
+    19→model Banco {
+    20→  id             String   @id @default(cuid())
+    21→  codigo         String   @unique
+    22→  nombre         String
+    23→  codigo_ach     String?
+    24→  formato_cuenta String?
+    25→  activo         Boolean  @default(true)
+    26→  fecha_creacion DateTime @default(now())
+    27→
+    28→  retornos_bancarios RetornoBancario[]
+    29→}
+    30→
+    31→// ============================================================
+    32→// Table 2: parametros_legales
+    33→// ============================================================
+    34→model ParametroLegal {
+    35→  id                    String    @id @default(cuid())
+    36→  descripcion_cambio    String
+    37→  decreto_norma_origen  String
+    38→  tasa_isss_laboral     Float     @default(0.03)
+    39→  tasa_isss_patronal    Float     @default(0.075)
+    40→  tope_cotizacion_isss  Float     @default(1000.00)
+    41→  tasa_afp_laboral      Float     @default(0.0725)
+    42→  tasa_afp_patronal     Float     @default(0.0875)
+    43→  tasa_insaforp         Float     @default(0.01)
+    44→  empleados_minimos_insaforp Int  @default(10)
+    45→  fecha_vigencia_desde  DateTime
+    46→  fecha_vigencia_hasta  DateTime?
+    47→  estado                String    @default("ACTIVO")
+    48→  creado_por_id         String?
+    49→  fecha_creacion        DateTime  @default(now())
+    50→  fecha_actualizacion   DateTime  @updatedAt
+    51→
+    52→  creado_por         Usuario?           @relation(fields: [creado_por_id], references: [id])
+    53→  tramos_isr         TramoISR[]
+    54→  salarios_minimos   SalarioMinimoSector[]
+    55→}
+    56→
+    57→// ============================================================
+    58→// Table 3: tramos_isr
+    59→// ============================================================
+    60→model TramoISR {
+    61→  id                 String  @id @default(cuid())
+    62→  parametro_legal_id String
+    63→  numero_tramo       Int
+    64→  desde              Float
+    65→  hasta              Float?
+    66→  porcentaje         Float
+    67→  cuota_fija         Float
+    68→
+    69→  parametro_legal ParametroLegal @relation(fields: [parametro_legal_id], references: [id])
+    70→}
+    71→
+    72→// ============================================================
+    73→// Table 4: salarios_minimos_sector
+    74→// ============================================================
+    75→model SalarioMinimoSector {
+    76→  id                 String  @id @default(cuid())
+    77→  parametro_legal_id String
+    78→  sector             String
+    79→  salario_mensual    Float
+    80→
+    81→  parametro_legal ParametroLegal @relation(fields: [parametro_legal_id], references: [id])
+    82→}
+    83→
+    84→// ============================================================
+    85→// Table 5: usuarios
+    86→// ============================================================
+    87→model Usuario {
+    88→  id                   String    @id @default(cuid())
+    89→  email                String    @unique
+    90→  password_hash        String
+    91→  nombre               String
+    92→  apellido             String
+    93→  rol                  String    @default("EMPLEADO")
+    94→  estado               String    @default("ACTIVO")
+    95→  intentos_fallidos    Int       @default(0)
+    96→  bloqueado_hasta      DateTime?
+    97→  ultimo_login         DateTime?
+    98→  debe_cambiar_password Boolean  @default(true)
+    99→  empleado_id          String?   @unique
+   100→  fecha_creacion       DateTime  @default(now())
+   101→  fecha_actualizacion  DateTime  @updatedAt
+   102→
+   103→  empleado                    Empleado?                     @relation(fields: [empleado_id], references: [id])
+   104→  parametros_legales_creados  ParametroLegal[]
+   105→  perfiles_puesto_creados     PerfilPuesto[]
+   106→  versiones_perfil_creadas    VersionPerfilPuesto[]
+   107→  planillas_calculadas        Planilla[]                    @relation("PlanillaCalculadaPor")
+   108→  planillas_aprobadas         Planilla[]                    @relation("PlanillaAprobadaPor")
+   109→  incidencias_aprobadas       IncidenciaNomina[]
+   110→  liquidaciones_aprobadas     Liquidacion[]
+   111→  cambios_salariales          HistorialCambioSalarial[]
+   112→  cambios_cargo_autorizados   HistorialCambioCargo[]
+   113→  documentos_subidos          DocumentoEmpleado[]
+   114→  solicitudes_aprobadas       SolicitudSelfService[]
+   115→  checklist_completados       ChecklistAprobacionPlanilla[]
+   116→  refresh_tokens              RefreshToken[]
+   117→  otp_tokens                  OtpToken[]
+   118→  permisos_granulares         PermisoGranularUsuario[]
+   119→  historial_contrasenas       HistorialContrasena[]
+   120→  bitacora_auditoria          BitacoraAuditoria[]
+   121→}
+   122→
+   123→// ============================================================
+   124→// Table 6: areas
+   125→// ============================================================
+   126→model Area {
+   127→  id                String   @id @default(cuid())
+   128→  nombre            String
+   129→  codigo            String   @unique
+   130→  descripcion       String?
+   131→  area_padre_id     String?
+   132→  nivel             Int      @default(1)
+   133→  activo            Boolean  @default(true)
+   134→  fecha_creacion    DateTime @default(now())
+   135→  fecha_actualizacion DateTime @updatedAt
+   136→
+   137→  area_padre        Area?    @relation("AreaJerarquia", fields: [area_padre_id], references: [id])
+   138→  areas_hijas       Area[]   @relation("AreaJerarquia")
+   139→  perfiles_puesto   PerfilPuesto[]
+   140→  empleados         Empleado[]
+   141→}
+   142→
+   143→// ============================================================
+   144→// Table 7: bandas_salariales
+   145→// ============================================================
+   146→model BandaSalarial {
+   147→  id                String   @id @default(cuid())
+   148→  grado             Int
+   149→  nombre            String
+   150→  salario_minimo    Float
+   151→  salario_medio     Float
+   152→  salario_maximo    Float
+   153→  moneda            String   @default("USD")
+   154→  activo            Boolean  @default(true)
+   155→  fecha_creacion    DateTime @default(now())
+   156→  fecha_actualizacion DateTime @updatedAt
+   157→
+   158→  perfiles_puesto PerfilPuesto[]
+   159→}
+   160→
+   161→// ============================================================
+   162→// Table 8: perfiles_puesto
+   163→// ============================================================
+   164→model PerfilPuesto {
+   165→  id                       String   @id @default(cuid())
+   166→  codigo                   String   @unique
+   167→  nombre_puesto            String
+   168→  area_id                  String
+   169→  banda_salarial_id        String?
+   170→  sector_laboral           String   @default("COMERCIO")
+   171→  proposito                String?
+   172→  funciones_esenciales     String?
+   173→  requisitos_educacion     String?
+   174→  requisitos_experiencia   String?
+   175→  requisitos_habilidades   String?
+   176→  responsabilidades        String?
+   177→  condiciones_trabajo      String?
+   178→  puntos_total             Int      @default(0)
+   179→  estado                   String   @default("BORRADOR")
+   180→  version                  Int      @default(1)
+   181→  creado_por_id            String?
+   182→  fecha_creacion           DateTime @default(now())
+   183→  fecha_actualizacion      DateTime @updatedAt
+   184→
+   185→  area                  Area                   @relation(fields: [area_id], references: [id])
+   186→  banda_salarial        BandaSalarial?         @relation(fields: [banda_salarial_id], references: [id])
+   187→  creado_por            Usuario?               @relation(fields: [creado_por_id], references: [id])
+   188→  versiones             VersionPerfilPuesto[]
+   189→  empleados_perfil      Empleado[]
+   190→  contratos             Contrato[]
+   191→  cargo_anterior_en     HistorialCambioCargo[] @relation("CargoAnterior")
+   192→  cargo_nuevo_en        HistorialCambioCargo[] @relation("CargoNuevo")
+   193→}
+   194→
+   195→// ============================================================
+   196→// Table 9: versiones_perfil_puesto
+   197→// ============================================================
+   198→model VersionPerfilPuesto {
+   199→  id                String   @id @default(cuid())
+   200→  perfil_puesto_id  String
+   201→  version           Int
+   202→  cambio_descripcion String
+   203→  contenido         String
+   204→  creado_por_id     String?
+   205→  fecha_creacion    DateTime @default(now())
+   206→
+   207→  perfil_puesto     PerfilPuesto @relation(fields: [perfil_puesto_id], references: [id])
+   208→  creado_por        Usuario?     @relation(fields: [creado_por_id], references: [id])
+   209→}
+   210→
+   211→// ============================================================
+   212→// Table 10: empleados
+   213→// ============================================================
+   214→model Empleado {
+   215→  id                          String    @id @default(cuid())
+   216→  codigo_empleado             String    @unique
+   217→  primer_nombre               String
+   218→  segundo_nombre              String?
+   219→  primer_apellido             String
+   220→  segundo_apellido            String?
+   221→  apellido_casada             String?
+   222→  dui                         String    @unique
+   223→  nit                         String?   @unique
+   224→  fecha_nacimiento            DateTime?
+   225→  genero                      String?
+   226→  estado_civil                String?
+   227→  direccion                   String?
+   228→  telefono                    String?
+   229→  email_personal              String?
+   230→  numero_isss                 String?   @unique
+   231→  numero_afp                  String?
+   232→  afp_administradora          String?
+   233→  tipo_sangre                 String?
+   234→  contacto_emergencia_nombre  String?
+   235→  contacto_emergencia_telefono String?
+   236→  contacto_emergencia_relacion String?
+   237→  nacionalidad                String    @default("Salvadoreña")
+   238→  fecha_ingreso               DateTime
+   239→  fecha_salida                DateTime?
+   240→  salario_base                Float     @default(0)
+   241→  perfil_puesto_id            String?
+   242→  area_id                     String?
+   243→  estado                      String    @default("ACTIVO")
+   244→  fecha_creacion              DateTime  @default(now())
+   245→  fecha_actualizacion         DateTime  @updatedAt
+   246→
+   247→  perfil_puesto               PerfilPuesto?              @relation(fields: [perfil_puesto_id], references: [id])
+   248→  area                        Area?                      @relation(fields: [area_id], references: [id])
+   249→  usuario                     Usuario?
+   250→  contratos                   Contrato[]
+   251→  empleados_planilla          EmpleadoPlanilla[]
+   252→  incidencias                 IncidenciaNomina[]
+   253→  detalles_planilla           DetallePlanilla[]
+   254→  vacaciones                  VacacionEmpleado[]
+   255→  liquidaciones               Liquidacion[]
+   256→  cambios_salariales          HistorialCambioSalarial[]
+   257→  cambios_cargo               HistorialCambioCargo[]
+   258→  documentos                  DocumentoEmpleado[]
+   259→  solicitudes                 SolicitudSelfService[]
+   260→}
+   261→
+   262→// ============================================================
+   263→// Table 11: contratos
+   264→// ============================================================
+   265→model Contrato {
+   266→  id                  String   @id @default(cuid())
+   267→  empleado_id         String
+   268→  perfil_puesto_id    String?
+   269→  tipo_contrato       String
+   270→  salario_base_contrato Float
+   271→  tipo_jornada        String
+   272→  fecha_inicio        DateTime
+   273→  fecha_fin           DateTime?
+   274→  activo              Boolean  @default(true)
+   275→  observaciones       String?
+   276→  fecha_creacion      DateTime @default(now())
+   277→  fecha_actualizacion DateTime @updatedAt
+   278→
+   279→  empleado            Empleado      @relation(fields: [empleado_id], references: [id])
+   280→  perfil_puesto       PerfilPuesto? @relation(fields: [perfil_puesto_id], references: [id])
+   281→}
+   282→
+   283→// ============================================================
+   284→// Table 12: planillas
+   285→// ============================================================
+   286→model Planilla {
+   287→  id                    String    @id @default(cuid())
+   288→  codigo_planilla       String    @unique
+   289→  tipo                  String    @default("MENSUAL")
+   290→  estado                String    @default("BORRADOR")
+   291→  fecha_inicio_periodo  DateTime
+   292→  fecha_fin_periodo     DateTime
+   293→  total_empleados       Int       @default(0)
+   294→  total_salarios_brutos Float     @default(0)
+   295→  total_isss_laboral    Float     @default(0)
+   296→  total_isss_patronal   Float     @default(0)
+   297→  total_afp_laboral     Float     @default(0)
+   298→  total_afp_patronal    Float     @default(0)
+   299→  total_isr_retenido    Float     @default(0)
+   300→  total_descuentos      Float     @default(0)
+   301→  total_neto_a_pagar    Float     @default(0)
+   302→  total_cargas_patronales Float   @default(0)
+   303→  calculada_por_id      String?
+   304→  aprobada_por_id       String?
+   305→  fecha_calculo         DateTime?
+   306→  fecha_aprobacion      DateTime?
+   307→  observaciones         String?
+   308→  planilla_original_id  String?
+   309→  fecha_creacion        DateTime  @default(now())
+   310→  fecha_actualizacion   DateTime  @updatedAt
+   311→
+   312→  calculada_por          Usuario?                     @relation("PlanillaCalculadaPor", fields: [calculada_por_id], references: [id])
+   313→  aprobada_por           Usuario?                     @relation("PlanillaAprobadaPor", fields: [aprobada_por_id], references: [id])
+   314→  planilla_original      Planilla?                    @relation("PlanillaComplementaria", fields: [planilla_original_id], references: [id])
+   315→  planillas_complementarias Planilla[]                 @relation("PlanillaComplementaria")
+   316→  empleados_planilla     EmpleadoPlanilla[]
+   317→  detalles_planilla      DetallePlanilla[]
+   318→  incidencias            IncidenciaNomina[]
+   319→  presentaciones_isss    HistorialPresentacionISSS[]
+   320→  presentaciones_afp     HistorialPresentacionAFP[]
+   321→  enteros_isr            HistorialEnteroISR[]
+   322→  retornos_bancarios     RetornoBancario[]
+   323→  checklist_aprobacion   ChecklistAprobacionPlanilla[]
+   324→}
+   325→
+   326→// ============================================================
+   327→// Table 13: empleados_planilla
+   328→// ============================================================
+   329→model EmpleadoPlanilla {
+   330→  id             String   @id @default(cuid())
+   331→  planilla_id    String
+   332→  empleado_id    String
+   333→  incluido       Boolean  @default(true)
+   334→  fecha_creacion DateTime @default(now())
+   335→
+   336→  planilla       Planilla @relation(fields: [planilla_id], references: [id])
+   337→  empleado       Empleado @relation(fields: [empleado_id], references: [id])
+   338→
+   339→  @@unique([planilla_id, empleado_id])
+   340→}
+   341→
+   342→// ============================================================
+   343→// Table 14: incidencias_nomina
+   344→// ============================================================
+   345→model IncidenciaNomina {
+   346→  id                  String    @id @default(cuid())
+   347→  empleado_id         String
+   348→  tipo                String
+   349→  estado              String    @default("PENDIENTE")
+   350→  fecha_inicio        DateTime
+   351→  fecha_fin           DateTime?
+   352→  cantidad_horas      Float?
+   353→  tipo_horas_extra    String?
+   354→  monto               Float?
+   355→  descripcion         String?
+   356→  numero_incapacidad  String?
+   357→  aprobada_por_id     String?
+   358→  periodo_id          String?
+   359→  fecha_creacion      DateTime  @default(now())
+   360→  fecha_actualizacion DateTime  @updatedAt
+   361→
+   362→  empleado            Empleado  @relation(fields: [empleado_id], references: [id])
+   363→  aprobada_por        Usuario?  @relation(fields: [aprobada_por_id], references: [id])
+   364→  periodo             Planilla? @relation(fields: [periodo_id], references: [id])
+   365→}
+   366→
+   367→// ============================================================
+   368→// Table 15: detalles_planilla
+   369→// ============================================================
+   370→model DetallePlanilla {
+   371→  id                   String   @id @default(cuid())
+   372→  planilla_id          String
+   373→  empleado_id          String
+   374→  salario_base         Float
+   375→  total_horas_extra    Float    @default(0)
+   376→  total_comisiones     Float    @default(0)
+   377→  total_bonos          Float    @default(0)
+   378→  salario_bruto        Float
+   379→  isss_laboral         Float    @default(0)
+   380→  isss_patronal        Float    @default(0)
+   381→  afp_laboral          Float    @default(0)
+   382→  afp_patronal         Float    @default(0)
+   383→  renta_imponible      Float    @default(0)
+   384→  isr_retenido         Float    @default(0)
+   385→  total_descuentos     Float    @default(0)
+   386→  salario_neto         Float
+   387→  cuota_alimenticia    Float    @default(0)
+   388→  prestamo_patronal    Float    @default(0)
+   389→  seguro_complementario Float   @default(0)
+   390→  otros_descuentos     Float    @default(0)
+   391→  observaciones        String?
+   392→  fecha_creacion       DateTime @default(now())
+   393→
+   394→  planilla             Planilla @relation(fields: [planilla_id], references: [id])
+   395→  empleado             Empleado @relation(fields: [empleado_id], references: [id])
+   396→
+   397→  @@unique([planilla_id, empleado_id])
+   398→}
+   399→
+   400→// ============================================================
+   401→// Table 16: vacaciones_empleado
+   402→// ============================================================
+   403→model VacacionEmpleado {
+   404→  id                String   @id @default(cuid())
+   405→  empleado_id       String
+   406→  anio              Int
+   407→  dias_derecho      Int
+   408→  dias_tomados      Int      @default(0)
+   409→  dias_pendientes   Int      @default(15)
+   410→  dias_vendidos     Int      @default(0)
+   411→  estado            String   @default("ABIERTO")
+   412→  observaciones     String?
+   413→  fecha_creacion    DateTime @default(now())
+   414→  fecha_actualizacion DateTime @updatedAt
+   415→
+   416→  empleado          Empleado @relation(fields: [empleado_id], references: [id])
+   417→}
+   418→
+   419→// ============================================================
+   420→// Table 17: liquidaciones
+   421→// ============================================================
+   422→model Liquidacion {
+   423→  id                      String    @id @default(cuid())
+   424→  empleado_id             String
+   425→  tipo                    String
+   426→  fecha_liquidacion       DateTime
+   427→  salario_base_liquidacion Float
+   428→  anios_servicio          Float
+   429→  indemnizacion           Float     @default(0)
+   430→  prestacion_economica    Float     @default(0)
+   431→  vacacion_proporcional   Float     @default(0)
+   432→  aguinaldo_proporcional  Float     @default(0)
+   433→  salario_pendiente       Float     @default(0)
+   434→  total_liquidacion       Float
+   435→  estado                  String    @default("CALCULADA")
+   436→  aprobada_por_id         String?
+   437→  observaciones           String?
+   438→  fecha_creacion          DateTime  @default(now())
+   439→  fecha_actualizacion     DateTime  @updatedAt
+   440→
+   441→  empleado                Empleado  @relation(fields: [empleado_id], references: [id])
+   442→  aprobada_por            Usuario?  @relation(fields: [aprobada_por_id], references: [id])
+   443→}
+   444→
+   445→// ============================================================
+   446→// Table 18: historial_cambios_salariales
+   447→// ============================================================
+   448→model HistorialCambioSalarial {
+   449→  id                String   @id @default(cuid())
+   450→  empleado_id       String
+   451→  salario_anterior  Float
+   452→  salario_nuevo     Float
+   453→  tipo_cambio       String
+   454→  motivo            String?
+   455→  autorizado_por_id String?
+   456→  fecha_cambio      DateTime @default(now())
+   457→
+   458→  empleado          Empleado @relation(fields: [empleado_id], references: [id])
+   459→  autorizado_por    Usuario? @relation(fields: [autorizado_por_id], references: [id])
+   460→}
+   461→
+   462→// ============================================================
+   463→// Table 19: historial_cambios_cargo
+   464→// ============================================================
+   465→model HistorialCambioCargo {
+   466→  id                  String   @id @default(cuid())
+   467→  empleado_id         String
+   468→  cargo_anterior_id   String?
+   469→  cargo_nuevo_id      String?
+   470→  tipo_movimiento     String
+   471→  motivo              String?
+   472→  autorizado_por_id   String?
+   473→  fecha_movimiento    DateTime @default(now())
+   474→
+   475→  empleado            Empleado      @relation(fields: [empleado_id], references: [id])
+   476→  cargo_anterior      PerfilPuesto? @relation("CargoAnterior", fields: [cargo_anterior_id], references: [id])
+   477→  cargo_nuevo         PerfilPuesto? @relation("CargoNuevo", fields: [cargo_nuevo_id], references: [id])
+   478→  autorizado_por      Usuario?      @relation(fields: [autorizado_por_id], references: [id])
+   479→}
+   480→
+   481→// ============================================================
+   482→// Table 20: historial_presentaciones_isss
+   483→// ============================================================
+   484→model HistorialPresentacionISSS {
+   485→  id                        String   @id @default(cuid())
+   486→  planilla_id               String
+   487→  periodo_mes               Int
+   488→  periodo_anio              Int
+   489→  numero_planilla_isss      String?
+   490→  fecha_presentacion        DateTime?
+   491→  estado                    String   @default("PENDIENTE")
+   492→  archivo_ois               String?
+   493→  total_cotizacion_laboral  Float    @default(0)
+   494→  total_cotizacion_patronal Float    @default(0)
+   495→  observaciones             String?
+   496→  fecha_creacion            DateTime @default(now())
+   497→
+   498→  planilla                  Planilla @relation(fields: [planilla_id], references: [id])
+   499→}
+   500→
+   501→// ============================================================
+   502→// Table 21: historial_presentaciones_afp
+   503→// ============================================================
+   504→model HistorialPresentacionAFP {
+   505→  id                        String   @id @default(cuid())
+   506→  planilla_id               String
+   507→  administradora            String
+   508→  periodo_mes               Int
+   509→  periodo_anio              Int
+   510→  fecha_presentacion        DateTime?
+   511→  estado                    String   @default("PENDIENTE")
+   512→  archivo_sepp              String?
+   513→  total_cotizacion_laboral  Float    @default(0)
+   514→  total_cotizacion_patronal Float    @default(0)
+   515→  observaciones             String?
+   516→  fecha_creacion            DateTime @default(now())
+   517→
+   518→  planilla                  Planilla @relation(fields: [planilla_id], references: [id])
+   519→}
+   520→
+   521→// ============================================================
+   522→// Table 22: historial_enteros_isr
+   523→// ============================================================
+   524→model HistorialEnteroISR {
+   525→  id                String   @id @default(cuid())
+   526→  planilla_id       String
+   527→  periodo_mes       Int
+   528→  periodo_anio      Int
+   529→  formulario_f910   String?
+   530→  total_retenciones Float    @default(0)
+   531→  fecha_entero      DateTime?
+   532→  estado            String   @default("PENDIENTE")
+   533→  observaciones     String?
+   534→  fecha_creacion    DateTime @default(now())
+   535→
+   536→  planilla          Planilla @relation(fields: [planilla_id], references: [id])
+   537→}
+   538→
+   539→// ============================================================
+   540→// Table 23: refresh_tokens
+   541→// ============================================================
+   542→model RefreshToken {
+   543→  id         String   @id @default(cuid())
+   544→  usuario_id String
+   545→  token      String   @unique
+   546→  expires_at DateTime
+   547→  revoked    Boolean  @default(false)
+   548→  created_at DateTime @default(now())
+   549→
+   550→  usuario    Usuario  @relation(fields: [usuario_id], references: [id])
+   551→}
+   552→
+   553→// ============================================================
+   554→// Table 24: otp_tokens
+   555→// ============================================================
+   556→model OtpToken {
+   557→  id         String   @id @default(cuid())
+   558→  usuario_id String?
+   559→  email      String
+   560→  token_hash String
+   561→  tipo       String
+   562→  expires_at DateTime
+   563→  usado      Boolean  @default(false)
+   564→  intentos   Int      @default(0)
+   565→  created_at DateTime @default(now())
+   566→
+   567→  usuario    Usuario? @relation(fields: [usuario_id], references: [id])
+   568→}
+   569→
+   570→// ============================================================
+   571→// Table 25: tokens_bloqueados
+   572→// ============================================================
+   573→model TokenBloqueado {
+   574→  id            String   @id @default(cuid())
+   575→  token         String
+   576→  tipo          String
+   577→  razon         String?
+   578→  fecha_bloqueo DateTime @default(now())
+   579→}
+   580→
+   581→// ============================================================
+   582→// Table 26: intentos_login
+   583→// ============================================================
+   584→model IntentoLogin {
+   585→  id         String   @id @default(cuid())
+   586→  email      String
+   587→  ip_origen  String?
+   588→  user_agent String?
+   589→  exitoso    Boolean
+   590→  created_at DateTime @default(now())
+   591→}
+   592→
+   593→// ============================================================
+   594→// Table 27: permisos_granulares_usuario
+   595→// ============================================================
+   596→model PermisoGranularUsuario {
+   597→  id             String   @id @default(cuid())
+   598→  usuario_id     String
+   599→  modulo         String
+   600→  vista          String
+   601→  permiso        String
+   602→  concedido      Boolean  @default(true)
+   603→  fecha_creacion DateTime @default(now())
+   604→
+   605→  usuario        Usuario  @relation(fields: [usuario_id], references: [id])
+   606→
+   607→  @@unique([usuario_id, modulo, vista, permiso])
+   608→}
+   609→
+   610→// ============================================================
+   611→// Table 28: historial_contrasenas
+   612→// ============================================================
+   613→model HistorialContrasena {
+   614→  id           String   @id @default(cuid())
+   615→  usuario_id   String
+   616→  password_hash String
+   617→  cambiada_en  DateTime @default(now())
+   618→
+   619→  usuario      Usuario  @relation(fields: [usuario_id], references: [id])
+   620→}
+   621→
+   622→// ============================================================
+   623→// Table 29: documentos_empleado
+   624→// ============================================================
+   625→model DocumentoEmpleado {
+   626→  id              String   @id @default(cuid())
+   627→  empleado_id     String
+   628→  tipo_documento  String
+   629→  nombre_archivo  String
+   630→  ruta_archivo    String
+   631→  tipo_mime       String?
+   632→  tamano_bytes    Int?
+   633→  descripcion     String?
+   634→  subido_por_id   String?
+   635→  fecha_creacion  DateTime @default(now())
+   636→
+   637→  empleado        Empleado @relation(fields: [empleado_id], references: [id])
+   638→  subido_por      Usuario? @relation(fields: [subido_por_id], references: [id])
+   639→}
+   640→
+   641→// ============================================================
+   642→// Table 30: solicitudes_self_service
+   643→// ============================================================
+   644→model SolicitudSelfService {
+   645→  id               String    @id @default(cuid())
+   646→  empleado_id      String
+   647→  tipo             String
+   648→  estado           String    @default("PENDIENTE")
+   649→  detalle          String?
+   650→  aprobada_por_id  String?
+   651→  fecha_solicitud  DateTime  @default(now())
+   652→  fecha_resolucion DateTime?
+   653→
+   654→  empleado         Empleado  @relation(fields: [empleado_id], references: [id])
+   655→  aprobada_por     Usuario?  @relation(fields: [aprobada_por_id], references: [id])
+   656→}
+   657→
+   658→// ============================================================
+   659→// Table 31: retornos_bancarios
+   660→// ============================================================
+   661→model RetornoBancario {
+   662→  id              String   @id @default(cuid())
+   663→  planilla_id     String
+   664→  banco_id        String
+   665→  archivo_nombre  String?
+   666→  fecha_envio     DateTime?
+   667→  fecha_retorno   DateTime?
+   668→  estado          String   @default("PENDIENTE")
+   669→  total_registros Int      @default(0)
+   670→  total_monto     Float    @default(0)
+   671→  errores_detalle String?
+   672→  observaciones   String?
+   673→  fecha_creacion  DateTime @default(now())
+   674→
+   675→  planilla        Planilla @relation(fields: [planilla_id], references: [id])
+   676→  banco           Banco    @relation(fields: [banco_id], references: [id])
+   677→}
+   678→
+   679→// ============================================================
+   680→// Table 32: integraciones_externas
+   681→// ============================================================
+   682→model IntegracionExterna {
+   683→  id                  String   @id @default(cuid())
+   684→  tipo                String
+   685→  nombre              String
+   686→  configuracion       String?
+   687→  credenciales_cifradas String?
+   688→  activo              Boolean  @default(true)
+   689→  ultimo_test         DateTime?
+   690→  estado_test         String?
+   691→  fecha_creacion      DateTime @default(now())
+   692→  fecha_actualizacion DateTime @updatedAt
+   693→
+   694→  logs                LogIntegracion[]
+   695→}
+   696→
+   697→// ============================================================
+   698→// Table 33: log_integraciones
+   699→// ============================================================
+   700→model LogIntegracion {
+   701→  id               String   @id @default(cuid())
+   702→  integracion_id   String?
+   703→  tipo_operacion   String
+   704→  request_data     String?
+   705→  response_data    String?
+   706→  estado           String
+   707→  mensaje_error    String?
+   708→  duracion_ms      Int?
+   709→  fecha_creacion   DateTime @default(now())
+   710→
+   711→  integracion      IntegracionExterna? @relation(fields: [integracion_id], references: [id])
+   712→}
+   713→
+   714→// ============================================================
+   715→// Table 34: checklist_aprobacion_planilla
+   716→// ============================================================
+   717→model ChecklistAprobacionPlanilla {
+   718→  id                String    @id @default(cuid())
+   719→  planilla_id       String
+   720→  item              String
+   721→  completado        Boolean   @default(false)
+   722→  completado_por_id String?
+   723→  fecha_completado  DateTime?
+   724→  observaciones     String?
+   725→  fecha_creacion    DateTime  @default(now())
+   726→
+   727→  planilla          Planilla  @relation(fields: [planilla_id], references: [id])
+   728→  completado_por    Usuario?  @relation(fields: [completado_por_id], references: [id])
+   729→}
+   730→
+   731→// ============================================================
+   732→// Table 35: bitacora_auditoria (IMMUTABLE - NO UPDATE/DELETE)
+   733→// ============================================================
+   734→model BitacoraAuditoria {
+   735→  id                  String   @id @default(cuid())
+   736→  usuario_id          String?
+   737→  usuario_email       String?
+   738→  accion              String
+   739→  tabla_afectada      String?
+   740→  registro_id         String?
+   741→  valor_anterior      String?
+   742→  valor_nuevo         String?
+   743→  resultado           String?
+   744→  nivel_criticidad    String   @default("NORMAL")
+   745→  ip_origen           String?
+   746→  user_agent          String?
+   747→  detalle_adicional   String?
+   748→  fecha_accion        DateTime @default(now())
+   749→
+   750→  usuario             Usuario? @relation(fields: [usuario_id], references: [id])
+   751→}
+   752→
