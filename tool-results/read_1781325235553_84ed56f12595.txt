@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  ArrowLeft, Edit2, Save, X, FileText, Briefcase, Heart, DollarSign,
+     6→  Palmtree, FolderOpen, Loader2, AlertCircle, Plus, Clock,
+     7→  User, CalendarDays, AlertTriangle, Printer, MapPin, Phone, Mail,
+     8→  Shield, Building2, Hash, CreditCard, TrendingUp, ChevronDown,
+     9→  ChevronUp, Globe, Droplets, Users, Award, Download, Search,
+    10→  FileCheck, Stamp, LetterText, FileSpreadsheet,
+    11→  Sparkles
+    12→} from 'lucide-react';
+    13→import { Button } from '@/components/ui/button';
+    14→import { Input } from '@/components/ui/input';
+    15→import { Label } from '@/components/ui/label';
+    16→import { Badge } from '@/components/ui/badge';
+    17→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    18→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    19→import {
+    20→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    21→} from '@/components/ui/table';
+    22→import {
+    23→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    24→} from '@/components/ui/select';
+    25→import {
+    26→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+    27→} from '@/components/ui/dialog';
+    28→import { Separator } from '@/components/ui/separator';
+    29→import { Skeleton } from '@/components/ui/skeleton';
+    30→import { useToast } from '@/hooks/use-toast';
+    31→
+    32→type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+    33→
+    34→interface EmployeeDetailProps {
+    35→  empleadoId: string;
+    36→  onBack: () => void;
+    37→  userRole: UserRole;
+    38→  accessToken: string | null;
+    39→}
+    40→
+    41→interface EmpleadoDetail {
+    42→  id: string;
+    43→  codigo_empleado: string;
+    44→  primer_nombre: string;
+    45→  segundo_nombre: string | null;
+    46→  primer_apellido: string;
+    47→  segundo_apellido: string | null;
+    48→  apellido_casada: string | null;
+    49→  dui: string;
+    50→  nit: string | null;
+    51→  fecha_nacimiento: string | null;
+    52→  genero: string | null;
+    53→  estado_civil: string | null;
+    54→  direccion: string | null;
+    55→  telefono: string | null;
+    56→  email_personal: string | null;
+    57→  numero_isss: string | null;
+    58→  numero_afp: string | null;
+    59→  afp_administradora: string | null;
+    60→  tipo_sangre: string | null;
+    61→  contacto_emergencia_nombre: string | null;
+    62→  contacto_emergencia_telefono: string | null;
+    63→  contacto_emergencia_relacion: string | null;
+    64→  nacionalidad: string;
+    65→  fecha_ingreso: string;
+    66→  fecha_salida: string | null;
+    67→  salario_base: number;
+    68→  estado: string;
+    69→  area: { id: string; nombre: string; codigo: string } | null;
+    70→  perfil_puesto: { id: string; nombre_puesto: string; codigo: string; banda_salarial: { nombre: string; salario_minimo: number; salario_maximo: number } | null } | null;
+    71→  contratos: Array<{
+    72→    id: string; tipo_contrato: string; salario_base_contrato: number; tipo_jornada: string;
+    73→    fecha_inicio: string; fecha_fin: string | null; activo: boolean; observaciones: string | null;
+    74→    perfil_puesto: { nombre_puesto: string } | null;
+    75→  }>;
+    76→  vacaciones: Array<{
+    77→    id: string; anio: number; dias_derecho: number; dias_tomados: number;
+    78→    dias_pendientes: number; dias_vendidos: number; estado: string;
+    79→  }>;
+    80→  documentos: Array<{
+    81→    id: string; tipo_documento: string; nombre_archivo: string; descripcion: string | null; fecha_creacion: string;
+    82→  }>;
+    83→  incidencias: Array<{
+    84→    id: string; tipo: string; estado: string; fecha_inicio: string; fecha_fin: string | null;
+    85→    cantidad_horas: number | null; monto: number | null; descripcion: string | null;
+    86→  }>;
+    87→  cambios_salariales: Array<{
+    88→    id: string; salario_anterior: number; salario_nuevo: number; tipo_cambio: string;
+    89→    motivo: string | null; fecha_cambio: string;
+    90→  }>;
+    91→  usuario: { id: string; email: string; rol: string } | null;
+    92→}
+    93→
+    94→/* ─── Document Category & Card Types ─── */
+    95→interface DocItem {
+    96→  id: string;
+    97→  title: string;
+    98→  description: string;
+    99→  category: 'contratos' | 'constancias' | 'boletas' | 'cartas' | 'otros';
+   100→  icon: React.ReactNode;
+   101→  iconBg: string;
+   102→  iconColor: string;
+   103→  date: string;
+   104→  status: 'Vigente' | 'Expirado' | 'Borrador';
+   105→  statusColor: string;
+   106→  onDownload?: () => void;
+   107→  onPrint?: () => void;
+   108→}
+   109→
+   110→function getDocStatusColor(status: string): string {
+   111→  switch (status) {
+   112→    case 'Vigente': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+   113→    case 'Expirado': return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
+   114→    case 'Borrador': return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+   115→    default: return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+   116→  }
+   117→}
+   118→
+   119→function getContractStatus(fechaFin: string | null, activo: boolean): 'Vigente' | 'Expirado' | 'Borrador' {
+   120→  if (!activo) return 'Expirado';
+   121→  if (!fechaFin) return 'Vigente';
+   122→  return new Date(fechaFin) > new Date() ? 'Vigente' : 'Expirado';
+   123→}
+   124→
+   125→/* ─── DocumentGrid Component ─── */
+   126→function DocumentGrid({
+   127→  empleado,
+   128→  docCategory,
+   129→  docSearch,
+   130→  planillas,
+   131→  selectedPlanilla,
+   132→  setSelectedPlanilla,
+   133→  aguinaldoAnio,
+   134→  accessToken,
+   135→  formatDate,
+   136→  formatSalary,
+   137→  addToRecentDocs,
+   138→  getNombreCompleto,
+   139→  toast,
+   140→  recentDocs,
+   141→}: {
+   142→  empleado: EmpleadoDetail;
+   143→  docCategory: string;
+   144→  docSearch: string;
+   145→  planillas: Array<{ id: string; codigo_planilla: string; tipo: string; estado: string; fecha_inicio_periodo: string; fecha_fin_periodo: string }>;
+   146→  selectedPlanilla: string;
+   147→  setSelectedPlanilla: (v: string) => void;
+   148→  aguinaldoAnio: string;
+   149→  accessToken: string | null;
+   150→  formatDate: (d: string | null) => string;
+   151→  formatSalary: (amount: number) => string;
+   152→  addToRecentDocs: (doc: { id: string; title: string; type: string; date: string; category: string }) => void;
+   153→  getNombreCompleto: () => string;
+   154→  toast: (opts: { title: string; description?: string; variant?: string }) => void;
+   155→  recentDocs: Array<{ id: string; title: string; type: string; date: string; category: string }>;
+   156→}) {
+   157→  const handleDownloadBoleta = async (planillaId: string, planillaCodigo: string) => {
+   158→    try {
+   159→      const res = await fetch(`/api/nomina/planillas/${planillaId}/boleta?empleado_id=${empleado.id}`, {
+   160→        headers: { Authorization: `Bearer ${accessToken}` },
+   161→      });
+   162→      if (!res.ok) {
+   163→        const data = await res.json().catch(() => ({}));
+   164→        toast({ title: 'Error', description: (data as { error?: string }).error || 'No se pudo generar la boleta', variant: 'destructive' });
+   165→        return;
+   166→      }
+   167→      const blob = await res.blob();
+   168→      const url = window.URL.createObjectURL(blob);
+   169→      const a = document.createElement('a');
+   170→      a.href = url;
+   171→      a.download = `boleta-${empleado.codigo_empleado}-${planillaCodigo}.pdf`;
+   172→      a.click();
+   173→      window.URL.revokeObjectURL(url);
+   174→      addToRecentDocs({
+   175→        id: `boleta-${planillaId}`,
+   176→        title: `Boleta ${planillaCodigo}`,
+   177→        type: 'Boleta de Pago',
+   178→        date: new Date().toISOString(),
+   179→        category: 'boletas',
+   180→      });
+   181→      toast({ title: 'Boleta descargada', description: `Boleta de ${planillaCodigo} descargada exitosamente` });
+   182→    } catch {
+   183→      toast({ title: 'Error', description: 'Error de conexión al descargar boleta', variant: 'destructive' });
+   184→    }
+   185→  };
+   186→
+   187→  const handleDownloadAguinaldo = async () => {
+   188→    try {
+   189→      const res = await fetch(`/api/nomina/aguinaldo/pdf?empleado_id=${empleado.id}&anio=${aguinaldoAnio}`, {
+   190→        headers: { Authorization: `Bearer ${accessToken}` },
+   191→      });
+   192→      if (!res.ok) {
+   193→        const data = await res.json().catch(() => ({}));
+   194→        toast({ title: 'Error', description: (data as { error?: string }).error || 'No se pudo generar la constancia', variant: 'destructive' });
+   195→        return;
+   196→      }
+   197→      const blob = await res.blob();
+   198→      const url = window.URL.createObjectURL(blob);
+   199→      const a = document.createElement('a');
+   200→      a.href = url;
+   201→      a.download = `aguinaldo-${empleado.codigo_empleado}-${aguinaldoAnio}.pdf`;
+   202→      a.click();
+   203→      window.URL.revokeObjectURL(url);
+   204→      addToRecentDocs({
+   205→        id: `aguinaldo-${aguinaldoAnio}`,
+   206→        title: `Constancia Aguinaldo ${aguinaldoAnio}`,
+   207→        type: 'Constancia de Aguinaldo',
+   208→        date: new Date().toISOString(),
+   209→        category: 'constancias',
+   210→      });
+   211→      toast({ title: 'Constancia descargada', description: `Constancia de aguinaldo ${aguinaldoAnio} descargada` });
+   212→    } catch {
+   213→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   214→    }
+   215→  };
+   216→
+   217→  const handleGenerateTextDoc = (title: string, content: string, filename: string, category: string, docId: string) => {
+   218→    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+   219→    const url = window.URL.createObjectURL(blob);
+   220→    const a = document.createElement('a');
+   221→    a.href = url;
+   222→    a.download = filename;
+   223→    a.click();
+   224→    window.URL.revokeObjectURL(url);
+   225→    addToRecentDocs({
+   226→      id: docId,
+   227→      title,
+   228→      type: category,
+   229→      date: new Date().toISOString(),
+   230→      category: category === 'Constancia de Empleo' || category === 'Constancia de Salario' ? 'constancias' : 'cartas',
+   231→    });
+   232→    toast({ title: 'Documento generado', description: `${title} descargado exitosamente` });
+   233→  };
+   234→
+   235→  const handlePrintDoc = (title: string, content: string) => {
+   236→    const printWindow = window.open('', '_blank');
+   237→    if (printWindow) {
+   238→      printWindow.document.write(`
+   239→        <html><head><title>${title}</title>
+   240→        <style>body{font-family:Arial,sans-serif;margin:40px;line-height:1.6}h1{color:#047857}table{width:100%;border-collapse:collapse;margin:16px 0}td,th{padding:8px;border:1px solid #e2e8f0;text-align:left}th{background:#f0fdf4}.header{text-align:center;margin-bottom:32px}.signature{margin-top:64px;display:flex;justify-content:space-between}.sig-line{border-top:1px solid #000;width:200px;text-align:center;padding-top:4px}</style>
+   241→        </head><body>${content}</body></html>
+   242→      `);
+   243→      printWindow.document.close();
+   244→      printWindow.print();
+   245→    }
+   246→  };
+   247→
+   248→  /* Build document list from employee data */
+   249→  const allDocuments: DocItem[] = (() => {
+   250→    const docs: DocItem[] = [];
+   251→
+   252→    // Contratos from DB
+   253→    empleado.contratos.forEach(c => {
+   254→      const status = getContractStatus(c.fecha_fin, c.activo);
+   255→      docs.push({
+   256→        id: `contrato-${c.id}`,
+   257→        title: `Contrato ${c.tipo_contrato.replace(/_/g, ' ')}`,
+   258→        description: `Puesto: ${c.perfil_puesto?.nombre_puesto || 'N/A'} • Jornada: ${c.tipo_jornada.replace(/_/g, ' ')} • Salario: ${formatSalary(c.salario_base_contrato)}`,
+   259→        category: 'contratos',
+   260→        icon: <FileText className="h-5 w-5" />,
+   261→        iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+   262→        iconColor: 'text-emerald-600 dark:text-emerald-400',
+   263→        date: c.fecha_inicio,
+   264→        status,
+   265→        statusColor: getDocStatusColor(status),
+   266→        onDownload: () => {
+   267→          const content = generateConstanciaEmpleoHTML(empleado, formatDate, formatSalary);
+   268→          handleGenerateTextDoc(`Contrato ${c.tipo_contrato}`, content, `contrato-${empleado.codigo_empleado}-${c.tipo_contrato}.txt`, 'Contrato', `contrato-${c.id}`);
+   269→        },
+   270→        onPrint: () => {
+   271→          const content = generateConstanciaEmpleoHTML(empleado, formatDate, formatSalary);
+   272→          handlePrintDoc(`Contrato ${c.tipo_contrato}`, content);
+   273→        },
+   274→      });
+   275→    });
+   276→
+   277→    // Constancias (generated)
+   278→    docs.push({
+   279→      id: 'constancia-empleo',
+   280→      title: 'Constancia de Empleo',
+   281→      description: 'Certifica que el empleado labora activamente en la empresa',
+   282→      category: 'constancias',
+   283→      icon: <Stamp className="h-5 w-5" />,
+   284→      iconBg: 'bg-teal-100 dark:bg-teal-900/30',
+   285→      iconColor: 'text-teal-600 dark:text-teal-400',
+   286→      date: new Date().toISOString(),
+   287→      status: empleado.estado === 'ACTIVO' ? 'Vigente' : 'Expirado',
+   288→      statusColor: getDocStatusColor(empleado.estado === 'ACTIVO' ? 'Vigente' : 'Expirado'),
+   289→      onDownload: () => {
+   290→        const content = generateConstanciaEmpleoHTML(empleado, formatDate, formatSalary);
+   291→        handleGenerateTextDoc('Constancia de Empleo', content, `constancia-empleo-${empleado.codigo_empleado}.txt`, 'Constancia de Empleo', 'constancia-empleo');
+   292→      },
+   293→      onPrint: () => {
+   294→        const content = generateConstanciaEmpleoHTML(empleado, formatDate, formatSalary);
+   295→        handlePrintDoc('Constancia de Empleo', content);
+   296→      },
+   297→    });
+   298→
+   299→    docs.push({
+   300→      id: 'constancia-salario',
+   301→      title: 'Constancia de Salario',
+   302→      description: `Salario actual: ${formatSalary(empleado.salario_base)}`,
+   303→      category: 'constancias',
+   304→      icon: <DollarSign className="h-5 w-5" />,
+   305→      iconBg: 'bg-amber-100 dark:bg-amber-900/30',
+   306→      iconColor: 'text-amber-600 dark:text-amber-400',
+   307→      date: new Date().toISOString(),
+   308→      status: empleado.estado === 'ACTIVO' ? 'Vigente' : 'Expirado',
+   309→      statusColor: getDocStatusColor(empleado.estado === 'ACTIVO' ? 'Vigente' : 'Expirado'),
+   310→      onDownload: () => {
+   311→        const content = generateConstanciaSalarioHTML(empleado, formatDate, formatSalary);
+   312→        handleGenerateTextDoc('Constancia de Salario', content, `constancia-salario-${empleado.codigo_empleado}.txt`, 'Constancia de Salario', 'constancia-salario');
+   313→      },
+   314→      onPrint: () => {
+   315→        const content = generateConstanciaSalarioHTML(empleado, formatDate, formatSalary);
+   316→        handlePrintDoc('Constancia de Salario', content);
+   317→      },
+   318→    });
+   319→
+   320→    // Constancia de Aguinaldo
+   321→    docs.push({
+   322→      id: `constancia-aguinaldo-${aguinaldoAnio}`,
+   323→      title: `Constancia de Aguinaldo ${aguinaldoAnio}`,
+   324→      description: 'Cálculo de aguinaldo según ley salvadoreña',
+   325→      category: 'constancias',
+   326→      icon: <Palmtree className="h-5 w-5" />,
+   327→      iconBg: 'bg-purple-100 dark:bg-purple-900/30',
+   328→      iconColor: 'text-purple-600 dark:text-purple-400',
+   329→      date: new Date().toISOString(),
+   330→      status: 'Borrador',
+   331→      statusColor: getDocStatusColor('Borrador'),
+   332→      onDownload: handleDownloadAguinaldo,
+   333→      onPrint: handleDownloadAguinaldo,
+   334→    });
+   335→
+   336→    // Boletas de Pago (from planillas)
+   337→    planillas.forEach(p => {
+   338→      docs.push({
+   339→        id: `boleta-${p.id}`,
+   340→        title: `Boleta ${p.codigo_planilla}`,
+   341→        description: `Período: ${formatDate(p.fecha_inicio_periodo)} - ${formatDate(p.fecha_fin_periodo)} • Tipo: ${p.tipo}`,
+   342→        category: 'boletas',
+   343→        icon: <FileSpreadsheet className="h-5 w-5" />,
+   344→        iconBg: 'bg-rose-100 dark:bg-rose-900/30',
+   345→        iconColor: 'text-rose-600 dark:text-rose-400',
+   346→        date: p.fecha_fin_periodo,
+   347→        status: p.estado === 'CERRADA' ? 'Vigente' : 'Borrador',
+   348→        statusColor: getDocStatusColor(p.estado === 'CERRADA' ? 'Vigente' : 'Borrador'),
+   349→        onDownload: () => handleDownloadBoleta(p.id, p.codigo_planilla),
+   350→        onPrint: () => handleDownloadBoleta(p.id, p.codigo_planilla),
+   351→      });
+   352→    });
+   353→
+   354→    // Cartas
+   355→    docs.push({
+   356→      id: 'carta-referencia',
+   357→      title: 'Carta de Referencia Laboral',
+   358→      description: 'Referencia laboral del empleado',
+   359→      category: 'cartas',
+   360→      icon: <LetterText className="h-5 w-5" />,
+   361→      iconBg: 'bg-sky-100 dark:bg-sky-900/30',
+   362→      iconColor: 'text-sky-600 dark:text-sky-400',
+   363→      date: new Date().toISOString(),
+   364→      status: 'Borrador',
+   365→      statusColor: getDocStatusColor('Borrador'),
+   366→      onDownload: () => {
+   367→        const content = generateCartaReferenciaHTML(empleado, formatDate, formatSalary);
+   368→        handleGenerateTextDoc('Carta de Referencia', content, `carta-referencia-${empleado.codigo_empleado}.txt`, 'Carta de Referencia', 'carta-referencia');
+   369→      },
+   370→      onPrint: () => {
+   371→        const content = generateCartaReferenciaHTML(empleado, formatDate, formatSalary);
+   372→        handlePrintDoc('Carta de Referencia', content);
+   373→      },
+   374→    });
+   375→
+   376→    // Otros - from empleado.documentos
+   377→    empleado.documentos.forEach(doc => {
+   378→      docs.push({
+   379→        id: `doc-${doc.id}`,
+   380→        title: doc.nombre_archivo,
+   381→        description: doc.descripcion || doc.tipo_documento,
+   382→        category: 'otros',
+   383→        icon: <FileCheck className="h-5 w-5" />,
+   384→        iconBg: 'bg-slate-100 dark:bg-slate-800/50',
+   385→        iconColor: 'text-slate-600 dark:text-slate-400',
+   386→        date: doc.fecha_creacion,
+   387→        status: 'Vigente',
+   388→        statusColor: getDocStatusColor('Vigente'),
+   389→      });
+   390→    });
+   391→
+   392→    return docs;
+   393→  })();
+   394→
+   395→  /* Filter documents */
+   396→  const filteredDocs = (() => {
+   397→    let result = allDocuments;
+   398→    if (docCategory !== 'todos') {
+   399→      result = result.filter(d => d.category === docCategory);
+   400→    }
+   401→    if (docSearch.trim()) {
+   402→      const q = docSearch.toLowerCase();
+   403→      result = result.filter(d => d.title.toLowerCase().includes(q) || d.description.toLowerCase().includes(q));
+   404→    }
+   405→    return result;
+   406→  })();
+   407→
+   408→  /* Category counts */
+   409→  const categoryCounts = (() => {
+   410→    const counts: Record<string, number> = { todos: allDocuments.length };
+   411→    allDocuments.forEach(d => {
+   412→      counts[d.category] = (counts[d.category] || 0) + 1;
+   413→    });
+   414→    return counts;
+   415→  })();
+   416→
+   417→  /* Recent docs from parent state */
+   418→  const recentDocItems = (() => {
+   419→    if (recentDocs.length === 0) return [];
+   420→    return recentDocs.map(rd => {
+   421→      const matchingDoc = allDocuments.find(d => d.id === rd.id);
+   422→      return {
+   423→        ...rd,
+   424→        icon: matchingDoc?.icon || <FileText className="h-4 w-4" />,
+   425→        iconBg: matchingDoc?.iconBg || 'bg-slate-100 dark:bg-slate-800/50',
+   426→        iconColor: matchingDoc?.iconColor || 'text-slate-600 dark:text-slate-400',
+   427→        onDownload: matchingDoc?.onDownload,
+   428→      };
+   429→    });
+   430→  })();
+   431→
+   432→  if (filteredDocs.length === 0) {
+   433→    return (
+   434→      <Card className="shadow-sm border-dashed">
+   435→        <CardContent className="py-16 flex flex-col items-center text-slate-400 dark:text-slate-500">
+   436→          <div className="h-20 w-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+   437→            <FolderOpen className="h-10 w-10" />
+   438→          </div>
+   439→          <p className="text-base font-medium text-slate-600 dark:text-slate-300">No se encontraron documentos</p>
+   440→          <p className="text-sm mt-1">
+   441→            {docCategory !== 'todos' || docSearch
+   442→              ? 'Intenta con otra categoría o término de búsqueda'
+   443→              : 'Los documentos del empleado aparecerán aquí'}
+   444→          </p>
+   445→        </CardContent>
+   446→      </Card>
+   447→    );
+   448→  }
+   449→
+   450→  return (
+   451→    <div className="space-y-4">
+   452→      {/* Stats Bar */}
+   453→      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+   454→        {[
+   455→          { key: 'todos', label: 'Total', icon: <FolderOpen className="h-3.5 w-3.5" /> },
+   456→          { key: 'contratos', label: 'Contratos', icon: <FileText className="h-3.5 w-3.5" /> },
+   457→          { key: 'constancias', label: 'Constancias', icon: <Stamp className="h-3.5 w-3.5" /> },
+   458→          { key: 'boletas', label: 'Boletas', icon: <FileSpreadsheet className="h-3.5 w-3.5" /> },
+   459→          { key: 'cartas', label: 'Cartas', icon: <LetterText className="h-3.5 w-3.5" /> },
+   460→          { key: 'otros', label: 'Otros', icon: <FileCheck className="h-3.5 w-3.5" /> },
+   461→        ].map(stat => (
+   462→          <button
+   463→            key={stat.key}
+   464→            onClick={() => {} /* category change is handled by parent */}
+   465→            className={`p-2.5 rounded-lg border text-center transition-all ${
+   466→              docCategory === stat.key
+   467→                ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-900/20'
+   468→                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-600'
+   469→            }`}
+   470→          >
+   471→            <div className="flex items-center justify-center gap-1 text-slate-500 dark:text-slate-400 mb-1">
+   472→              {stat.icon}
+   473→            </div>
+   474→            <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{categoryCounts[stat.key] || 0}</p>
+   475→            <p className="text-[10px] text-slate-400 uppercase tracking-wider">{stat.label}</p>
+   476→          </button>
+   477→        ))}
+   478→      </div>
+   479→
+   480→      {/* Document Cards Grid */}
+   481→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+   482→        {filteredDocs.map(doc => (
+   483→          <Card key={doc.id} className="shadow-sm hover:shadow-md transition-all group border-slate-200 dark:border-slate-700">
+   484→            <CardContent className="p-4">
+   485→              <div className="flex items-start gap-3">
+   486→                <div className={`h-10 w-10 rounded-lg ${doc.iconBg} flex items-center justify-center shrink-0`}>
+   487→                  <span className={doc.iconColor}>{doc.icon}</span>
+   488→                </div>
+   489→                <div className="flex-1 min-w-0">
+   490→                  <div className="flex items-start justify-between gap-2">
+   491→                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate leading-tight">{doc.title}</p>
+   492→                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${doc.statusColor}`}>
+   493→                      {doc.status}
+   494→                    </Badge>
+   495→                  </div>
+   496→                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">{doc.description}</p>
+   497→                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-1">
+   498→                    <Clock className="h-3 w-3" /> {formatDate(doc.date)}
+   499→                  </p>
+   500→                </div>
+   501→              </div>
+   502→              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50">
+   503→                {doc.onDownload && (
+   504→                  <Button
+   505→                    variant="ghost"
+   506→                    size="sm"
+   507→                    className="h-7 px-2 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
+   508→                    onClick={doc.onDownload}
+   509→                  >
+   510→                    <Download className="h-3.5 w-3.5 mr-1" /> Descargar
+   511→                  </Button>
+   512→                )}
+   513→                {doc.onPrint && (
+   514→                  <Button
+   515→                    variant="ghost"
+   516→                    size="sm"
+   517→                    className="h-7 px-2 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+   518→                    onClick={doc.onPrint}
+   519→                  >
+   520→                    <Printer className="h-3.5 w-3.5 mr-1" /> Imprimir
+   521→                  </Button>
+   522→                )}
+   523→                {!doc.onDownload && !doc.onPrint && (
+   524→                  <span className="text-[11px] text-slate-400 italic">Sin acciones disponibles</span>
+   525→                )}
+   526→              </div>
+   527→            </CardContent>
+   528→          </Card>
+   529→        ))}
+   530→      </div>
+   531→
+   532→      {/* Recent Documents Section */}
+   533→      {recentDocItems.length > 0 && (
+   534→        <Card className="shadow-sm border-slate-200 dark:border-slate-700">
+   535→          <CardHeader className="pb-2">
+   536→            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+   537→              <Clock className="h-4 w-4" /> Documentos Recientes
+   538→            </CardTitle>
+   539→            <CardDescription className="text-xs">Últimos documentos accedidos o generados</CardDescription>
+   540→          </CardHeader>
+   541→          <CardContent className="pt-0">
+   542→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+   543→              {recentDocItems.map(rd => (
+   544→                <button
+   545→                  key={rd.id}
+   546→                  onClick={rd.onDownload}
+   547→                  className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 hover:border-emerald-200 dark:hover:border-emerald-700 transition-all text-left group"
+   548→                >
+   549→                  <div className={`h-8 w-8 rounded-md ${rd.iconBg} flex items-center justify-center shrink-0`}>
+   550→                    <span className={rd.iconColor}>{rd.icon}</span>
+   551→                  </div>
+   552→                  <div className="min-w-0 flex-1">
+   553→                    <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-300">{rd.title}</p>
+   554→                    <p className="text-[10px] text-slate-400">{formatDate(rd.date)}</p>
+   555→                  </div>
+   556→                  <Download className="h-3.5 w-3.5 text-slate-300 group-hover:text-emerald-500 shrink-0" />
+   557→                </button>
+   558→              ))}
+   559→            </div>
+   560→          </CardContent>
+   561→        </Card>
+   562→      )}
+   563→    </div>
+   564→  );
+   565→}
+   566→
+   567→/* ─── HTML Document Generators ─── */
+   568→function generateConstanciaEmpleoHTML(emp: EmpleadoDetail, formatDate: (d: string | null) => string, formatSalary: (n: number) => string): string {
+   569→  const nombre = `${emp.primer_nombre}${emp.segundo_nombre ? ' ' + emp.segundo_nombre : ''} ${emp.primer_apellido}${emp.segundo_apellido ? ' ' + emp.segundo_apellido : ''}`;
+   570→  const activeContract = emp.contratos.find(c => c.activo);
+   571→  return `
+   572→    <div class="header">
+   573→      <h1>CONSTANCIA DE EMPLEO</h1>
+   574→      <p><strong>Empresa S.A. de C.V.</strong></p>
+   575→    </div>
+   576→    <p>Por medio de la presente, quien suscribe certifica que:</p>
+   577→    <table>
+   578→      <tr><th>Nombre</th><td>${nombre}</td></tr>
+   579→      <tr><th>DUI</th><td>${emp.dui}</td></tr>
+   580→      <tr><th>Código Empleado</th><td>${emp.codigo_empleado}</td></tr>
+   581→      <tr><th>Puesto</th><td>${emp.perfil_puesto?.nombre_puesto || 'N/A'}</td></tr>
+   582→      <tr><th>Departamento</th><td>${emp.area?.nombre || 'N/A'}</td></tr>
+   583→      <tr><th>Fecha de Ingreso</th><td>${formatDate(emp.fecha_ingreso)}</td></tr>
+   584→      <tr><th>Tipo de Contrato</th><td>${activeContract?.tipo_contrato?.replace(/_/g, ' ') || 'N/A'}</td></tr>
+   585→      <tr><th>Salario Base</th><td>${formatSalary(emp.salario_base)}</td></tr>
+   586→      <tr><th>Estado</th><td>${emp.estado}</td></tr>
+   587→    </table>
+   588→    <p>La presente se extiende a solicitud del interesado en la ciudad de San Salvador, El Salvador, a los ${new Date().toLocaleDateString('es-SV', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+   589→    <div class="signature">
+   590→      <div class="sig-line">Firma y Sello<br/>Recursos Humanos</div>
+   591→    </div>
+   592→  `;
+   593→}
+   594→
+   595→function generateConstanciaSalarioHTML(emp: EmpleadoDetail, formatDate: (d: string | null) => string, formatSalary: (n: number) => string): string {
+   596→  const nombre = `${emp.primer_nombre}${emp.segundo_nombre ? ' ' + emp.segundo_nombre : ''} ${emp.primer_apellido}${emp.segundo_apellido ? ' ' + emp.segundo_apellido : ''}`;
+   597→  const activeContract = emp.contratos.find(c => c.activo);
+   598→  const salario = emp.salario_base;
+   599→  const isss = salario * 0.03;
+   600→  const afp = salario * 0.0725;
+   601→  const rentaBase = salario - isss - afp;
+   602→  return `
+   603→    <div class="header">
+   604→      <h1>CONSTANCIA DE SALARIO</h1>
+   605→      <p><strong>Empresa S.A. de C.V.</strong></p>
+   606→    </div>
+   607→    <p>Por medio de la presente, certificamos los ingresos del empleado:</p>
+   608→    <table>
+   609→      <tr><th>Nombre</th><td>${nombre}</td></tr>
+   610→      <tr><th>DUI</th><td>${emp.dui}</td></tr>
+   611→      <tr><th>Código Empleado</th><td>${emp.codigo_empleado}</td></tr>
+   612→      <tr><th>Puesto</th><td>${emp.perfil_puesto?.nombre_puesto || 'N/A'}</td></tr>
+   613→      <tr><th>Departamento</th><td>${emp.area?.nombre || 'N/A'}</td></tr>
+   614→      <tr><th>Fecha de Ingreso</th><td>${formatDate(emp.fecha_ingreso)}</td></tr>
+   615→    </table>
+   616→    <h3>Detalle Salarial Mensual</h3>
+   617→    <table>
+   618→      <tr><th>Salario Base</th><td>${formatSalary(salario)}</td></tr>
+   619→      <tr><th>ISSS Laboral (3%)</th><td>-${formatSalary(isss)}</td></tr>
+   620→      <tr><th>AFP Laboral (7.25%)</th><td>-${formatSalary(afp)}</td></tr>
+   621→      <tr><th>Renta Imponible</th><td>${formatSalary(rentaBase)}</td></tr>
+   622→      <tr><th>Tipo Contrato</th><td>${activeContract?.tipo_contrato?.replace(/_/g, ' ') || 'N/A'}</td></tr>
+   623→    </table>
+   624→    <p>La presente se extiende a solicitud del interesado en la ciudad de San Salvador, El Salvador, a los ${new Date().toLocaleDateString('es-SV', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+   625→    <div class="signature">
+   626→      <div class="sig-line">Firma y Sello<br/>Recursos Humanos</div>
+   627→    </div>
+   628→  `;
+   629→}
+   630→
+   631→function generateCartaReferenciaHTML(emp: EmpleadoDetail, formatDate: (d: string | null) => string, formatSalary: (n: number) => string): string {
+   632→  const nombre = `${emp.primer_nombre}${emp.segundo_nombre ? ' ' + emp.segundo_nombre : ''} ${emp.primer_apellido}${emp.segundo_apellido ? ' ' + emp.segundo_apellido : ''}`;
+   633→  return `
+   634→    <div class="header">
+   635→      <h1>CARTA DE REFERENCIA LABORAL</h1>
+   636→      <p><strong>Empresa S.A. de C.V.</strong></p>
+   637→    </div>
+   638→    <p>A quien corresponda:</p>
+   639→    <p>Por medio de la presente, hacemos constar que <strong>${nombre}</strong>, portador(a) del Documento Único de Identidad número <strong>${emp.dui}</strong>, ha laborado en nuestra institución desde el ${formatDate(emp.fecha_ingreso)} hasta la fecha, desempeñando el cargo de <strong>${emp.perfil_puesto?.nombre_puesto || 'N/A'}</strong> en el departamento de <strong>${emp.area?.nombre || 'N/A'}</strong>.</p>
+   640→    <p>Durante su permanencia en nuestra empresa, el(la) mencionado(a) funcionario(a) ha demostrado responsabilidad, honradez y eficiencia en el cumplimiento de sus labores, razón por la cual nos permitimos dar la más amplia referencia sobre su persona.</p>
+   641→    <p>Y para los usos que estime convenientes, se extiende la presente en la ciudad de San Salvador, El Salvador, a los ${new Date().toLocaleDateString('es-SV', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>
+   642→    <div class="signature">
+   643→      <div class="sig-line">Firma y Sello<br/>Recursos Humanos</div>
+   644→    </div>
+   645→  `;
+   646→}
+   647→
+   648→/* ─── Document Generator Component (inside dialog) ─── */
+   649→function DocumentGenerator({
+   650→  docGenType,
+   651→  setDocGenType,
+   652→  empleado,
+   653→  planillas,
+   654→  selectedPlanilla,
+   655→  setSelectedPlanilla,
+   656→  aguinaldoAnio,
+   657→  setAguinaldoAnio,
+   658→  accessToken,
+   659→  formatDate,
+   660→  formatSalary,
+   661→  getNombreCompleto,
+   662→  addToRecentDocs,
+   663→  docGenGenerating,
+   664→  setDocGenGenerating,
+   665→  onClose,
+   666→  toast,
+   667→}: {
+   668→  docGenType: string;
+   669→  setDocGenType: (v: string) => void;
+   670→  empleado: EmpleadoDetail;
+   671→  planillas: Array<{ id: string; codigo_planilla: string; tipo: string; estado: string; fecha_inicio_periodo: string; fecha_fin_periodo: string }>;
+   672→  selectedPlanilla: string;
+   673→  setSelectedPlanilla: (v: string) => void;
+   674→  aguinaldoAnio: string;
+   675→  setAguinaldoAnio: (v: string) => void;
+   676→  accessToken: string | null;
+   677→  formatDate: (d: string | null) => string;
+   678→  formatSalary: (n: number) => string;
+   679→  getNombreCompleto: () => string;
+   680→  addToRecentDocs: (doc: { id: string; title: string; type: string; date: string; category: string }) => void;
+   681→  docGenGenerating: boolean;
+   682→  setDocGenGenerating: (v: boolean) => void;
+   683→  onClose: () => void;
+   684→  toast: (opts: { title: string; description?: string; variant?: string }) => void;
+   685→}) {
+   686→  const nombre = getNombreCompleto();
+   687→  const activeContract = empleado.contratos.find(c => c.activo);
+   688→
+   689→  const handleGenerate = async () => {
+   690→    setDocGenGenerating(true);
+   691→    try {
+   692→      if (docGenType === 'boleta_pago') {
+   693→        if (!selectedPlanilla) {
+   694→          toast({ title: 'Error', description: 'Seleccione una planilla', variant: 'destructive' });
+   695→          setDocGenGenerating(false);
+   696→          return;
+   697→        }
+   698→        const p = planillas.find(pl => pl.id === selectedPlanilla);
+   699→        const res = await fetch(`/api/nomina/planillas/${selectedPlanilla}/boleta?empleado_id=${empleado.id}`, {
+   700→          headers: { Authorization: `Bearer ${accessToken}` },
+   701→        });
+   702→        if (!res.ok) {
+   703→          const data = await res.json().catch(() => ({}));
+   704→          toast({ title: 'Error', description: (data as { error?: string }).error || 'Error al generar boleta', variant: 'destructive' });
+   705→          setDocGenGenerating(false);
+   706→          return;
+   707→        }
+   708→        const blob = await res.blob();
+   709→        const url = window.URL.createObjectURL(blob);
+   710→        const a = document.createElement('a');
+   711→        a.href = url;
+   712→        a.download = `boleta-${empleado.codigo_empleado}-${p?.codigo_planilla || 'planilla'}.pdf`;
+   713→        a.click();
+   714→        window.URL.revokeObjectURL(url);
+   715→        addToRecentDocs({
+   716→          id: `boleta-${selectedPlanilla}`,
+   717→          title: `Boleta ${p?.codigo_planilla || ''}`,
+   718→          type: 'Boleta de Pago',
+   719→          date: new Date().toISOString(),
+   720→          category: 'boletas',
+   721→        });
+   722→      } else if (docGenType === 'constancia_aguinaldo') {
+   723→        const res = await fetch(`/api/nomina/aguinaldo/pdf?empleado_id=${empleado.id}&anio=${aguinaldoAnio}`, {
+   724→          headers: { Authorization: `Bearer ${accessToken}` },
+   725→        });
+   726→        if (!res.ok) {
+   727→          const data = await res.json().catch(() => ({}));
+   728→          toast({ title: 'Error', description: (data as { error?: string }).error || 'Error al generar constancia', variant: 'destructive' });
+   729→          setDocGenGenerating(false);
+   730→          return;
+   731→        }
+   732→        const blob = await res.blob();
+   733→        const url = window.URL.createObjectURL(blob);
+   734→        const a = document.createElement('a');
+   735→        a.href = url;
+   736→        a.download = `aguinaldo-${empleado.codigo_empleado}-${aguinaldoAnio}.pdf`;
+   737→        a.click();
+   738→        window.URL.revokeObjectURL(url);
+   739→        addToRecentDocs({
+   740→          id: `aguinaldo-${aguinaldoAnio}`,
+   741→          title: `Constancia Aguinaldo ${aguinaldoAnio}`,
+   742→          type: 'Constancia de Aguinaldo',
+   743→          date: new Date().toISOString(),
+   744→          category: 'constancias',
+   745→        });
+   746→      } else {
+   747→        // Text-based documents
+   748→        let content = '';
+   749→        let filename = '';
+   750→        let title = '';
+   751→        let category = 'constancias';
+   752→
+   753→        if (docGenType === 'constancia_empleo') {
+   754→          content = generateConstanciaEmpleoHTML(empleado, formatDate, formatSalary);
+   755→          filename = `constancia-empleo-${empleado.codigo_empleado}.txt`;
+   756→          title = 'Constancia de Empleo';
+   757→        } else if (docGenType === 'constancia_salario') {
+   758→          content = generateConstanciaSalarioHTML(empleado, formatDate, formatSalary);
+   759→          filename = `constancia-salario-${empleado.codigo_empleado}.txt`;
+   760→          title = 'Constancia de Salario';
+   761→        } else if (docGenType === 'carta_referencia') {
+   762→          content = generateCartaReferenciaHTML(empleado, formatDate, formatSalary);
+   763→          filename = `carta-referencia-${empleado.codigo_empleado}.txt`;
+   764→          title = 'Carta de Referencia';
+   765→          category = 'cartas';
+   766→        }
+   767→
+   768→        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+   769→        const url = window.URL.createObjectURL(blob);
+   770→        const a = document.createElement('a');
+   771→        a.href = url;
+   772→        a.download = filename;
+   773→        a.click();
+   774→        window.URL.revokeObjectURL(url);
+   775→        addToRecentDocs({
+   776→          id: docGenType,
+   777→          title,
+   778→          type: title,
+   779→          date: new Date().toISOString(),
+   780→          category,
+   781→        });
+   782→      }
+   783→
+   784→      toast({ title: 'Documento generado', description: 'El documento ha sido generado y descargado exitosamente' });
+   785→      onClose();
+   786→    } catch {
+   787→      toast({ title: 'Error', description: 'Error al generar el documento', variant: 'destructive' });
+   788→    } finally {
+   789→      setDocGenGenerating(false);
+   790→    }
+   791→  };
+   792→
+   793→  const renderPreview = () => {
+   794→    if (docGenType === 'constancia_empleo') {
+   795→      return (
+   796→        <div className="space-y-3">
+   797→          <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4">
+   798→            <h4 className="text-sm font-bold text-emerald-700 dark:text-emerald-300 text-center mb-3">CONSTANCIA DE EMPLEO</h4>
+   799→            <Separator className="mb-3" />
+   800→            <div className="space-y-2 text-sm">
+   801→              <div className="flex justify-between"><span className="text-slate-500">Nombre:</span><span className="font-medium text-slate-900 dark:text-slate-100">{nombre}</span></div>
+   802→              <div className="flex justify-between"><span className="text-slate-500">DUI:</span><span className="font-medium text-slate-900 dark:text-slate-100">{empleado.dui}</span></div>
+   803→              <div className="flex justify-between"><span className="text-slate-500">Puesto:</span><span className="font-medium text-slate-900 dark:text-slate-100">{empleado.perfil_puesto?.nombre_puesto || 'N/A'}</span></div>
+   804→              <div className="flex justify-between"><span className="text-slate-500">Departamento:</span><span className="font-medium text-slate-900 dark:text-slate-100">{empleado.area?.nombre || 'N/A'}</span></div>
+   805→              <div className="flex justify-between"><span className="text-slate-500">Fecha Ingreso:</span><span className="font-medium text-slate-900 dark:text-slate-100">{formatDate(empleado.fecha_ingreso)}</span></div>
+   806→              <div className="flex justify-between"><span className="text-slate-500">Tipo Contrato:</span><span className="font-medium text-slate-900 dark:text-slate-100">{activeContract?.tipo_contrato?.replace(/_/g, ' ') || 'N/A'}</span></div>
+   807→              <div className="flex justify-between"><span className="text-slate-500">Estado:</span><Badge className={getDocStatusColor(empleado.estado === 'ACTIVO' ? 'Vigente' : 'Expirado')}>{empleado.estado}</Badge></div>
+   808→            </div>
+   809→          </div>
+   810→        </div>
+   811→      );
+   812→    }
+   813→
+   814→    if (docGenType === 'constancia_salario') {
+   815→      const salario = empleado.salario_base;
+   816→      const isss = salario * 0.03;
+   817→      const afp = salario * 0.0725;
+   818→      return (
+   819→        <div className="space-y-3">
+   820→          <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+   821→            <h4 className="text-sm font-bold text-amber-700 dark:text-amber-300 text-center mb-3">CONSTANCIA DE SALARIO</h4>
+   822→            <Separator className="mb-3" />
+   823→            <div className="space-y-2 text-sm">
+   824→              <div className="flex justify-between"><span className="text-slate-500">Nombre:</span><span className="font-medium text-slate-900 dark:text-slate-100">{nombre}</span></div>
+   825→              <div className="flex justify-between"><span className="text-slate-500">Puesto:</span><span className="font-medium text-slate-900 dark:text-slate-100">{empleado.perfil_puesto?.nombre_puesto || 'N/A'}</span></div>
+   826→              <Separator className="my-2" />
+   827→              <div className="flex justify-between"><span className="text-slate-500">Salario Base:</span><span className="font-semibold text-emerald-700 dark:text-emerald-400">{formatSalary(salario)}</span></div>
+   828→              <div className="flex justify-between text-red-600 dark:text-red-400"><span>ISSS Laboral (3%):</span><span>-{formatSalary(isss)}</span></div>
+   829→              <div className="flex justify-between text-red-600 dark:text-red-400"><span>AFP Laboral (7.25%):</span><span>-{formatSalary(afp)}</span></div>
+   830→            </div>
+   831→          </div>
+   832→        </div>
+   833→      );
+   834→    }
+   835→
+   836→    if (docGenType === 'carta_referencia') {
+   837→      return (
+   838→        <div className="space-y-3">
+   839→          <div className="bg-sky-50 dark:bg-sky-900/10 border border-sky-200 dark:border-sky-800 rounded-lg p-4">
+   840→            <h4 className="text-sm font-bold text-sky-700 dark:text-sky-300 text-center mb-3">CARTA DE REFERENCIA LABORAL</h4>
+   841→            <Separator className="mb-3" />
+   842→            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+   843→              Por medio de la presente, hacemos constar que <strong>{nombre}</strong>, portador(a) del DUI <strong>{empleado.dui}</strong>,
+   844→              ha laborado en nuestra institución desde el {formatDate(empleado.fecha_ingreso)} hasta la fecha,
+   845→              desempeñando el cargo de <strong>{empleado.perfil_puesto?.nombre_puesto || 'N/A'}</strong> en el
+   846→              departamento de <strong>{empleado.area?.nombre || 'N/A'}</strong>.
+   847→            </p>
+   848→          </div>
+   849→        </div>
+   850→      );
+   851→    }
+   852→
+   853→    if (docGenType === 'constancia_aguinaldo') {
+   854→      return (
+   855→        <div className="space-y-3">
+   856→          <div className="bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+   857→            <h4 className="text-sm font-bold text-purple-700 dark:text-purple-300 text-center mb-3">CONSTANCIA DE AGUINALDO</h4>
+   858→            <Separator className="mb-3" />
+   859→            <div className="space-y-2 text-sm">
+   860→              <div className="flex justify-between"><span className="text-slate-500">Empleado:</span><span className="font-medium text-slate-900 dark:text-slate-100">{nombre}</span></div>
+   861→              <div className="flex justify-between"><span className="text-slate-500">Año:</span><span className="font-medium text-slate-900 dark:text-slate-100">{aguinaldoAnio}</span></div>
+   862→              <div className="flex justify-between"><span className="text-slate-500">Salario Base:</span><span className="font-medium text-slate-900 dark:text-slate-100">{formatSalary(empleado.salario_base)}</span></div>
+   863→            </div>
+   864→            <p className="text-xs text-slate-500 mt-3">Se generará un PDF con el cálculo completo de aguinaldo.</p>
+   865→          </div>
+   866→          <div>
+   867→            <Label className="text-xs">Año del Aguinaldo</Label>
+   868→            <Select value={aguinaldoAnio} onValueChange={setAguinaldoAnio}>
+   869→              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+   870→              <SelectContent>
+   871→                <SelectItem value="2026">2026</SelectItem>
+   872→                <SelectItem value="2025">2025</SelectItem>
+   873→                <SelectItem value="2024">2024</SelectItem>
+   874→              </SelectContent>
+   875→            </Select>
+   876→          </div>
+   877→        </div>
+   878→      );
+   879→    }
+   880→
+   881→    if (docGenType === 'boleta_pago') {
+   882→      return (
+   883→        <div className="space-y-3">
+   884→          <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 dark:border-rose-800 rounded-lg p-4">
+   885→            <h4 className="text-sm font-bold text-rose-700 dark:text-rose-300 text-center mb-3">BOLETA DE PAGO</h4>
+   886→            <Separator className="mb-3" />
+   887→            <div className="space-y-2 text-sm">
+   888→              <div className="flex justify-between"><span className="text-slate-500">Empleado:</span><span className="font-medium text-slate-900 dark:text-slate-100">{nombre}</span></div>
+   889→              <div className="flex justify-between"><span className="text-slate-500">Código:</span><span className="font-medium text-slate-900 dark:text-slate-100">{empleado.codigo_empleado}</span></div>
+   890→            </div>
+   891→            <p className="text-xs text-slate-500 mt-3">Se generará un PDF con el detalle completo de la boleta.</p>
+   892→          </div>
+   893→          <div>
+   894→            <Label className="text-xs">Seleccionar Planilla</Label>
+   895→            <Select value={selectedPlanilla} onValueChange={setSelectedPlanilla}>
+   896→              <SelectTrigger className="h-9"><SelectValue placeholder="Seleccionar planilla..." /></SelectTrigger>
+   897→              <SelectContent>
+   898→                {planillas.length === 0 ? (
+   899→                  <SelectItem value="_none" disabled>No hay planillas disponibles</SelectItem>
+   900→                ) : (
+   901→                  planillas.map(p => (
+   902→                    <SelectItem key={p.id} value={p.id}>
+   903→                      {p.codigo_planilla} — {formatDate(p.fecha_inicio_periodo)} a {formatDate(p.fecha_fin_periodo)}
+   904→                    </SelectItem>
+   905→                  ))
+   906→                )}
+   907→              </SelectContent>
+   908→            </Select>
+   909→          </div>
+   910→        </div>
+   911→      );
+   912→    }
+   913→
+   914→    return null;
+   915→  };
+   916→
+   917→  return (
+   918→    <div className="space-y-4">
+   919→      <button
+   920→        onClick={() => setDocGenType('')}
+   921→        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-emerald-600 transition-colors"
+   922→      >
+   923→        <ChevronDown className="h-4 w-4 rotate-90" /> Cambiar tipo de documento
+   924→      </button>
+   925→
+   926→      {renderPreview()}
+   927→
+   928→      <div className="flex justify-end gap-2 pt-2">
+   929→        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+   930→        <Button
+   931→          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   932→          onClick={handleGenerate}
+   933→          disabled={docGenGenerating}
+   934→        >
+   935→          {docGenGenerating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Download className="h-4 w-4 mr-1.5" />}
+   936→          Generar y Descargar
+   937→        </Button>
+   938→      </div>
+   939→    </div>
+   940→  );
+   941→}
+   942→
+   943→/* ─── circular progress ring ─── */
+   944→function CircularProgress({ value, max, size = 80, strokeWidth = 6, color = 'emerald' }: {
+   945→  value: number; max: number; size?: number; strokeWidth?: number; color?: string;
+   946→}) {
+   947→  const radius = (size - strokeWidth) / 2;
+   948→  const circumference = radius * 2 * Math.PI;
+   949→  const pct = max > 0 ? Math.min(value / max, 1) : 0;
+   950→  const offset = circumference - pct * circumference;
+   951→  const colorMap: Record<string, string> = {
+   952→    emerald: 'text-emerald-500',
+   953→    amber: 'text-amber-500',
+   954→    sky: 'text-sky-500',
+   955→    purple: 'text-purple-500',
+   956→  };
+   957→  const strokeClass = colorMap[color] || colorMap.emerald;
+   958→  return (
+   959→    <svg width={size} height={size} className="-rotate-90">
+   960→      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className="text-slate-200 dark:text-slate-700" />
+   961→      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" className={`${strokeClass} transition-all duration-700`} />
+   962→    </svg>
+   963→  );
+   964→}
+   965→
+   966→export default function EmployeeDetail({ empleadoId, onBack, userRole, accessToken }: EmployeeDetailProps) {
+   967→  const [empleado, setEmpleado] = useState<EmpleadoDetail | null>(null);
+   968→  const [loading, setLoading] = useState(true);
+   969→  const [editing, setEditing] = useState(false);
+   970→  const [editData, setEditData] = useState<Record<string, unknown>>({});
+   971→  const [saving, setSaving] = useState(false);
+   972→  const [newContractOpen, setNewContractOpen] = useState(false);
+   973→  const [contractData, setContractData] = useState({ tipo_contrato: 'INDEFINIDO', salario_base_contrato: '', tipo_jornada: 'COMPLETA', fecha_inicio: '', fecha_fin: '', observaciones: '' });
+   974→  const { toast } = useToast();
+   975→
+   976→  // Document management state
+   977→  const [docCategory, setDocCategory] = useState<string>('todos');
+   978→  const [docSearch, setDocSearch] = useState('');
+   979→  const [docGenOpen, setDocGenOpen] = useState(false);
+   980→  const [docGenType, setDocGenType] = useState<string>('');
+   981→  const [docGenGenerating, setDocGenGenerating] = useState(false);
+   982→  const [recentDocs, setRecentDocs] = useState<Array<{ id: string; title: string; type: string; date: string; category: string }>>([]);
+   983→  const [planillas, setPlanillas] = useState<Array<{ id: string; codigo_planilla: string; tipo: string; estado: string; fecha_inicio_periodo: string; fecha_fin_periodo: string }>>([]);
+   984→  const [selectedPlanilla, setSelectedPlanilla] = useState<string>('');
+   985→  const [aguinaldoAnio, setAguinaldoAnio] = useState<string>(new Date().getFullYear().toString());
+   986→
+   987→  const fetchEmpleado = useCallback(async () => {
+   988→    setLoading(true);
+   989→    try {
+   990→      const res = await fetch(`/api/empleados/${empleadoId}`, {
+   991→        headers: { Authorization: `Bearer ${accessToken}` },
+   992→      });
+   993→      const data = await res.json();
+   994→      if (res.ok) {
+   995→        setEmpleado(data.data);
+   996→      }
+   997→    } catch (err) {
+   998→      console.error('Error fetching employee:', err);
+   999→    } finally {
+  1000→      setLoading(false);
+  1001→    }
+  1002→  }, [empleadoId, accessToken]);
+  1003→
+  1004→  useEffect(() => { fetchEmpleado(); }, [fetchEmpleado]);
+  1005→
+  1006→  // Fetch planillas for boleta generation
+  1007→  useEffect(() => {
+  1008→    const fetchPlanillas = async () => {
+  1009→      try {
+  1010→        const res = await fetch('/api/nomina/planillas?limit=50&estado=CERRADA', {
+  1011→          headers: { Authorization: `Bearer ${accessToken}` },
+  1012→        });
+  1013→        const data = await res.json();
+  1014→        if (res.ok && data.data) {
+  1015→          setPlanillas(data.data.map((p: { id: string; codigo_planilla: string; tipo: string; estado: string; fecha_inicio_periodo: string; fecha_fin_periodo: string }) => ({
+  1016→            id: p.id,
+  1017→            codigo_planilla: p.codigo_planilla,
+  1018→            tipo: p.tipo,
+  1019→            estado: p.estado,
+  1020→            fecha_inicio_periodo: p.fecha_inicio_periodo,
+  1021→            fecha_fin_periodo: p.fecha_fin_periodo,
+  1022→          })));
+  1023→        }
+  1024→      } catch {
+  1025→        // silently ignore
+  1026→      }
+  1027→    };
+  1028→    if (accessToken) fetchPlanillas();
+  1029→  }, [accessToken]);
+  1030→
+  1031→  // Load recent docs from localStorage
+  1032→  useEffect(() => {
+  1033→    try {
+  1034→      const stored = localStorage.getItem(`recentDocs_${empleadoId}`);
+  1035→      if (stored) setRecentDocs(JSON.parse(stored));
+  1036→    } catch {
+  1037→      // silently ignore
+  1038→    }
+  1039→  }, [empleadoId]);
+  1040→
+  1041→  const addToRecentDocs = useCallback((doc: { id: string; title: string; type: string; date: string; category: string }) => {
+  1042→    setRecentDocs(prev => {
+  1043→      const filtered = prev.filter(d => d.id !== doc.id);
+  1044→      const updated = [doc, ...filtered].slice(0, 5);
+  1045→      try { localStorage.setItem(`recentDocs_${empleadoId}`, JSON.stringify(updated)); } catch { /* ignore */ }
+  1046→      return updated;
+  1047→    });
+  1048→  }, [empleadoId]);
+  1049→
+  1050→  const canEdit = userRole === 'ADMIN' || userRole === 'ANALISTA';
+  1051→  const canEditOwn = userRole === 'EMPLEADO';
+  1052→
+  1053→  const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('es-SV') : '—';
+  1054→  const formatSalary = (amount: number) => `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  1055→  const getNombreCompleto = () => {
+  1056→    if (!empleado) return '';
+  1057→    return `${empleado.primer_nombre}${empleado.segundo_nombre ? ' ' + empleado.segundo_nombre : ''} ${empleado.primer_apellido}${empleado.segundo_apellido ? ' ' + empleado.segundo_apellido : ''}`;
+  1058→  };
+  1059→
+  1060→  const getInitials = () => {
+  1061→    if (!empleado) return '';
+  1062→    const first = empleado.primer_nombre?.[0] || '';
+  1063→    const last = empleado.primer_apellido?.[0] || '';
+  1064→    return `${first}${last}`.toUpperCase();
+  1065→  };
+  1066→
+  1067→  const handleEdit = () => {
+  1068→    if (!empleado) return;
+  1069→    setEditData({
+  1070→      primer_nombre: empleado.primer_nombre,
+  1071→      segundo_nombre: empleado.segundo_nombre || '',
+  1072→      primer_apellido: empleado.primer_apellido,
+  1073→      segundo_apellido: empleado.segundo_apellido || '',
+  1074→      apellido_casada: empleado.apellido_casada || '',
+  1075→      dui: empleado.dui,
+  1076→      nit: empleado.nit || '',
+  1077→      genero: empleado.genero || '',
+  1078→      estado_civil: empleado.estado_civil || '',
+  1079→      direccion: empleado.direccion || '',
+  1080→      telefono: empleado.telefono || '',
+  1081→      email_personal: empleado.email_personal || '',
+  1082→      fecha_nacimiento: empleado.fecha_nacimiento ? new Date(empleado.fecha_nacimiento).toISOString().slice(0, 10) : '',
+  1083→      numero_isss: empleado.numero_isss || '',
+  1084→      numero_afp: empleado.numero_afp || '',
+  1085→      afp_administradora: empleado.afp_administradora || '',
+  1086→      tipo_sangre: empleado.tipo_sangre || '',
+  1087→      contacto_emergencia_nombre: empleado.contacto_emergencia_nombre || '',
+  1088→      contacto_emergencia_telefono: empleado.contacto_emergencia_telefono || '',
+  1089→      contacto_emergencia_relacion: empleado.contacto_emergencia_relacion || '',
+  1090→    });
+  1091→    setEditing(true);
+  1092→  };
+  1093→
+  1094→  const handleSave = async () => {
+  1095→    setSaving(true);
+  1096→    try {
+  1097→      const res = await fetch(`/api/empleados/${empleadoId}`, {
+  1098→        method: 'PUT',
+  1099→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+  1100→        body: JSON.stringify(editData),
+  1101→      });
+  1102→      const data = await res.json();
+  1103→      if (res.ok) {
+  1104→        toast({ title: 'Empleado actualizado', description: 'Los datos han sido guardados correctamente' });
+  1105→        setEditing(false);
+  1106→        fetchEmpleado();
+  1107→      } else {
+  1108→        toast({ title: 'Error', description: data.error || 'Error al actualizar', variant: 'destructive' });
+  1109→      }
+  1110→    } catch {
+  1111→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+  1112→    } finally {
+  1113→      setSaving(false);
+  1114→    }
+  1115→  };
+  1116→
+  1117→  const handleCreateContract = async () => {
+  1118→    setSaving(true);
+  1119→    try {
+  1120→      const res = await fetch(`/api/empleados/${empleadoId}/contratos`, {
+  1121→        method: 'POST',
+  1122→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+  1123→        body: JSON.stringify({
+  1124→          ...contractData,
+  1125→          salario_base_contrato: parseFloat(contractData.salario_base_contrato),
+  1126→          fecha_fin: contractData.fecha_fin || null,
+  1127→        }),
+  1128→      });
+  1129→      const data = await res.json();
+  1130→      if (res.ok) {
+  1131→        toast({ title: 'Contrato creado', description: 'El nuevo contrato ha sido registrado' });
+  1132→        setNewContractOpen(false);
+  1133→        setContractData({ tipo_contrato: 'INDEFINIDO', salario_base_contrato: '', tipo_jornada: 'COMPLETA', fecha_inicio: '', fecha_fin: '', observaciones: '' });
+  1134→        fetchEmpleado();
+  1135→      } else {
+  1136→        toast({ title: 'Error', description: data.error || 'Error al crear contrato', variant: 'destructive' });
+  1137→      }
+  1138→    } catch {
+  1139→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+  1140→    } finally {
+  1141→      setSaving(false);
+  1142→    }
+  1143→  };
+  1144→
+  1145→  /* ─── Loading ─── */
+  1146→  if (loading) {
+  1147→    return (
+  1148→      <div className="space-y-4">
+  1149→        <Skeleton className="h-10 w-48" />
+  1150→        <Skeleton className="h-48 w-full rounded-xl" />
+  1151→        <Skeleton className="h-8 w-full" />
+  1152→        <Skeleton className="h-64 w-full" />
+  1153→      </div>
+  1154→    );
+  1155→  }
+  1156→
+  1157→  /* ─── Not found ─── */
+  1158→  if (!empleado) {
+  1159→    return (
+  1160→      <Card className="shadow-sm">
+  1161→        <CardContent className="p-12 text-center">
+  1162→          <AlertCircle className="h-10 w-10 text-slate-400 mx-auto mb-2" />
+  1163→          <p className="text-slate-600">Empleado no encontrado</p>
+  1164→          <Button variant="outline" className="mt-4" onClick={onBack}>
+  1165→            <ArrowLeft className="h-4 w-4 mr-1" /> Volver
+  1166→          </Button>
+  1167→        </CardContent>
+  1168→      </Card>
+  1169→    );
+  1170→  }
+  1171→
+  1172→  const activeContract = empleado.contratos.find(c => c.activo);
+  1173→  const totalVacPendientes = empleado.vacaciones.reduce((s, v) => s + v.dias_pendientes, 0);
+  1174→  const totalVacDerecho = empleado.vacaciones.reduce((s, v) => s + v.dias_derecho, 0);
+  1175→
+  1176→  /* ─── InfoField with icon ─── */
+  1177→  const InfoField = ({ label, value, icon }: { label: string; value: string | null | undefined; icon?: React.ReactNode }) => (
+  1178→    <div className="flex items-start gap-2.5 py-2">
+  1179→      {icon && <span className="mt-0.5 text-slate-400 shrink-0">{icon}</span>}
+  1180→      <div className="min-w-0">
+  1181→        <p className="text-[11px] text-slate-400 font-medium uppercase tracking-wider">{label}</p>
+  1182→        <p className="text-sm text-slate-800 dark:text-slate-200 mt-0.5 font-medium">{value || '—'}</p>
+  1183→      </div>
+  1184→    </div>
+  1185→  );
+  1186→
+  1187→  const EditField = ({ label, field, type = 'text' }: { label: string; field: string; type?: string }) => (
+  1188→    <div>
+  1189→      <Label className="text-xs">{label}</Label>
+  1190→      <Input
+  1191→        type={type}
+  1192→        value={String(editData[field] || '')}
+  1193→        onChange={e => setEditData(prev => ({ ...prev, [field]: e.target.value }))}
+  1194→        className="h-8 text-sm"
+  1195→      />
+  1196→    </div>
+  1197→  );
+  1198→
+  1199→  return (
+  1200→    <div className="space-y-5">
+  1201→      {/* ═══════════════════════════════════════════
+  1202→          ENHANCED HEADER PROFILE CARD
+  1203→         ═══════════════════════════════════════════ */}
+  1204→      <Card className="overflow-hidden border-0 shadow-lg">
+  1205→        {/* Gradient banner */}
+  1206→        <div className="h-28 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-700 relative">
+  1207→          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PGNpcmNsZSBjeD0iMjAiIGN5PSIyMCIgcj0iMSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjA4KSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgZmlsbD0idXJsKCNnKSIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIvPjwvc3ZnPg==')] opacity-60" />
+  1208→        </div>
+  1209→        <div className="relative px-6 pb-5">
+  1210→          {/* Avatar */}
+  1211→          <div className="-mt-14 mb-4 flex items-end justify-between">
+  1212→            <div className="flex items-end gap-4">
+  1213→              <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 border-4 border-white shadow-lg flex items-center justify-center">
+  1214→                <span className="text-3xl font-bold text-white">{getInitials()}</span>
+  1215→              </div>
+  1216→              <div className="pb-1">
+  1217→                <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{getNombreCompleto()}</h2>
+  1218→                <div className="flex items-center gap-2 mt-1">
+  1219→                  <span className="text-sm text-slate-500 dark:text-slate-400">
+  1220→                    {empleado.perfil_puesto?.nombre_puesto || empleado.area?.nombre || 'Sin puesto asignado'}
+  1221→                  </span>
+  1222→                  <span className="text-slate-300">•</span>
+  1223→                  <span className="text-sm text-slate-500 dark:text-slate-400">{empleado.area?.nombre || 'Sin área'}</span>
+  1224→                  <Badge className={`ml-2 text-xs ${empleado.estado === 'ACTIVO' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+  1225→                    {empleado.estado}
+  1226→                  </Badge>
+  1227→                </div>
+  1228→              </div>
+  1229→            </div>
+  1230→            <div className="flex items-center gap-2 pb-1">
+  1231→              <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700" onClick={() => window.print()}>
+  1232→                <Printer className="h-4 w-4 mr-1" /> Imprimir
+  1233→              </Button>
+  1234→              <Button variant="outline" size="sm" onClick={onBack}>
+  1235→                <ArrowLeft className="h-4 w-4 mr-1" /> Volver
+  1236→              </Button>
+  1237→              {(canEdit || canEditOwn) && !editing && (
+  1238→                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleEdit}>
+  1239→                  <Edit2 className="h-4 w-4 mr-1" /> Editar
+  1240→                </Button>
+  1241→              )}
+  1242→              {editing && (
+  1243→                <div className="flex gap-2">
+  1244→                  <Button variant="outline" size="sm" onClick={() => setEditing(false)}><X className="h-4 w-4 mr-1" /> Cancelar</Button>
+  1245→                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleSave} disabled={saving}>
+  1246→                    {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />} Guardar
+  1247→                  </Button>
+  1248→                </div>
+  1249→              )}
+  1250→            </div>
+  1251→          </div>
+  1252→
+  1253→          {/* Quick info row */}
+  1254→          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-2">
+  1255→            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1256→              <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+  1257→                <Hash className="h-4 w-4 text-emerald-600" />
+  1258→              </div>
+  1259→              <div>
+  1260→                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Código</p>
+  1261→                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{empleado.codigo_empleado}</p>
+  1262→              </div>
+  1263→            </div>
+  1264→            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1265→              <div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+  1266→                <CreditCard className="h-4 w-4 text-amber-600" />
+  1267→              </div>
+  1268→              <div>
+  1269→                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">DUI</p>
+  1270→                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{empleado.dui}</p>
+  1271→              </div>
+  1272→            </div>
+  1273→            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1274→              <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+  1275→                <DollarSign className="h-4 w-4 text-emerald-600" />
+  1276→              </div>
+  1277→              <div>
+  1278→                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Salario</p>
+  1279→                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{formatSalary(empleado.salario_base)}</p>
+  1280→              </div>
+  1281→            </div>
+  1282→            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+  1283→              <div className="h-9 w-9 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+  1284→                <CalendarDays className="h-4 w-4 text-sky-600" />
+  1285→              </div>
+  1286→              <div>
+  1287→                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Fecha Ingreso</p>
+  1288→                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{formatDate(empleado.fecha_ingreso)}</p>
+  1289→              </div>
+  1290→            </div>
+  1291→          </div>
+  1292→        </div>
+  1293→      </Card>
+  1294→
+  1295→      {/* ═══════════════════════════════════════════
+  1296→          ENHANCED TAB NAVIGATION
+  1297→         ═══════════════════════════════════════════ */}
+  1298→      <Tabs defaultValue="general" className="space-y-4">
+  1299→        <div className="border-b border-slate-200 dark:border-slate-700">
+  1300→          <TabsList className="bg-transparent h-auto p-0 gap-0 w-full justify-start overflow-x-auto">
+  1301→            <TabsTrigger value="general" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+  1302→              <User className="h-4 w-4" /> General
+  1303→            </TabsTrigger>
+  1304→            <TabsTrigger value="contratos" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+  1305→              <FileText className="h-4 w-4" /> Contratos
+  1306→            </TabsTrigger>
+  1307→            <TabsTrigger value="salario" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+  1308→              <DollarSign className="h-4 w-4" /> Salario
+  1309→            </TabsTrigger>
+  1310→            <TabsTrigger value="vacaciones" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+  1311→              <CalendarDays className="h-4 w-4" /> Vacaciones
+  1312→            </TabsTrigger>
+  1313→            <TabsTrigger value="incidencias" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+  1314→              <AlertTriangle className="h-4 w-4" /> Incidencias
+  1315→            </TabsTrigger>
+  1316→            <TabsTrigger value="documentos" className="relative px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-emerald-600 data-[state=active]:text-emerald-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all flex items-center gap-1.5">
+  1317→              <FolderOpen className="h-4 w-4" /> Documentos
+  1318→            </TabsTrigger>
+  1319→          </TabsList>
+  1320→        </div>
+  1321→
+  1322→        {/* ═══════════════════════════════════════════
+  1323→            TAB: GENERAL — Grouped info cards
+  1324→           ═══════════════════════════════════════════ */}
+  1325→        <TabsContent value="general">
+  1326→          {editing ? (
+  1327→            <Card className="shadow-sm border-emerald-200">
+  1328→              <CardHeader className="pb-3 bg-emerald-50/50 dark:bg-emerald-900/10">
+  1329→                <CardTitle className="text-base flex items-center gap-2">
+  1330→                  <Edit2 className="h-4 w-4 text-emerald-600" />
+  1331→                  Editar Datos Personales
+  1332→                </CardTitle>
+  1333→              </CardHeader>
+  1334→              <CardContent className="pt-4">
+  1335→                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  1336→                  <EditField label="Primer Nombre" field="primer_nombre" />
+  1337→                  <EditField label="Segundo Nombre" field="segundo_nombre" />
+  1338→                  <EditField label="Primer Apellido" field="primer_apellido" />
+  1339→                  <EditField label="Segundo Apellido" field="segundo_apellido" />
+  1340→                  <EditField label="Apellido de Casada" field="apellido_casada" />
+  1341→                  <EditField label="DUI" field="dui" />
+  1342→                  <EditField label="NIT" field="nit" />
+  1343→                  <EditField label="Fecha de Nacimiento" field="fecha_nacimiento" type="date" />
+  1344→                  <div>
+  1345→                    <Label className="text-xs">Género</Label>
+  1346→                    <Select value={String(editData.genero || '')} onValueChange={v => setEditData(p => ({ ...p, genero: v }))}>
+  1347→                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+  1348→                      <SelectContent>
+  1349→                        <SelectItem value="">Seleccionar</SelectItem>
+  1350→                        <SelectItem value="MASCULINO">Masculino</SelectItem>
+  1351→                        <SelectItem value="FEMENINO">Femenino</SelectItem>
+  1352→                      </SelectContent>
+  1353→                    </Select>
+  1354→                  </div>
+  1355→                  <EditField label="Teléfono" field="telefono" />
+  1356→                  <EditField label="Email Personal" field="email_personal" type="email" />
+  1357→                  <div className="sm:col-span-2 lg:col-span-3">
+  1358→                    <EditField label="Dirección" field="direccion" />
+  1359→                  </div>
+  1360→                  <Separator className="sm:col-span-2 lg:col-span-3" />
+  1361→                  <EditField label="Contacto Emergencia Nombre" field="contacto_emergencia_nombre" />
+  1362→                  <EditField label="Contacto Emergencia Teléfono" field="contacto_emergencia_telefono" />
+  1363→                  <EditField label="Contacto Emergencia Relación" field="contacto_emergencia_relacion" />
+  1364→                </div>
+  1365→              </CardContent>
+  1366→            </Card>
+  1367→          ) : (
+  1368→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1369→              {/* Datos Personales */}
+  1370→              <Card className="shadow-sm border-l-4 border-l-emerald-500">
+  1371→                <CardHeader className="pb-2">
+  1372→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+  1373→                    <User className="h-4 w-4" /> Datos Personales
+  1374→                  </CardTitle>
+  1375→                </CardHeader>
+  1376→                <CardContent className="pt-0 space-y-0.5">
+  1377→                  <InfoField label="Primer Nombre" value={empleado.primer_nombre} icon={<User className="h-3.5 w-3.5" />} />
+  1378→                  <InfoField label="Segundo Nombre" value={empleado.segundo_nombre} icon={<User className="h-3.5 w-3.5" />} />
+  1379→                  <InfoField label="Primer Apellido" value={empleado.primer_apellido} icon={<User className="h-3.5 w-3.5" />} />
+  1380→                  <InfoField label="Segundo Apellido" value={empleado.segundo_apellido} icon={<User className="h-3.5 w-3.5" />} />
+  1381→                  <InfoField label="Apellido de Casada" value={empleado.apellido_casada} icon={<User className="h-3.5 w-3.5" />} />
+  1382→                  <InfoField label="DUI" value={empleado.dui} icon={<CreditCard className="h-3.5 w-3.5" />} />
+  1383→                  <InfoField label="NIT" value={empleado.nit} icon={<Hash className="h-3.5 w-3.5" />} />
+  1384→                  <InfoField label="Fecha Nacimiento" value={formatDate(empleado.fecha_nacimiento)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+  1385→                  <InfoField label="Género" value={empleado.genero} icon={<User className="h-3.5 w-3.5" />} />
+  1386→                  <InfoField label="Estado Civil" value={empleado.estado_civil} icon={<Users className="h-3.5 w-3.5" />} />
+  1387→                  <InfoField label="Nacionalidad" value={empleado.nacionalidad} icon={<Globe className="h-3.5 w-3.5" />} />
+  1388→                </CardContent>
+  1389→              </Card>
+  1390→
+  1391→              {/* Datos Laborales */}
+  1392→              <Card className="shadow-sm border-l-4 border-l-amber-500">
+  1393→                <CardHeader className="pb-2">
+  1394→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-700 dark:text-amber-400">
+  1395→                    <Briefcase className="h-4 w-4" /> Datos Laborales
+  1396→                  </CardTitle>
+  1397→                </CardHeader>
+  1398→                <CardContent className="pt-0 space-y-0.5">
+  1399→                  <InfoField label="Código Empleado" value={empleado.codigo_empleado} icon={<Hash className="h-3.5 w-3.5" />} />
+  1400→                  <InfoField label="Puesto" value={empleado.perfil_puesto?.nombre_puesto} icon={<Briefcase className="h-3.5 w-3.5" />} />
+  1401→                  <InfoField label="Área" value={empleado.area?.nombre} icon={<Building2 className="h-3.5 w-3.5" />} />
+  1402→                  <InfoField label="Fecha Ingreso" value={formatDate(empleado.fecha_ingreso)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+  1403→                  <InfoField label="Fecha Salida" value={formatDate(empleado.fecha_salida)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+  1404→                  <InfoField label="Estado" value={empleado.estado} icon={<Shield className="h-3.5 w-3.5" />} />
+  1405→                  <InfoField label="Banda Salarial" value={empleado.perfil_puesto?.banda_salarial?.nombre} icon={<Award className="h-3.5 w-3.5" />} />
+  1406→                </CardContent>
+  1407→              </Card>
+  1408→
+  1409→              {/* Contacto */}
+  1410→              <Card className="shadow-sm border-l-4 border-l-sky-500">
+  1411→                <CardHeader className="pb-2">
+  1412→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-sky-700 dark:text-sky-400">
+  1413→                    <Phone className="h-4 w-4" /> Contacto
+  1414→                  </CardTitle>
+  1415→                </CardHeader>
+  1416→                <CardContent className="pt-0 space-y-0.5">
+  1417→                  <InfoField label="Teléfono" value={empleado.telefono} icon={<Phone className="h-3.5 w-3.5" />} />
+  1418→                  <InfoField label="Email Personal" value={empleado.email_personal} icon={<Mail className="h-3.5 w-3.5" />} />
+  1419→                  <Separator className="my-2" />
+  1420→                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">Contacto de Emergencia</p>
+  1421→                  <InfoField label="Nombre" value={empleado.contacto_emergencia_nombre} icon={<User className="h-3.5 w-3.5" />} />
+  1422→                  <InfoField label="Teléfono" value={empleado.contacto_emergencia_telefono} icon={<Phone className="h-3.5 w-3.5" />} />
+  1423→                  <InfoField label="Relación" value={empleado.contacto_emergencia_relacion} icon={<Users className="h-3.5 w-3.5" />} />
+  1424→                </CardContent>
+  1425→              </Card>
+  1426→
+  1427→              {/* Ubicación + Previsional */}
+  1428→              <Card className="shadow-sm border-l-4 border-l-purple-500">
+  1429→                <CardHeader className="pb-2">
+  1430→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-purple-700 dark:text-purple-400">
+  1431→                    <MapPin className="h-4 w-4" /> Ubicación y Previsional
+  1432→                  </CardTitle>
+  1433→                </CardHeader>
+  1434→                <CardContent className="pt-0 space-y-0.5">
+  1435→                  <InfoField label="Dirección" value={empleado.direccion} icon={<MapPin className="h-3.5 w-3.5" />} />
+  1436→                  <Separator className="my-2" />
+  1437→                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">Datos Previsionales</p>
+  1438→                  <InfoField label="Número ISSS" value={empleado.numero_isss} icon={<Shield className="h-3.5 w-3.5" />} />
+  1439→                  <InfoField label="Número AFP (NUP)" value={empleado.numero_afp} icon={<Shield className="h-3.5 w-3.5" />} />
+  1440→                  <InfoField label="AFP Administradora" value={empleado.afp_administradora} icon={<Building2 className="h-3.5 w-3.5" />} />
+  1441→                  <InfoField label="Tipo de Sangre" value={empleado.tipo_sangre} icon={<Droplets className="h-3.5 w-3.5" />} />
+  1442→                </CardContent>
+  1443→              </Card>
+  1444→            </div>
+  1445→          )}
+  1446→        </TabsContent>
+  1447→
+  1448→        {/* ═══════════════════════════════════════════
+  1449→            TAB: CONTRATOS — Timeline + status badges
+  1450→           ═══════════════════════════════════════════ */}
+  1451→        <TabsContent value="contratos">
+  1452→          <div className="space-y-4">
+  1453→            {/* Active Contract Highlighted */}
+  1454→            <Card className={`shadow-sm ${activeContract ? 'border-emerald-300 border-2 bg-emerald-50/30 dark:bg-emerald-900/10' : ''}`}>
+  1455→              <CardHeader className="pb-3">
+  1456→                <div className="flex items-center justify-between">
+  1457→                  <CardTitle className="text-base flex items-center gap-2">
+  1458→                    <FileText className="h-4 w-4 text-emerald-600" />
+  1459→                    Contrato Vigente
+  1460→                    {activeContract && (
+  1461→                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs ml-2">Activo</Badge>
+  1462→                    )}
+  1463→                  </CardTitle>
+  1464→                  {canEdit && (
+  1465→                    <Button size="sm" variant="outline" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => setNewContractOpen(true)}>
+  1466→                      <Plus className="h-4 w-4 mr-1" /> Nuevo Contrato
+  1467→                    </Button>
+  1468→                  )}
+  1469→                </div>
+  1470→              </CardHeader>
+  1471→              <CardContent>
+  1472→                {activeContract ? (
+  1473→                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  1474→                    <InfoField label="Tipo de Contrato" value={activeContract.tipo_contrato} icon={<FileText className="h-3.5 w-3.5" />} />
+  1475→                    <InfoField label="Salario Base" value={formatSalary(activeContract.salario_base_contrato)} icon={<DollarSign className="h-3.5 w-3.5" />} />
+  1476→                    <InfoField label="Jornada" value={activeContract.tipo_jornada} icon={<Clock className="h-3.5 w-3.5" />} />
+  1477→                    <InfoField label="Fecha Inicio" value={formatDate(activeContract.fecha_inicio)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+  1478→                    <InfoField label="Fecha Fin" value={activeContract.fecha_fin ? formatDate(activeContract.fecha_fin) : 'Indefinido'} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+  1479→                    <InfoField label="Puesto" value={activeContract.perfil_puesto?.nombre_puesto || '—'} icon={<Briefcase className="h-3.5 w-3.5" />} />
+  1480→                    {activeContract.observaciones && (
+  1481→                      <div className="sm:col-span-2 lg:col-span-3">
+  1482→                        <InfoField label="Observaciones" value={activeContract.observaciones} icon={<FileText className="h-3.5 w-3.5" />} />
+  1483→                      </div>
+  1484→                    )}
+  1485→                  </div>
+  1486→                ) : (
+  1487→                  <div className="flex flex-col items-center py-10 text-slate-400">
+  1488→                    <FileText className="h-10 w-10 mb-2" />
+  1489→                    <p className="text-sm font-medium">No hay contrato vigente</p>
+  1490→                  </div>
+  1491→                )}
+  1492→              </CardContent>
+  1493→            </Card>
+  1494→
+  1495→            {/* Contract History Timeline */}
+  1496→            <Card className="shadow-sm">
+  1497→              <CardHeader className="pb-3">
+  1498→                <CardTitle className="text-base flex items-center gap-2">
+  1499→                  <Clock className="h-4 w-4 text-slate-500" />
+  1500→                  Historial de Contratos
+  1501→                </CardTitle>
+  1502→              </CardHeader>
+  1503→              <CardContent>
+  1504→                {empleado.contratos.length === 0 ? (
+  1505→                  <p className="text-sm text-slate-500 text-center py-6">Sin contratos registrados</p>
+  1506→                ) : (
+  1507→                  <div className="relative space-y-0">
+  1508→                    {/* Timeline line */}
+  1509→                    <div className="absolute left-5 top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700" />
+  1510→                    {empleado.contratos.map((c, idx) => (
+  1511→                      <div key={c.id} className="relative flex items-start gap-4 py-3">
+  1512→                        {/* Timeline dot */}
+  1513→                        <div className={`relative z-10 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+  1514→                          c.activo
+  1515→                            ? 'border-emerald-500 bg-emerald-500'
+  1516→                            : 'border-slate-300 bg-white dark:bg-slate-800'
+  1517→                        }`}>
+  1518→                          {c.activo && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+  1519→                        </div>
+  1520→                        {/* Content card */}
+  1521→                        <div className={`flex-1 p-3 rounded-lg border transition-colors ${
+  1522→                          c.activo
+  1523→                            ? 'border-emerald-200 bg-emerald-50/50 dark:bg-emerald-900/10'
+  1524→                            : 'border-slate-100 bg-slate-50/50 dark:bg-slate-800/30'
+  1525→                        }`}>
+  1526→                          <div className="flex items-center justify-between">
+  1527→                            <div className="flex items-center gap-2">
+  1528→                              <Badge variant={c.activo ? 'default' : 'secondary'} className={c.activo ? 'bg-emerald-100 text-emerald-700' : 'text-xs'}>
+  1529→                                {c.activo ? 'Vigente' : 'Finalizado'}
+  1530→                              </Badge>
+  1531→                              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{c.tipo_contrato}</span>
+  1532→                            </div>
+  1533→                            <span className="text-sm font-mono text-emerald-600 font-semibold">{formatSalary(c.salario_base_contrato)}</span>
+  1534→                          </div>
+  1535→                          <div className="flex items-center gap-4 mt-1.5 text-xs text-slate-500">
+  1536→                            <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{formatDate(c.fecha_inicio)} — {c.fecha_fin ? formatDate(c.fecha_fin) : 'Indefinido'}</span>
+  1537→                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{c.tipo_jornada}</span>
+  1538→                            {c.perfil_puesto && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{c.perfil_puesto.nombre_puesto}</span>}
+  1539→                          </div>
+  1540→                        </div>
+  1541→                      </div>
+  1542→                    ))}
+  1543→                  </div>
+  1544→                )}
+  1545→
+  1546→                {/* Salary mini chart (sparkline) */}
+  1547→                {empleado.contratos.length > 1 && (
+  1548→                  <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+  1549→                    <p className="text-xs text-slate-400 font-medium mb-2">Evolución Salarial en Contratos</p>
+  1550→                    <div className="flex items-end gap-1 h-16">
+  1551→                      {empleado.contratos.map((c, idx) => {
+  1552→                        const maxSal = Math.max(...empleado.contratos.map(x => x.salario_base_contrato));
+  1553→                        const minSal = Math.min(...empleado.contratos.map(x => x.salario_base_contrato));
+  1554→                        const range = maxSal - minSal || 1;
+  1555→                        const height = 20 + ((c.salario_base_contrato - minSal) / range) * 80;
+  1556→                        return (
+  1557→                          <div key={c.id} className="flex-1 flex flex-col items-center gap-1">
+  1558→                            <div
+  1559→                              className={`w-full rounded-t ${c.activo ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'} transition-all`}
+  1560→                              style={{ height: `${height}%` }}
+  1561→                            />
+  1562→                            <span className="text-[9px] text-slate-400">{formatDate(c.fecha_inicio).slice(-4)}</span>
+  1563→                          </div>
+  1564→                        );
+  1565→                      })}
+  1566→                    </div>
+  1567→                  </div>
+  1568→                )}
+  1569→              </CardContent>
+  1570→            </Card>
+  1571→          </div>
+  1572→        </TabsContent>
+  1573→
+  1574→        {/* ═══════════════════════════════════════════
+  1575→            TAB: SALARIO — Large display + band + history
+  1576→           ═══════════════════════════════════════════ */}
+  1577→        <TabsContent value="salario">
+  1578→          <div className="space-y-4">
+  1579→            {/* Current salary large display */}
+  1580→            <Card className="shadow-sm overflow-hidden">
+  1581→              <div className="bg-gradient-to-r from-emerald-600 to-teal-500 p-6 text-white">
+  1582→                <p className="text-sm font-medium opacity-80 mb-1">Salario Base Mensual</p>
+  1583→                <p className="text-4xl font-bold tracking-tight">{formatSalary(empleado.salario_base)}</p>
+  1584→                <div className="flex items-center gap-3 mt-3 text-sm opacity-90">
+  1585→                  <span className="flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" /> {empleado.perfil_puesto?.nombre_puesto || 'Sin puesto'}</span>
+  1586→                  <span>•</span>
+  1587→                  <span>{empleado.area?.nombre || 'Sin área'}</span>
+  1588→                </div>
+  1589→              </div>
+  1590→              {/* Salary band position indicator */}
+  1591→              {empleado.perfil_puesto?.banda_salarial && (
+  1592→                <div className="p-5">
+  1593→                  <div className="flex items-center justify-between mb-2">
+  1594→                    <p className="text-xs text-slate-500 font-medium">Posición en Banda Salarial</p>
+  1595→                    <Badge variant="outline" className="text-xs">{empleado.perfil_puesto.banda_salarial.nombre}</Badge>
+  1596→                  </div>
+  1597→                  <div className="relative h-4 rounded-full bg-gradient-to-r from-emerald-200 via-amber-200 to-red-200 overflow-hidden">
+  1598→                    <div
+  1599→                      className="absolute top-0 h-full w-1.5 bg-slate-800 dark:bg-white rounded-full shadow-lg transition-all duration-500"
+  1600→                      style={{
+  1601→                        left: `${Math.min(100, Math.max(0,
+  1602→                          ((empleado.salario_base - empleado.perfil_puesto.banda_salarial.salario_minimo) /
+  1603→                          (empleado.perfil_puesto.banda_salarial.salario_maximo - empleado.perfil_puesto.banda_salarial.salario_minimo)) * 100
+  1604→                        ))}%`
+  1605→                      }}
+  1606→                    />
+  1607→                  </div>
+  1608→                  <div className="flex justify-between mt-1.5 text-xs text-slate-400">
+  1609→                    <span>Mín: {formatSalary(empleado.perfil_puesto.banda_salarial.salario_minimo)}</span>
+  1610→                    <span>Máx: {formatSalary(empleado.perfil_puesto.banda_salarial.salario_maximo)}</span>
+  1611→                  </div>
+  1612→                </div>
+  1613→              )}
+  1614→            </Card>
+  1615→
+  1616→            {/* Next review date */}
+  1617→            {empleado.cambios_salariales.length > 0 && (
+  1618→              <Card className="shadow-sm border-amber-200 bg-amber-50/30 dark:bg-amber-900/10">
+  1619→                <CardContent className="p-4 flex items-center gap-3">
+  1620→                  <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+  1621→                    <TrendingUp className="h-5 w-5 text-amber-600" />
+  1622→                  </div>
+  1623→                  <div>
+  1624→                    <p className="text-xs text-slate-500">Último cambio salarial</p>
+  1625→                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+  1626→                      {formatDate(empleado.cambios_salariales[0].fecha_cambio)} — {empleado.cambios_salariales[0].tipo_cambio}
+  1627→                    </p>
+  1628→                  </div>
+  1629→                </CardContent>
+  1630→              </Card>
+  1631→            )}
+  1632→
+  1633→            {/* Change history timeline */}
+  1634→            <Card className="shadow-sm">
+  1635→              <CardHeader className="pb-3">
+  1636→                <CardTitle className="text-base flex items-center gap-2">
+  1637→                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+  1638→                  Historial de Cambios Salariales
+  1639→                </CardTitle>
+  1640→              </CardHeader>
+  1641→              <CardContent>
+  1642→                {empleado.cambios_salariales.length === 0 ? (
+  1643→                  <p className="text-sm text-slate-500 text-center py-6">Sin cambios salariales registrados</p>
+  1644→                ) : (
+  1645→                  <div className="relative space-y-0">
+  1646→                    <div className="absolute left-5 top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700" />
+  1647→                    {empleado.cambios_salariales.map(cs => {
+  1648→                      const diff = cs.salario_nuevo - cs.salario_anterior;
+  1649→                      const isIncrease = diff > 0;
+  1650→                      return (
+  1651→                        <div key={cs.id} className="relative flex items-start gap-4 py-3">
+  1652→                          <div className={`relative z-10 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+  1653→                            isIncrease ? 'border-emerald-500 bg-emerald-500' : 'border-amber-500 bg-amber-500'
+  1654→                          }`}>
+  1655→                            <TrendingUp className={`h-2.5 w-2.5 text-white ${!isIncrease ? 'rotate-180' : ''}`} />
+  1656→                          </div>
+  1657→                          <div className="flex-1 p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+  1658→                            <div className="flex items-center justify-between">
+  1659→                              <div>
+  1660→                                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{cs.tipo_cambio}</p>
+  1661→                                <p className="text-xs text-slate-400 mt-0.5">{formatDate(cs.fecha_cambio)}</p>
+  1662→                              </div>
+  1663→                              <div className="text-right">
+  1664→                                <p className="text-sm font-mono text-slate-600 dark:text-slate-400">{formatSalary(cs.salario_anterior)} → {formatSalary(cs.salario_nuevo)}</p>
+  1665→                                <p className={`text-xs font-semibold ${isIncrease ? 'text-emerald-600' : 'text-amber-600'}`}>
+  1666→                                  {isIncrease ? '+' : ''}{formatSalary(diff)}
+  1667→                                </p>
+  1668→                              </div>
+  1669→                            </div>
+  1670→                            {cs.motivo && <p className="text-xs text-slate-400 mt-1.5 italic">{cs.motivo}</p>}
+  1671→                          </div>
+  1672→                        </div>
+  1673→                      );
+  1674→                    })}
+  1675→                  </div>
+  1676→                )}
+  1677→              </CardContent>
+  1678→            </Card>
+  1679→          </div>
+  1680→        </TabsContent>
+  1681→
+  1682→        {/* ═══════════════════════════════════════════
+  1683→            TAB: VACACIONES — Circular progress + per-year
+  1684→           ═══════════════════════════════════════════ */}
+  1685→        <TabsContent value="vacaciones">
+  1686→          <div className="space-y-4">
+  1687→            {/* Vacation balance summary */}
+  1688→            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  1689→              <Card className="shadow-sm bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200">
+  1690→                <CardContent className="p-5 flex items-center gap-4">
+  1691→                  <div className="relative">
+  1692→                    <CircularProgress value={totalVacDerecho > 0 ? totalVacPendientes : 0} max={totalVacDerecho || 1} size={80} strokeWidth={6} color="emerald" />
+  1693→                    <div className="absolute inset-0 flex items-center justify-center">
+  1694→                      <span className="text-lg font-bold text-emerald-700">{totalVacPendientes}</span>
+  1695→                    </div>
+  1696→                  </div>
+  1697→                  <div>
+  1698→                    <p className="text-xs text-slate-500 font-medium">Días Pendientes</p>
+  1699→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{totalVacPendientes}</p>
+  1700→                    <p className="text-xs text-slate-400">de {totalVacDerecho} totales</p>
+  1701→                  </div>
+  1702→                </CardContent>
+  1703→              </Card>
+  1704→              <Card className="shadow-sm">
+  1705→                <CardContent className="p-5 flex items-center gap-4">
+  1706→                  <div className="h-14 w-14 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+  1707→                    <CalendarDays className="h-6 w-6 text-amber-600" />
+  1708→                  </div>
+  1709→                  <div>
+  1710→                    <p className="text-xs text-slate-500 font-medium">Días Tomados</p>
+  1711→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{empleado.vacaciones.reduce((s, v) => s + v.dias_tomados, 0)}</p>
+  1712→                  </div>
+  1713→                </CardContent>
+  1714→              </Card>
+  1715→              <Card className="shadow-sm">
+  1716→                <CardContent className="p-5 flex items-center gap-4">
+  1717→                  <div className="h-14 w-14 rounded-xl bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+  1718→                    <DollarSign className="h-6 w-6 text-sky-600" />
+  1719→                  </div>
+  1720→                  <div>
+  1721→                    <p className="text-xs text-slate-500 font-medium">Días Vendidos</p>
+  1722→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{empleado.vacaciones.reduce((s, v) => s + v.dias_vendidos, 0)}</p>
+  1723→                  </div>
+  1724→                </CardContent>
+  1725→              </Card>
+  1726→            </div>
+  1727→
+  1728→            {/* Request vacation button for EMPLEADO */}
+  1729→            {userRole === 'EMPLEADO' && (
+  1730→              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+  1731→                <Palmtree className="h-4 w-4 mr-2" /> Solicitar Vacaciones
+  1732→              </Button>
+  1733→            )}
+  1734→
+  1735→            {/* Per-year breakdown with progress bars */}
+  1736→            <Card className="shadow-sm">
+  1737→              <CardHeader className="pb-3">
+  1738→                <CardTitle className="text-base flex items-center gap-2">
+  1739→                  <Palmtree className="h-4 w-4 text-emerald-600" />
+  1740→                  Desglose por Año
+  1741→                </CardTitle>
+  1742→              </CardHeader>
+  1743→              <CardContent>
+  1744→                {empleado.vacaciones.length === 0 ? (
+  1745→                  <div className="flex flex-col items-center py-10 text-slate-400">
+  1746→                    <Palmtree className="h-10 w-10 mb-2" />
+  1747→                    <p className="text-sm font-medium">Sin registros de vacaciones</p>
+  1748→                  </div>
+  1749→                ) : (
+  1750→                  <div className="space-y-4">
+  1751→                    {empleado.vacaciones.map(v => {
+  1752→                      const usedPct = v.dias_derecho > 0 ? (v.dias_tomados / v.dias_derecho) * 100 : 0;
+  1753→                      const pendPct = v.dias_derecho > 0 ? (v.dias_pendientes / v.dias_derecho) * 100 : 0;
+  1754→                      return (
+  1755→                        <div key={v.id} className="p-4 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+  1756→                          <div className="flex items-center justify-between mb-3">
+  1757→                            <div className="flex items-center gap-2">
+  1758→                              <span className="text-lg font-bold text-slate-800 dark:text-slate-200">{v.anio}</span>
+  1759→                              <Badge className={`text-xs ${v.estado === 'ABIERTO' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+  1760→                                {v.estado}
+  1761→                              </Badge>
+  1762→                            </div>
+  1763→                            <span className="text-sm font-semibold text-amber-600">{v.dias_pendientes} días pend.</span>
+  1764→                          </div>
+  1765→                          <div className="grid grid-cols-4 gap-3 text-center mb-3">
+  1766→                            <div>
+  1767→                              <p className="text-[10px] text-slate-400 uppercase">Derecho</p>
+  1768→                              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{v.dias_derecho}</p>
+  1769→                            </div>
+  1770→                            <div>
+  1771→                              <p className="text-[10px] text-slate-400 uppercase">Tomados</p>
+  1772→                              <p className="text-sm font-semibold text-emerald-600">{v.dias_tomados}</p>
+  1773→                            </div>
+  1774→                            <div>
+  1775→                              <p className="text-[10px] text-slate-400 uppercase">Pendientes</p>
+  1776→                              <p className="text-sm font-semibold text-amber-600">{v.dias_pendientes}</p>
+  1777→                            </div>
+  1778→                            <div>
+  1779→                              <p className="text-[10px] text-slate-400 uppercase">Vendidos</p>
+  1780→                              <p className="text-sm font-semibold text-sky-600">{v.dias_vendidos}</p>
+  1781→                            </div>
+  1782→                          </div>
+  1783→                          {/* Stacked progress bar */}
+  1784→                          <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+  1785→                            <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${usedPct}%` }} />
+  1786→                            <div className="bg-amber-400 transition-all duration-500" style={{ width: `${pendPct}%` }} />
+  1787→                          </div>
+  1788→                          <div className="flex justify-between mt-1 text-[10px] text-slate-400">
+  1789→                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Tomados</span>
+  1790→                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" /> Pendientes</span>
+  1791→                          </div>
+  1792→                        </div>
+  1793→                      );
+  1794→                    })}
+  1795→                  </div>
+  1796→                )}
+  1797→              </CardContent>
+  1798→            </Card>
+  1799→          </div>
+  1800→        </TabsContent>
+  1801→
+  1802→        {/* ═══════════════════════════════════════════
+  1803→            TAB: INCIDENCIAS
+  1804→           ═══════════════════════════════════════════ */}
+  1805→        <TabsContent value="incidencias">
+  1806→          <Card className="shadow-sm">
+  1807→            <CardHeader className="pb-3">
+  1808→              <CardTitle className="text-base flex items-center gap-2">
+  1809→                <AlertTriangle className="h-4 w-4 text-amber-500" />
+  1810→                Incidencias del Empleado
+  1811→              </CardTitle>
+  1812→              <CardDescription>Registro de incidencias, permisos y novedades</CardDescription>
+  1813→            </CardHeader>
+  1814→            <CardContent>
+  1815→              {empleado.incidencias.length === 0 ? (
+  1816→                <div className="flex flex-col items-center py-10 text-slate-400">
+  1817→                  <AlertTriangle className="h-10 w-10 mb-2" />
+  1818→                  <p className="text-sm font-medium">Sin incidencias registradas</p>
+  1819→                  <p className="text-xs">Las incidencias del empleado aparecerán aquí</p>
+  1820→                </div>
+  1821→              ) : (
+  1822→                <div className="space-y-3 max-h-96 overflow-y-auto">
+  1823→                  {empleado.incidencias.map(inc => {
+  1824→                    const tipoColors: Record<string, string> = {
+  1825→                      PERMISO: 'bg-sky-100 text-sky-700 border-sky-200',
+  1826→                      VACACION: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  1827→                      ENFERMEDAD: 'bg-amber-100 text-amber-700 border-amber-200',
+  1828→                      AUSENCIA: 'bg-red-100 text-red-700 border-red-200',
+  1829→                      HORAS_EXTRA: 'bg-purple-100 text-purple-700 border-purple-200',
+  1830→                    };
+  1831→                    const estadoColors: Record<string, string> = {
+  1832→                      PENDIENTE: 'bg-yellow-100 text-yellow-700',
+  1833→                      APROBADA: 'bg-emerald-100 text-emerald-700',
+  1834→                      RECHAZADA: 'bg-red-100 text-red-700',
+  1835→                    };
+  1836→                    return (
+  1837→                      <div key={inc.id} className="p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+  1838→                        <div className="flex items-center justify-between mb-1">
+  1839→                          <div className="flex items-center gap-2">
+  1840→                            <Badge variant="outline" className={tipoColors[inc.tipo] || 'bg-slate-100 text-slate-600'}>
+  1841→                              {inc.tipo}
+  1842→                            </Badge>
+  1843→                            <Badge className={estadoColors[inc.estado] || 'bg-slate-100 text-slate-600'}>
+  1844→                              {inc.estado}
+  1845→                            </Badge>
+  1846→                          </div>
+  1847→                          <span className="text-xs text-slate-400">{formatDate(inc.fecha_inicio)}</span>
+  1848→                        </div>
+  1849→                        {inc.descripcion && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{inc.descripcion}</p>}
+  1850→                        <div className="flex gap-4 mt-1.5 text-xs text-slate-400">
+  1851→                          {inc.cantidad_horas && <span>{inc.cantidad_horas} hrs</span>}
+  1852→                          {inc.monto && <span className="text-emerald-600 font-medium">{formatSalary(inc.monto)}</span>}
+  1853→                          {inc.fecha_fin && <span>Fin: {formatDate(inc.fecha_fin)}</span>}
+  1854→                        </div>
+  1855→                      </div>
+  1856→                    );
+  1857→                  })}
+  1858→                </div>
+  1859→              )}
+  1860→            </CardContent>
+  1861→          </Card>
+  1862→        </TabsContent>
+  1863→
+  1864→        {/* ═══════════════════════════════════════════
+  1865→            TAB: DOCUMENTOS — Enhanced Document Management
+  1866→           ═══════════════════════════════════════════ */}
+  1867→        <TabsContent value="documentos">
+  1868→          <div className="space-y-4">
+  1869→            {/* Header with Generate Button */}
+  1870→            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+  1871→              <div>
+  1872→                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+  1873→                  <FolderOpen className="h-5 w-5 text-emerald-600" />
+  1874→                  Gestión de Documentos
+  1875→                </h3>
+  1876→                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Documentos, constancias y certificaciones del empleado</p>
+  1877→              </div>
+  1878→              {(canEdit || canEditOwn) && (
+  1879→                <Button
+  1880→                  className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+  1881→                  onClick={() => { setDocGenType(''); setDocGenOpen(true); }}
+  1882→                >
+  1883→                  <Sparkles className="h-4 w-4 mr-1.5" /> Generar Documento
+  1884→                </Button>
+  1885→              )}
+  1886→            </div>
+  1887→
+  1888→            {/* Category Filter Tabs */}
+  1889→            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+  1890→              {[
+  1891→                { key: 'todos', label: 'Todos', icon: <FolderOpen className="h-3.5 w-3.5" /> },
+  1892→                { key: 'contratos', label: 'Contratos', icon: <FileText className="h-3.5 w-3.5" /> },
+  1893→                { key: 'constancias', label: 'Constancias', icon: <Stamp className="h-3.5 w-3.5" /> },
+  1894→                { key: 'boletas', label: 'Boletas de Pago', icon: <FileSpreadsheet className="h-3.5 w-3.5" /> },
+  1895→                { key: 'cartas', label: 'Cartas', icon: <LetterText className="h-3.5 w-3.5" /> },
+  1896→                { key: 'otros', label: 'Otros', icon: <FileCheck className="h-3.5 w-3.5" /> },
+  1897→              ].map(cat => (
+  1898→                <button
+  1899→                  key={cat.key}
+  1900→                  onClick={() => setDocCategory(cat.key)}
+  1901→                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+  1902→                    docCategory === cat.key
+  1903→                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-700'
+  1904→                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+  1905→                  }`}
+  1906→                >
+  1907→                  {cat.icon} {cat.label}
+  1908→                </button>
+  1909→              ))}
+  1910→            </div>
+  1911→
+  1912→            {/* Search */}
+  1913→            <div className="relative">
+  1914→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+  1915→              <Input
+  1916→                placeholder="Buscar documentos..."
+  1917→                value={docSearch}
+  1918→                onChange={e => setDocSearch(e.target.value)}
+  1919→                className="pl-9 h-9 text-sm"
+  1920→              />
+  1921→            </div>
+  1922→
+  1923→            {/* Document Grid */}
+  1924→            <DocumentGrid
+  1925→              empleado={empleado}
+  1926→              docCategory={docCategory}
+  1927→              docSearch={docSearch}
+  1928→              planillas={planillas}
+  1929→              selectedPlanilla={selectedPlanilla}
+  1930→              setSelectedPlanilla={setSelectedPlanilla}
+  1931→              aguinaldoAnio={aguinaldoAnio}
+  1932→              accessToken={accessToken}
+  1933→              formatDate={formatDate}
+  1934→              formatSalary={formatSalary}
+  1935→              addToRecentDocs={addToRecentDocs}
+  1936→              getNombreCompleto={getNombreCompleto}
+  1937→              toast={toast}
+  1938→              recentDocs={recentDocs}
+  1939→            />
+  1940→          </div>
+  1941→        </TabsContent>
+  1942→      </Tabs>
+  1943→
+  1944→      {/* ═══════════════════════════════════════════
+  1945→          NEW CONTRACT DIALOG
+  1946→         ═══════════════════════════════════════════ */}
+  1947→      <Dialog open={newContractOpen} onOpenChange={setNewContractOpen}>
+  1948→        <DialogContent>
+  1949→          <DialogHeader>
+  1950→            <DialogTitle>Nuevo Contrato</DialogTitle>
+  1951→            <DialogDescription>Crear un nuevo contrato para {getNombreCompleto()}</DialogDescription>
+  1952→          </DialogHeader>
+  1953→          <div className="space-y-4">
+  1954→            <div className="grid grid-cols-2 gap-3">
+  1955→              <div>
+  1956→                <Label>Tipo de Contrato</Label>
+  1957→                <Select value={contractData.tipo_contrato} onValueChange={v => setContractData(p => ({ ...p, tipo_contrato: v }))}>
+  1958→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1959→                  <SelectContent>
+  1960→                    <SelectItem value="INDEFINIDO">Indefinido</SelectItem>
+  1961→                    <SelectItem value="PLAZO_FIJO">Plazo Fijo</SelectItem>
+  1962→                    <SelectItem value="OBRA_LABOR">Obra/Labor</SelectItem>
+  1963→                    <SelectItem value="TEMPORAL">Temporal</SelectItem>
+  1964→                  </SelectContent>
+  1965→                </Select>
+  1966→              </div>
+  1967→              <div>
+  1968→                <Label>Tipo Jornada</Label>
+  1969→                <Select value={contractData.tipo_jornada} onValueChange={v => setContractData(p => ({ ...p, tipo_jornada: v }))}>
+  1970→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1971→                  <SelectContent>
+  1972→                    <SelectItem value="COMPLETA">Completa</SelectItem>
+  1973→                    <SelectItem value="MEDIA">Media</SelectItem>
+  1974→                    <SelectItem value="POR_HORAS">Por Horas</SelectItem>
+  1975→                  </SelectContent>
+  1976→                </Select>
+  1977→              </div>
+  1978→            </div>
+  1979→            <div>
+  1980→              <Label>Salario Base (USD)</Label>
+  1981→              <Input type="number" step="0.01" value={contractData.salario_base_contrato} onChange={e => setContractData(p => ({ ...p, salario_base_contrato: e.target.value }))} />
+  1982→            </div>
+  1983→            <div className="grid grid-cols-2 gap-3">
+  1984→              <div>
+  1985→                <Label>Fecha Inicio</Label>
+  1986→                <Input type="date" value={contractData.fecha_inicio} onChange={e => setContractData(p => ({ ...p, fecha_inicio: e.target.value }))} />
+  1987→              </div>
+  1988→              <div>
+  1989→                <Label>Fecha Fin (opcional)</Label>
+  1990→                <Input type="date" value={contractData.fecha_fin} onChange={e => setContractData(p => ({ ...p, fecha_fin: e.target.value }))} />
+  1991→              </div>
+  1992→            </div>
+  1993→            <div>
+  1994→              <Label>Observaciones</Label>
+  1995→              <Input value={contractData.observaciones} onChange={e => setContractData(p => ({ ...p, observaciones: e.target.value }))} />
+  1996→            </div>
+  1997→            <div className="flex justify-end gap-2">
+  1998→              <Button variant="outline" onClick={() => setNewContractOpen(false)}>Cancelar</Button>
+  1999→              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCreateContract} disabled={saving}>
+  2000→                {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Crear Contrato
+
+[showing lines 1-2000 of 2085; use offset=2001 with limit to continue reading]

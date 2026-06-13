@@ -1,0 +1,1476 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import {
+     5→  AlertCircle, Clock, CheckCircle2, XCircle, Plus, Loader2, Search,
+     6→  Zap, Gift, Percent, Heart, CalendarDays, FileText, Eye, Ban,
+     7→  Briefcase, Timer, ChevronDown, ChevronUp, ChevronRight, ChevronLeft,
+     8→  DoorOpen, HeartPulse, Scale, AlertTriangle, Info, X, Filter,
+     9→  ThumbsUp, ThumbsDown, UserCheck, CalendarCheck, ArrowRight,
+    10→  ShieldCheck, BookOpen,
+    11→} from 'lucide-react';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Input } from '@/components/ui/input';
+    14→import { Label } from '@/components/ui/label';
+    15→import { Badge } from '@/components/ui/badge';
+    16→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    17→import {
+    18→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    19→} from '@/components/ui/select';
+    20→import {
+    21→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+    22→} from '@/components/ui/dialog';
+    23→import { Skeleton } from '@/components/ui/skeleton';
+    24→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+    25→import { Progress } from '@/components/ui/progress';
+    26→import { Textarea } from '@/components/ui/textarea';
+    27→import { useToast } from '@/hooks/use-toast';
+    28→
+    29→// ─── Types ────────────────────────────────────────────────────────────────────
+    30→
+    31→type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+    32→
+    33→interface IncidenceManagerProps {
+    34→  accessToken: string | null;
+    35→  userRole: UserRole;
+    36→}
+    37→
+    38→interface Incidencia {
+    39→  id: string;
+    40→  tipo: string;
+    41→  estado: string;
+    42→  fecha_inicio: string;
+    43→  fecha_fin: string | null;
+    44→  cantidad_horas: number | null;
+    45→  tipo_horas_extra: string | null;
+    46→  monto: number | null;
+    47→  descripcion: string | null;
+    48→  numero_incapacidad: string | null;
+    49→  fecha_creacion?: string;
+    50→  fecha_actualizacion?: string;
+    51→  empleado: {
+    52→    id: string;
+    53→    codigo_empleado: string;
+    54→    primer_nombre: string;
+    55→    segundo_nombre: string | null;
+    56→    primer_apellido: string;
+    57→    segundo_apellido: string | null;
+    58→  };
+    59→  aprobada_por: { nombre: string; apellido: string } | null;
+    60→}
+    61→
+    62→interface EmpleadoOption {
+    63→  id: string;
+    64→  codigo_empleado: string;
+    65→  primer_nombre: string;
+    66→  primer_apellido: string;
+    67→}
+    68→
+    69→// ─── Constants ────────────────────────────────────────────────────────────────
+    70→
+    71→const TIPO_LABELS: Record<string, string> = {
+    72→  HORAS_EXTRA: 'Horas Extra',
+    73→  AUSENCIA: 'Ausencia',
+    74→  INCAPACIDAD_ISSS: 'Incapacidad ISSS',
+    75→  PERMISO: 'Permiso',
+    76→  COMISION: 'Comisión',
+    77→  BONO: 'Bono',
+    78→  DESCUENTO_ESPECIAL: 'Descuento Especial',
+    79→};
+    80→
+    81→const TIPO_ICONS: Record<string, React.ElementType> = {
+    82→  HORAS_EXTRA: Clock,
+    83→  AUSENCIA: XCircle,
+    84→  INCAPACIDAD_ISSS: HeartPulse,
+    85→  PERMISO: DoorOpen,
+    86→  COMISION: Percent,
+    87→  BONO: Gift,
+    88→  DESCUENTO_ESPECIAL: Ban,
+    89→};
+    90→
+    91→const TIPO_COLORS: Record<string, { bg: string; icon: string; accent: string; border: string }> = {
+    92→  HORAS_EXTRA: { bg: 'bg-amber-50 dark:bg-amber-900/20', icon: 'text-amber-600 dark:text-amber-400', accent: 'bg-amber-500', border: 'border-amber-200 dark:border-amber-800' },
+    93→  AUSENCIA: { bg: 'bg-slate-50 dark:bg-slate-800', icon: 'text-slate-600 dark:text-slate-400', accent: 'bg-slate-500', border: 'border-slate-200 dark:border-slate-700' },
+    94→  INCAPACIDAD_ISSS: { bg: 'bg-rose-50 dark:bg-rose-900/20', icon: 'text-rose-600 dark:text-rose-400', accent: 'bg-rose-500', border: 'border-rose-200 dark:border-rose-800' },
+    95→  PERMISO: { bg: 'bg-teal-50 dark:bg-teal-900/20', icon: 'text-teal-600 dark:text-teal-400', accent: 'bg-teal-500', border: 'border-teal-200 dark:border-teal-800' },
+    96→  COMISION: { bg: 'bg-violet-50 dark:bg-violet-900/20', icon: 'text-violet-600 dark:text-violet-400', accent: 'bg-violet-500', border: 'border-violet-200 dark:border-violet-800' },
+    97→  BONO: { bg: 'bg-emerald-50 dark:bg-emerald-900/20', icon: 'text-emerald-600 dark:text-emerald-400', accent: 'bg-emerald-500', border: 'border-emerald-200 dark:border-emerald-800' },
+    98→  DESCUENTO_ESPECIAL: { bg: 'bg-red-50 dark:bg-red-900/20', icon: 'text-red-600 dark:text-red-400', accent: 'bg-red-500', border: 'border-red-200 dark:border-red-800' },
+    99→};
+   100→
+   101→// Legal references per type
+   102→const TIPO_LEGAL_REF: Record<string, string> = {
+   103→  HORAS_EXTRA: 'Art. 169 CT',
+   104→  AUSENCIA: 'Art. 52 CT',
+   105→  INCAPACIDAD_ISSS: 'Art. 61 Ley ISSS',
+   106→  PERMISO: 'Art. 177 CT',
+   107→  COMISION: 'Art. 140 CT',
+   108→  BONO: 'Art. 140 CT',
+   109→  DESCUENTO_ESPECIAL: 'Art. 140 CT',
+   110→};
+   111→
+   112→const ESTADO_COLORS: Record<string, string> = {
+   113→  PENDIENTE: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+   114→  APROBADA: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+   115→  RECHAZADA: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+   116→};
+   117→
+   118→const ESTADO_DOT: Record<string, string> = {
+   119→  PENDIENTE: 'bg-amber-500',
+   120→  APROBADA: 'bg-emerald-500',
+   121→  RECHAZADA: 'bg-red-500',
+   122→};
+   123→
+   124→const WIZARD_STEPS = [
+   125→  { id: 1, label: 'Empleado', icon: Briefcase },
+   126→  { id: 2, label: 'Tipo', icon: Zap },
+   127→  { id: 3, label: 'Detalles', icon: FileText },
+   128→  { id: 4, label: 'Revisar', icon: Eye },
+   129→];
+   130→
+   131→// ─── Helper Components ────────────────────────────────────────────────────────
+   132→
+   133→function AvatarInitials({ nombre, apellido, size = 'md' }: { nombre: string; apellido: string; size?: 'sm' | 'md' | 'lg' }) {
+   134→  const initials = (nombre[0] || '') + (apellido[0] || '');
+   135→  const sizeClasses = {
+   136→    sm: 'w-8 h-8 text-[10px]',
+   137→    md: 'w-9 h-9 text-xs',
+   138→    lg: 'w-12 h-12 text-sm',
+   139→  };
+   140→  return (
+   141→    <div className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-bold shrink-0 shadow-sm`}>
+   142→      {initials.toUpperCase()}
+   143→    </div>
+   144→  );
+   145→}
+   146→
+   147→function KpiCard({
+   148→  title, count, total, icon: Icon, iconBg, iconColor, accentColor, barColor,
+   149→}: {
+   150→  title: string; count: number; total: number;
+   151→  icon: React.ElementType; iconBg: string; iconColor: string;
+   152→  accentColor: string; barColor: string;
+   153→}) {
+   154→  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+   155→  return (
+   156→    <Card className={`shadow-sm hover:shadow-md transition-all duration-200 dark:bg-slate-900 dark:border-slate-800 border-l-4 ${accentColor}`}>
+   157→      <CardContent className="p-4">
+   158→        <div className="flex items-center gap-3 mb-3">
+   159→          <div className={`p-2.5 rounded-xl ${iconBg}`}>
+   160→            <Icon className={`h-5 w-5 ${iconColor}`} />
+   161→          </div>
+   162→          <div className="flex-1 min-w-0">
+   163→            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{title}</p>
+   164→            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{count}</p>
+   165→          </div>
+   166→          <span className="text-xs font-medium text-slate-400 dark:text-slate-500">{pct}%</span>
+   167→        </div>
+   168→        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+   169→          <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${pct}%` }} />
+   170→        </div>
+   171→      </CardContent>
+   172→    </Card>
+   173→  );
+   174→}
+   175→
+   176→function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+   177→  return (
+   178→    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+   179→      {label}
+   180→      <button onClick={onClear} className="hover:bg-emerald-200 dark:hover:bg-emerald-800 rounded-full p-0.5 transition-colors">
+   181→        <X className="h-3 w-3" />
+   182→      </button>
+   183→    </span>
+   184→  );
+   185→}
+   186→
+   187→// ─── Main Component ───────────────────────────────────────────────────────────
+   188→
+   189→export default function IncidenceManager({ accessToken, userRole }: IncidenceManagerProps) {
+   190→  const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
+   191→  const [empleados, setEmpleados] = useState<EmpleadoOption[]>([]);
+   192→  const [loading, setLoading] = useState(true);
+   193→  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: 10, totalPages: 0 });
+   194→
+   195→  // Filters
+   196→  const [quickTab, setQuickTab] = useState('all');
+   197→  const [tipoFilter, setTipoFilter] = useState('all');
+   198→  const [estadoFilter, setEstadoFilter] = useState('all');
+   199→  const [dateFrom, setDateFrom] = useState('');
+   200→  const [dateTo, setDateTo] = useState('');
+   201→  const [employeeFilter, setEmployeeFilter] = useState('all');
+   202→  const [showFilters, setShowFilters] = useState(false);
+   203→
+   204→  // Dialog & Wizard
+   205→  const [dialogOpen, setDialogOpen] = useState(false);
+   206→  const [wizardStep, setWizardStep] = useState(1);
+   207→  const [saving, setSaving] = useState(false);
+   208→  const [searchEmpleado, setSearchEmpleado] = useState('');
+   209→
+   210→  // Expandable detail
+   211→  const [expandedId, setExpandedId] = useState<string | null>(null);
+   212→
+   213→  // Overtime calculator
+   214→  const [horasCalc, setHorasCalc] = useState({ rate: '', hours: '' });
+   215→
+   216→  const { toast } = useToast();
+   217→
+   218→  const [form, setForm] = useState({
+   219→    empleado_id: '',
+   220→    tipo: 'HORAS_EXTRA',
+   221→    fecha_inicio: '',
+   222→    fecha_fin: '',
+   223→    descripcion: '',
+   224→    cantidad_horas: '',
+   225→    tipo_horas_extra: 'DIURNA',
+   226→    monto: '',
+   227→    numero_incapacidad: '',
+   228→  });
+   229→
+   230→  // ─── Data Fetching ────────────────────────────────────────────────────────
+   231→
+   232→  const fetchIncidencias = useCallback(async () => {
+   233→    setLoading(true);
+   234→    try {
+   235→      const params = new URLSearchParams();
+   236→      params.set('page', String(pagination.page));
+   237→      params.set('pageSize', String(pagination.pageSize));
+   238→      if (tipoFilter && tipoFilter !== 'all') params.set('tipo', tipoFilter);
+   239→      if (estadoFilter && estadoFilter !== 'all') params.set('estado', estadoFilter);
+   240→      if (employeeFilter && employeeFilter !== 'all') params.set('empleado_id', employeeFilter);
+   241→      if (dateFrom) params.set('fechaDesde', dateFrom);
+   242→      if (dateTo) params.set('fechaHasta', dateTo);
+   243→
+   244→      const res = await fetch(`/api/incidencias?${params.toString()}`, {
+   245→        headers: { Authorization: `Bearer ${accessToken}` },
+   246→      });
+   247→      const data = await res.json();
+   248→      if (res.ok) {
+   249→        setIncidencias(data.data);
+   250→        setPagination(data.pagination);
+   251→      }
+   252→    } catch (err) {
+   253→      console.error('Error fetching incidencias:', err);
+   254→    } finally {
+   255→      setLoading(false);
+   256→    }
+   257→  }, [accessToken, pagination.page, pagination.pageSize, tipoFilter, estadoFilter, employeeFilter, dateFrom, dateTo]);
+   258→
+   259→  useEffect(() => { fetchIncidencias(); }, [fetchIncidencias]);
+   260→
+   261→  useEffect(() => {
+   262→    const fetchEmpleados = async () => {
+   263→      try {
+   264→        const res = await fetch('/api/empleados?pageSize=100&estado=ACTIVO', {
+   265→          headers: { Authorization: `Bearer ${accessToken}` },
+   266→        });
+   267→        const data = await res.json();
+   268→        if (res.ok) setEmpleados(data.data || []);
+   269→      } catch { /* ignore */ }
+   270→    };
+   271→    fetchEmpleados();
+   272→  }, [accessToken]);
+   273→
+   274→  // ─── Computed Values ───────────────────────────────────────────────────────
+   275→
+   276→  const summary = useMemo(() => ({
+   277→    total: pagination.total,
+   278→    pendientes: incidencias.filter(i => i.estado === 'PENDIENTE').length,
+   279→    aprobadas: incidencias.filter(i => i.estado === 'APROBADA').length,
+   280→    rechazadas: incidencias.filter(i => i.estado === 'RECHAZADA').length,
+   281→  }), [pagination.total, incidencias]);
+   282→
+   283→  const activeFilterCount = [
+   284→    tipoFilter !== 'all',
+   285→    estadoFilter !== 'all',
+   286→    employeeFilter !== 'all',
+   287→    !!dateFrom,
+   288→    !!dateTo,
+   289→  ].filter(Boolean).length;
+   290→
+   291→  const filteredEmpleados = searchEmpleado
+   292→    ? empleados.filter(e => `${e.primer_nombre} ${e.primer_apellido} ${e.codigo_empleado}`.toLowerCase().includes(searchEmpleado.toLowerCase()))
+   293→    : empleados;
+   294→
+   295→  const selectedEmpleadoName = form.empleado_id
+   296→    ? (() => {
+   297→        const emp = empleados.find(e => e.id === form.empleado_id);
+   298→        return emp ? `${emp.primer_nombre} ${emp.primer_apellido}` : '';
+   299→      })()
+   300→    : '';
+   301→
+   302→  const selectedEmpleadoCode = form.empleado_id
+   303→    ? (() => {
+   304→        const emp = empleados.find(e => e.id === form.empleado_id);
+   305→        return emp?.codigo_empleado || '';
+   306→      })()
+   307→    : '';
+   308→
+   309→  const canCreate = userRole === 'ADMIN' || userRole === 'ANALISTA';
+   310→  const canApprove = userRole === 'ADMIN' || userRole === 'APROBADOR';
+   311→
+   312→  // Overtime calculation
+   313→  const overtimeCalcResult = useMemo(() => {
+   314→    if (!horasCalc.rate || !horasCalc.hours) return null;
+   315→    const rate = parseFloat(horasCalc.rate);
+   316→    const hours = parseFloat(horasCalc.hours);
+   317→    if (isNaN(rate) || isNaN(hours) || rate <= 0 || hours <= 0) return null;
+   318→    const hourlyRate = rate / 30 / 8; // monthly salary / 30 days / 8 hours
+   319→    const multiplier = form.tipo_horas_extra === 'DIURNA' ? 2 : form.tipo_horas_extra === 'NOCTURNA' ? 2.5 : 3;
+   320→    const total = hourlyRate * hours * multiplier;
+   321→    return { hourlyRate, multiplier, total };
+   322→  }, [horasCalc, form.tipo_horas_extra]);
+   323→
+   324→  // ─── Legal Compliance Data ────────────────────────────────────────────────
+   325→
+   326→  const overtimeHoursUsed = useMemo(() => {
+   327→    const extraIncs = incidencias.filter(i => i.tipo === 'HORAS_EXTRA' && i.estado !== 'RECHAZADA');
+   328→    return extraIncs.reduce((sum, i) => sum + (i.cantidad_horas || 0), 0);
+   329→  }, [incidencias]);
+   330→
+   331→  const overtimeWarning = overtimeHoursUsed > 100; // approaching 147h/year limit
+   332→
+   333→  // ─── Handlers ──────────────────────────────────────────────────────────────
+   334→
+   335→  const handleQuickTabChange = (tab: string) => {
+   336→    setQuickTab(tab);
+   337→    if (tab === 'all') setEstadoFilter('all');
+   338→    else if (tab === 'PENDIENTE') setEstadoFilter('PENDIENTE');
+   339→    else if (tab === 'APROBADA') setEstadoFilter('APROBADA');
+   340→    else if (tab === 'RECHAZADA') setEstadoFilter('RECHAZADA');
+   341→    setPagination(p => ({ ...p, page: 1 }));
+   342→  };
+   343→
+   344→  const clearAllFilters = () => {
+   345→    setTipoFilter('all');
+   346→    setEstadoFilter('all');
+   347→    setEmployeeFilter('all');
+   348→    setDateFrom('');
+   349→    setDateTo('');
+   350→    setQuickTab('all');
+   351→    setPagination(p => ({ ...p, page: 1 }));
+   352→  };
+   353→
+   354→  const handleCreate = async () => {
+   355→    if (!form.empleado_id) { toast({ title: 'Error', description: 'Seleccione un empleado', variant: 'destructive' }); return; }
+   356→    if (!form.tipo) { toast({ title: 'Error', description: 'Seleccione el tipo de incidencia', variant: 'destructive' }); return; }
+   357→    if (!form.fecha_inicio) { toast({ title: 'Error', description: 'Fecha inicio es requerida', variant: 'destructive' }); return; }
+   358→
+   359→    if (form.tipo === 'HORAS_EXTRA' && (!form.cantidad_horas || parseFloat(form.cantidad_horas) <= 0)) {
+   360→      toast({ title: 'Error', description: 'Cantidad de horas es requerida para HORAS_EXTRA', variant: 'destructive' });
+   361→      return;
+   362→    }
+   363→    if (form.tipo === 'HORAS_EXTRA' && parseFloat(form.cantidad_horas) > 4) {
+   364→      toast({ title: 'Advertencia Legal', description: 'Art. 169 CT: Máximo 4 horas de horas extra por día', variant: 'destructive' });
+   365→      return;
+   366→    }
+   367→    if (['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && (!form.monto || parseFloat(form.monto) <= 0)) {
+   368→      toast({ title: 'Error', description: 'Monto es requerido', variant: 'destructive' });
+   369→      return;
+   370→    }
+   371→
+   372→    setSaving(true);
+   373→    try {
+   374→      const body: Record<string, unknown> = {
+   375→        empleado_id: form.empleado_id,
+   376→        tipo: form.tipo,
+   377→        fecha_inicio: form.fecha_inicio,
+   378→        fecha_fin: form.fecha_fin || null,
+   379→        descripcion: form.descripcion || null,
+   380→      };
+   381→
+   382→      if (form.tipo === 'HORAS_EXTRA') {
+   383→        body.cantidad_horas = parseFloat(form.cantidad_horas);
+   384→        body.tipo_horas_extra = form.tipo_horas_extra;
+   385→      }
+   386→      if (form.tipo === 'INCAPACIDAD_ISSS') {
+   387→        body.numero_incapacidad = form.numero_incapacidad;
+   388→      }
+   389→      if (['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo)) {
+   390→        body.monto = parseFloat(form.monto);
+   391→      }
+   392→
+   393→      const res = await fetch('/api/incidencias', {
+   394→        method: 'POST',
+   395→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   396→        body: JSON.stringify(body),
+   397→      });
+   398→      const data = await res.json();
+   399→      if (res.ok) {
+   400→        toast({ title: 'Incidencia creada', description: 'La incidencia ha sido registrada exitosamente' });
+   401→        setDialogOpen(false);
+   402→        resetForm();
+   403→        fetchIncidencias();
+   404→      } else {
+   405→        toast({ title: 'Error', description: data.error || 'Error al crear incidencia', variant: 'destructive' });
+   406→      }
+   407→    } catch {
+   408→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   409→    } finally {
+   410→      setSaving(false);
+   411→    }
+   412→  };
+   413→
+   414→  const handleApproveReject = async (id: string, estado: 'APROBADA' | 'RECHAZADA') => {
+   415→    try {
+   416→      const res = await fetch(`/api/incidencias/${id}`, {
+   417→        method: 'PUT',
+   418→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   419→        body: JSON.stringify({ estado }),
+   420→      });
+   421→      const data = await res.json();
+   422→      if (res.ok) {
+   423→        toast({
+   424→          title: `Incidencia ${estado.toLowerCase()}`,
+   425→          description: `La incidencia ha sido ${estado === 'APROBADA' ? 'aprobada' : 'rechazada'}`,
+   426→        });
+   427→        fetchIncidencias();
+   428→      } else {
+   429→        toast({ title: 'Error', description: data.error || 'Error al actualizar', variant: 'destructive' });
+   430→      }
+   431→    } catch {
+   432→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   433→    }
+   434→  };
+   435→
+   436→  const resetForm = () => {
+   437→    setForm({
+   438→      empleado_id: '', tipo: 'HORAS_EXTRA', fecha_inicio: '', fecha_fin: '',
+   439→      descripcion: '', cantidad_horas: '', tipo_horas_extra: 'DIURNA',
+   440→      monto: '', numero_incapacidad: '',
+   441→    });
+   442→    setWizardStep(1);
+   443→    setSearchEmpleado('');
+   444→    setHorasCalc({ rate: '', hours: '' });
+   445→  };
+   446→
+   447→  const openDialog = () => {
+   448→    resetForm();
+   449→    setDialogOpen(true);
+   450→  };
+   451→
+   452→  // ─── Formatters ────────────────────────────────────────────────────────────
+   453→
+   454→  const formatDate = (d: string) => {
+   455→    if (!d) return '—';
+   456→    const date = new Date(d);
+   457→    const day = String(date.getDate()).padStart(2, '0');
+   458→    const month = String(date.getMonth() + 1).padStart(2, '0');
+   459→    const year = date.getFullYear();
+   460→    return `${day}/${month}/${year}`;
+   461→  };
+   462→
+   463→  const formatDateTime = (d: string | undefined) => {
+   464→    if (!d) return '—';
+   465→    const date = new Date(d);
+   466→    const day = String(date.getDate()).padStart(2, '0');
+   467→    const month = String(date.getMonth() + 1).padStart(2, '0');
+   468→    const year = date.getFullYear();
+   469→    const hours = String(date.getHours()).padStart(2, '0');
+   470→    const mins = String(date.getMinutes()).padStart(2, '0');
+   471→    return `${day}/${month}/${year} ${hours}:${mins}`;
+   472→  };
+   473→
+   474→  const formatMonto = (v: number | null) => v ? `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+   475→  const getNombreEmp = (inc: Incidencia) =>
+   476→    `${inc.empleado.primer_nombre} ${inc.empleado.primer_apellido}`;
+   477→
+   478→  const canAdvanceWizard = () => {
+   479→    if (wizardStep === 1) return !!form.empleado_id;
+   480→    if (wizardStep === 2) return !!form.tipo;
+   481→    if (wizardStep === 3) {
+   482→      if (!form.fecha_inicio) return false;
+   483→      if (form.tipo === 'HORAS_EXTRA' && (!form.cantidad_horas || parseFloat(form.cantidad_horas) <= 0)) return false;
+   484→      if (['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && (!form.monto || parseFloat(form.monto) <= 0)) return false;
+   485→      if (form.tipo === 'INCAPACIDAD_ISSS' && !form.numero_incapacidad) return false;
+   486→    }
+   487→    return true;
+   488→  };
+   489→
+   490→  // ─── Render ───────────────────────────────────────────────────────────────
+   491→
+   492→  return (
+   493→    <div className="space-y-5">
+   494→      {/* ── Header ────────────────────────────────────────────────────────── */}
+   495→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   496→        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+   497→          <AlertCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   498→          Incidencias de Nómina
+   499→          <Badge variant="outline" className="ml-1 text-emerald-600 border-emerald-300 dark:text-emerald-400 dark:border-emerald-700">
+   500→            {summary.total}
+   501→          </Badge>
+   502→        </h2>
+   503→        {canCreate && (
+   504→          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800 shadow-sm" onClick={openDialog}>
+   505→            <Plus className="h-4 w-4 mr-1" /> Nueva Incidencia
+   506→          </Button>
+   507→        )}
+   508→      </div>
+   509→
+   510→      {/* ── KPI Summary Cards ─────────────────────────────────────────────── */}
+   511→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   512→        <KpiCard
+   513→          title="Total Incidencias"
+   514→          count={summary.total}
+   515→          total={Math.max(summary.total, 1)}
+   516→          icon={AlertCircle}
+   517→          iconBg="bg-slate-100 dark:bg-slate-800"
+   518→          iconColor="text-slate-600 dark:text-slate-400"
+   519→          accentColor="border-l-slate-400"
+   520→          barColor="bg-slate-400"
+   521→        />
+   522→        <KpiCard
+   523→          title="Pendientes"
+   524→          count={summary.pendientes}
+   525→          total={Math.max(summary.total, 1)}
+   526→          icon={Clock}
+   527→          iconBg="bg-amber-50 dark:bg-amber-900/30"
+   528→          iconColor="text-amber-600 dark:text-amber-400"
+   529→          accentColor="border-l-amber-500"
+   530→          barColor="bg-amber-500"
+   531→        />
+   532→        <KpiCard
+   533→          title="Aprobadas"
+   534→          count={summary.aprobadas}
+   535→          total={Math.max(summary.total, 1)}
+   536→          icon={CheckCircle2}
+   537→          iconBg="bg-emerald-50 dark:bg-emerald-900/30"
+   538→          iconColor="text-emerald-600 dark:text-emerald-400"
+   539→          accentColor="border-l-emerald-500"
+   540→          barColor="bg-emerald-500"
+   541→        />
+   542→        <KpiCard
+   543→          title="Rechazadas"
+   544→          count={summary.rechazadas}
+   545→          total={Math.max(summary.total, 1)}
+   546→          icon={XCircle}
+   547→          iconBg="bg-red-50 dark:bg-red-900/30"
+   548→          iconColor="text-red-600 dark:text-red-400"
+   549→          accentColor="border-l-red-500"
+   550→          barColor="bg-red-500"
+   551→        />
+   552→      </div>
+   553→
+   554→      {/* ── Quick Filter Tabs ─────────────────────────────────────────────── */}
+   555→      <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   556→        <CardContent className="p-4 space-y-3">
+   557→          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   558→            <Tabs value={quickTab} onValueChange={handleQuickTabChange}>
+   559→              <TabsList className="bg-slate-100 dark:bg-slate-800">
+   560→                <TabsTrigger value="all" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-600 dark:data-[state=active]:text-emerald-400">
+   561→                  Todas
+   562→                </TabsTrigger>
+   563→                <TabsTrigger value="PENDIENTE" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-amber-600 dark:data-[state=active]:text-amber-400">
+   564→                  <Clock className="h-3.5 w-3.5 mr-1" /> Pendientes
+   565→                </TabsTrigger>
+   566→                <TabsTrigger value="APROBADA" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-600 dark:data-[state=active]:text-emerald-400">
+   567→                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Aprobadas
+   568→                </TabsTrigger>
+   569→                <TabsTrigger value="RECHAZADA" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-red-600 dark:data-[state=active]:text-red-400">
+   570→                  <XCircle className="h-3.5 w-3.5 mr-1" /> Rechazadas
+   571→                </TabsTrigger>
+   572→              </TabsList>
+   573→            </Tabs>
+   574→            <Button
+   575→              variant="outline"
+   576→              size="sm"
+   577→              onClick={() => setShowFilters(!showFilters)}
+   578→              className="text-slate-600 dark:text-slate-400 dark:bg-slate-800 dark:border-slate-700"
+   579→            >
+   580→              <Filter className="h-4 w-4 mr-1" /> Filtros
+   581→              {activeFilterCount > 0 && (
+   582→                <Badge className="ml-1.5 h-5 w-5 p-0 flex items-center justify-center bg-emerald-500 text-white text-[10px]">
+   583→                  {activeFilterCount}
+   584→                </Badge>
+   585→              )}
+   586→            </Button>
+   587→          </div>
+   588→
+   589→          {/* Expanded Filters */}
+   590→          {showFilters && (
+   591→            <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800 animate-in slide-in-from-top-2 duration-200">
+   592→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+   593→                <Select value={tipoFilter} onValueChange={v => { setTipoFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+   594→                  <SelectTrigger className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200">
+   595→                    <SelectValue placeholder="Tipo" />
+   596→                  </SelectTrigger>
+   597→                  <SelectContent>
+   598→                    <SelectItem value="all">Todos los tipos</SelectItem>
+   599→                    {Object.entries(TIPO_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+   600→                  </SelectContent>
+   601→                </Select>
+   602→                <Select value={employeeFilter} onValueChange={v => { setEmployeeFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+   603→                  <SelectTrigger className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200">
+   604→                    <SelectValue placeholder="Empleado" />
+   605→                  </SelectTrigger>
+   606→                  <SelectContent>
+   607→                    <SelectItem value="all">Todos los empleados</SelectItem>
+   608→                    {empleados.slice(0, 50).map(e => (
+   609→                      <SelectItem key={e.id} value={e.id}>{e.primer_nombre} {e.primer_apellido}</SelectItem>
+   610→                    ))}
+   611→                  </SelectContent>
+   612→                </Select>
+   613→                <div>
+   614→                  <Input
+   615→                    type="date"
+   616→                    placeholder="Desde"
+   617→                    value={dateFrom}
+   618→                    onChange={e => { setDateFrom(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+   619→                    className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+   620→                  />
+   621→                </div>
+   622→                <div>
+   623→                  <Input
+   624→                    type="date"
+   625→                    placeholder="Hasta"
+   626→                    value={dateTo}
+   627→                    onChange={e => { setDateTo(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+   628→                    className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+   629→                  />
+   630→                </div>
+   631→                <Button
+   632→                  variant="ghost"
+   633→                  size="sm"
+   634→                  onClick={clearAllFilters}
+   635→                  className="h-9 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400"
+   636→                >
+   637→                  <X className="h-4 w-4 mr-1" /> Limpiar
+   638→                </Button>
+   639→              </div>
+   640→            </div>
+   641→          )}
+   642→
+   643→          {/* Active Filter Chips */}
+   644→          {activeFilterCount > 0 && (
+   645→            <div className="flex flex-wrap gap-2 pt-2">
+   646→              {tipoFilter !== 'all' && (
+   647→                <FilterChip label={`Tipo: ${TIPO_LABELS[tipoFilter] || tipoFilter}`} onClear={() => { setTipoFilter('all'); setPagination(p => ({ ...p, page: 1 })); }} />
+   648→              )}
+   649→              {estadoFilter !== 'all' && (
+   650→                <FilterChip label={`Estado: ${estadoFilter}`} onClear={() => { setEstadoFilter('all'); setQuickTab('all'); setPagination(p => ({ ...p, page: 1 })); }} />
+   651→              )}
+   652→              {employeeFilter !== 'all' && (
+   653→                <FilterChip
+   654→                  label={`Empleado: ${empleados.find(e => e.id === employeeFilter)?.primer_nombre || employeeFilter}`}
+   655→                  onClear={() => { setEmployeeFilter('all'); setPagination(p => ({ ...p, page: 1 })); }}
+   656→                />
+   657→              )}
+   658→              {dateFrom && (
+   659→                <FilterChip label={`Desde: ${formatDate(dateFrom)}`} onClear={() => { setDateFrom(''); setPagination(p => ({ ...p, page: 1 })); }} />
+   660→              )}
+   661→              {dateTo && (
+   662→                <FilterChip label={`Hasta: ${formatDate(dateTo)}`} onClear={() => { setDateTo(''); setPagination(p => ({ ...p, page: 1 })); }} />
+   663→              )}
+   664→            </div>
+   665→          )}
+   666→        </CardContent>
+   667→      </Card>
+   668→
+   669→      {/* ── Legal Compliance Widget ───────────────────────────────────────── */}
+   670→      <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800 border-l-4 border-l-emerald-500">
+   671→        <CardContent className="p-4">
+   672→          <div className="flex items-start gap-3">
+   673→            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 shrink-0">
+   674→              <Scale className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   675→            </div>
+   676→            <div className="flex-1 min-w-0">
+   677→              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+   678→                Cumplimiento Legal
+   679→                <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300 dark:text-emerald-400 dark:border-emerald-700">
+   680→                  <ShieldCheck className="h-3 w-3 mr-1" /> Referencias CT
+   681→                </Badge>
+   682→              </h3>
+   683→              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+   684→                {/* Overtime */}
+   685→                <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+   686→                  <div className="flex items-center gap-2 mb-1.5">
+   687→                    <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+   688→                    <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Horas Extra — Art. 169 CT</span>
+   689→                  </div>
+   690→                  <p className="text-[11px] text-slate-600 dark:text-slate-400 mb-1">Máx. 4h/día, 147h/año</p>
+   691→                  <div className="flex items-center gap-2">
+   692→                    <Progress value={Math.min((overtimeHoursUsed / 147) * 100, 100)} className="h-2 flex-1" />
+   693→                    <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{overtimeHoursUsed.toFixed(1)}h</span>
+   694→                  </div>
+   695→                  {overtimeWarning && (
+   696→                    <div className="flex items-center gap-1 mt-1.5 text-amber-600 dark:text-amber-400">
+   697→                      <AlertTriangle className="h-3 w-3" />
+   698→                      <span className="text-[10px] font-medium">Acercándose al límite anual</span>
+   699→                    </div>
+   700→                  )}
+   701→                </div>
+   702→                {/* Vacation */}
+   703→                <div className="p-3 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+   704→                  <div className="flex items-center gap-2 mb-1.5">
+   705→                    <CalendarDays className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+   706→                    <span className="text-xs font-medium text-teal-700 dark:text-teal-300">Vacaciones — Art. 177 CT</span>
+   707→                  </div>
+   708→                  <p className="text-[11px] text-slate-600 dark:text-slate-400">Mín. 15 días después de 1 año</p>
+   709→                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Se acumulan 1.25 días/mes</p>
+   710→                </div>
+   711→                {/* Sick Leave */}
+   712→                <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
+   713→                  <div className="flex items-center gap-2 mb-1.5">
+   714→                    <HeartPulse className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+   715→                    <span className="text-xs font-medium text-rose-700 dark:text-rose-300">Incapacidad — Art. 61 ISSS</span>
+   716→                  </div>
+   717→                  <p className="text-[11px] text-slate-600 dark:text-slate-400">Pagada por ISSS desde el 4° día</p>
+   718→                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Primeros 3 días a cargo del empleador</p>
+   719→                </div>
+   720→              </div>
+   721→            </div>
+   722→          </div>
+   723→        </CardContent>
+   724→      </Card>
+   725→
+   726→      {/* ── Incidence Cards Grid ──────────────────────────────────────────── */}
+   727→      {loading ? (
+   728→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   729→          {Array.from({ length: 6 }).map((_, i) => (
+   730→            <Card key={i} className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   731→              <CardContent className="p-4 space-y-3">
+   732→                <Skeleton className="h-5 w-3/4 dark:bg-slate-700" />
+   733→                <Skeleton className="h-4 w-1/2 dark:bg-slate-700" />
+   734→                <Skeleton className="h-4 w-2/3 dark:bg-slate-700" />
+   735→              </CardContent>
+   736→            </Card>
+   737→          ))}
+   738→        </div>
+   739→      ) : incidencias.length === 0 ? (
+   740→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   741→          <CardContent className="p-12 text-center">
+   742→            <AlertCircle className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+   743→            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300">No se encontraron incidencias</h3>
+   744→            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Intente ajustar los filtros</p>
+   745→            {activeFilterCount > 0 && (
+   746→              <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-3 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">
+   747→                <X className="h-4 w-4 mr-1" /> Limpiar filtros
+   748→              </Button>
+   749→            )}
+   750→          </CardContent>
+   751→        </Card>
+   752→      ) : (
+   753→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   754→          {incidencias.map(inc => {
+   755→            const tipoStyle = TIPO_COLORS[inc.tipo] || TIPO_COLORS.AUSENCIA;
+   756→            const TipoIcon = TIPO_ICONS[inc.tipo] || AlertCircle;
+   757→            const legalRef = TIPO_LEGAL_REF[inc.tipo] || '';
+   758→            const isExpanded = expandedId === inc.id;
+   759→            return (
+   760→              <Card
+   761→                key={inc.id}
+   762→                className={`shadow-sm hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 dark:bg-slate-900 dark:hover:border-slate-700 border-l-4 ${tipoStyle.border} ${tipoStyle.bg}`}
+   763→              >
+   764→                <CardContent className="p-4">
+   765→                  {/* Type badge + Status */}
+   766→                  <div className="flex items-start justify-between mb-3">
+   767→                    <div className="flex items-center gap-2">
+   768→                      <div className={`p-2 rounded-lg ${tipoStyle.bg} border ${tipoStyle.border}`}>
+   769→                        <TipoIcon className={`h-4 w-4 ${tipoStyle.icon}`} />
+   770→                      </div>
+   771→                      <div>
+   772→                        <Badge className={`${tipoStyle.bg} ${tipoStyle.icon} border ${tipoStyle.border} text-[11px] px-2 py-0.5`}>
+   773→                          {TIPO_LABELS[inc.tipo] || inc.tipo}
+   774→                        </Badge>
+   775→                        {legalRef && (
+   776→                          <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-1">
+   777→                            <BookOpen className="h-2.5 w-2.5" /> {legalRef}
+   778→                          </p>
+   779→                        )}
+   780→                      </div>
+   781→                    </div>
+   782→                    <div className="flex items-center gap-1.5">
+   783→                      <span className={`w-2 h-2 rounded-full ${ESTADO_DOT[inc.estado] || 'bg-slate-400'}`} />
+   784→                      <Badge className={`${ESTADO_COLORS[inc.estado] || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'} text-[11px] px-2 py-0.5`}>
+   785→                        {inc.estado}
+   786→                      </Badge>
+   787→                    </div>
+   788→                  </div>
+   789→
+   790→                  {/* Employee info */}
+   791→                  <div className="flex items-center gap-2.5 mb-3">
+   792→                    <AvatarInitials nombre={inc.empleado.primer_nombre} apellido={inc.empleado.primer_apellido} />
+   793→                    <div className="min-w-0">
+   794→                      <p className="text-sm font-medium truncate dark:text-slate-100">{getNombreEmp(inc)}</p>
+   795→                      <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{inc.empleado.codigo_empleado}</p>
+   796→                    </div>
+   797→                  </div>
+   798→
+   799→                  {/* Date range DD/MM/YYYY */}
+   800→                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2">
+   801→                    <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+   802→                    <span>{formatDate(inc.fecha_inicio)}</span>
+   803→                    {inc.fecha_fin && (
+   804→                      <>
+   805→                        <ArrowRight className="h-3 w-3" />
+   806→                        <span>{formatDate(inc.fecha_fin)}</span>
+   807→                      </>
+   808→                    )}
+   809→                  </div>
+   810→
+   811→                  {/* Amount / Hours */}
+   812→                  <div className="bg-white dark:bg-slate-800 rounded-lg p-3 mb-2 border border-slate-100 dark:border-slate-700">
+   813→                    {inc.cantidad_horas ? (
+   814→                      <div className="flex items-center justify-between">
+   815→                        <span className="text-xs text-slate-500 dark:text-slate-400">Horas Extra</span>
+   816→                        <span className="text-lg font-bold text-amber-600 dark:text-amber-400">{inc.cantidad_horas}h</span>
+   817→                      </div>
+   818→                    ) : inc.monto ? (
+   819→                      <div className="flex items-center justify-between">
+   820→                        <span className="text-xs text-slate-500 dark:text-slate-400">Monto</span>
+   821→                        <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">{formatMonto(inc.monto)}</span>
+   822→                      </div>
+   823→                    ) : (
+   824→                      <div className="flex items-center justify-between">
+   825→                        <span className="text-xs text-slate-500 dark:text-slate-400">Sin monto/horas</span>
+   826→                        <span className="text-sm text-slate-400 dark:text-slate-500">—</span>
+   827→                      </div>
+   828→                    )}
+   829→                    {inc.tipo_horas_extra && (
+   830→                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Tipo: {inc.tipo_horas_extra}</p>
+   831→                    )}
+   832→                    {inc.numero_incapacidad && (
+   833→                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Incapacidad #: {inc.numero_incapacidad}</p>
+   834→                    )}
+   835→                  </div>
+   836→
+   837→                  {/* Description with truncation/expand */}
+   838→                  {inc.descripcion && (
+   839→                    <div className="mb-2">
+   840→                      <p className={`text-xs text-slate-500 dark:text-slate-400 ${!isExpanded ? 'line-clamp-2' : ''}`}>
+   841→                        {inc.descripcion}
+   842→                      </p>
+   843→                      {inc.descripcion.length > 80 && (
+   844→                        <button
+   845→                          onClick={() => setExpandedId(isExpanded ? null : inc.id)}
+   846→                          className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline mt-0.5 flex items-center gap-0.5"
+   847→                        >
+   848→                          {isExpanded ? 'Ver menos' : 'Ver más'}
+   849→                          {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+   850→                        </button>
+   851→                      )}
+   852→                    </div>
+   853→                  )}
+   854→
+   855→                  {/* Expand detail toggle */}
+   856→                  <button
+   857→                    onClick={() => setExpandedId(isExpanded ? null : inc.id)}
+   858→                    className="w-full flex items-center justify-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 py-1.5 border-t border-slate-100 dark:border-slate-800 transition-colors mt-1"
+   859→                  >
+   860→                    <Eye className="h-3 w-3" />
+   861→                    {isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
+   862→                  </button>
+   863→
+   864→                  {/* Expanded Detail Section */}
+   865→                  {isExpanded && (
+   866→                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3 animate-in slide-in-from-top-2 duration-200">
+   867→                      {/* Approval Timeline */}
+   868→                      <div>
+   869→                        <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Línea de Tiempo</p>
+   870→                        <div className="space-y-2">
+   871→                          {/* Created */}
+   872→                          <div className="flex items-center gap-2">
+   873→                            <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+   874→                              <FileText className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+   875→                            </div>
+   876→                            <div className="flex-1 min-w-0">
+   877→                              <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Creada</p>
+   878→                              <p className="text-[10px] text-slate-400 dark:text-slate-500">{formatDateTime(inc.fecha_creacion)}</p>
+   879→                            </div>
+   880→                          </div>
+   881→                          {/* Reviewed/In Process */}
+   882→                          <div className="flex items-center gap-2">
+   883→                            <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+   884→                              inc.estado === 'PENDIENTE' ? 'bg-amber-100 dark:bg-amber-900/40' : 'bg-slate-100 dark:bg-slate-800'
+   885→                            }`}>
+   886→                              <UserCheck className={`h-3 w-3 ${inc.estado === 'PENDIENTE' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`} />
+   887→                            </div>
+   888→                            <div className="flex-1 min-w-0">
+   889→                              <p className={`text-[11px] font-medium ${inc.estado === 'PENDIENTE' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>
+   890→                                En Revisión
+   891→                              </p>
+   892→                              {inc.estado === 'PENDIENTE' && (
+   893→                                <p className="text-[10px] text-amber-500 dark:text-amber-400/70">Esperando aprobación</p>
+   894→                              )}
+   895→                            </div>
+   896→                          </div>
+   897→                          {/* Approved / Rejected */}
+   898→                          <div className="flex items-center gap-2">
+   899→                            <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+   900→                              inc.estado === 'APROBADA' ? 'bg-emerald-100 dark:bg-emerald-900/40' :
+   901→                              inc.estado === 'RECHAZADA' ? 'bg-red-100 dark:bg-red-900/40' :
+   902→                              'bg-slate-100 dark:bg-slate-800'
+   903→                            }`}>
+   904→                              {inc.estado === 'RECHAZADA' ? (
+   905→                                <ThumbsDown className="h-3 w-3 text-red-600 dark:text-red-400" />
+   906→                              ) : (
+   907→                                <ThumbsUp className={`h-3 w-3 ${
+   908→                                  inc.estado === 'APROBADA' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'
+   909→                                }`} />
+   910→                              )}
+   911→                            </div>
+   912→                            <div className="flex-1 min-w-0">
+   913→                              <p className={`text-[11px] font-medium ${
+   914→                                inc.estado === 'APROBADA' ? 'text-emerald-600 dark:text-emerald-400' :
+   915→                                inc.estado === 'RECHAZADA' ? 'text-red-600 dark:text-red-400' :
+   916→                                'text-slate-400 dark:text-slate-500'
+   917→                              }`}>
+   918→                                {inc.estado === 'APROBADA' ? 'Aprobada' : inc.estado === 'RECHAZADA' ? 'Rechazada' : 'Pendiente'}
+   919→                              </p>
+   920→                              {inc.aprobada_por && (
+   921→                                <p className="text-[10px] text-slate-400 dark:text-slate-500">
+   922→                                  Por: {inc.aprobada_por.nombre} {inc.aprobada_por.apellido}
+   923→                                </p>
+   924→                              )}
+   925→                              {inc.fecha_actualizacion && inc.estado !== 'PENDIENTE' && (
+   926→                                <p className="text-[10px] text-slate-400 dark:text-slate-500">
+   927→                                  {formatDateTime(inc.fecha_actualizacion)}
+   928→                                </p>
+   929→                              )}
+   930→                            </div>
+   931→                          </div>
+   932→                        </div>
+   933→                      </div>
+   934→
+   935→                      {/* Legal Reference */}
+   936→                      {legalRef && (
+   937→                        <div className="flex items-start gap-2 p-2 rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+   938→                          <Info className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400 mt-0.5 shrink-0" />
+   939→                          <div>
+   940→                            <p className="text-[10px] font-medium text-slate-600 dark:text-slate-300">Referencia Legal</p>
+   941→                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+   942→                              {legalRef === 'Art. 169 CT' && 'Máximo 4 horas/día y 147 horas/año de trabajo extraordinario.'}
+   943→                              {legalRef === 'Art. 52 CT' && 'El empleador puede descontar salarios por ausencias injustificadas.'}
+   944→                              {legalRef === 'Art. 61 Ley ISSS' && 'Incapacidad pagada por ISSS desde el 4to día. Primeros 3 días a cargo del empleador.'}
+   945→                              {legalRef === 'Art. 177 CT' && 'Todo trabajador tiene derecho a permisos con goce de sueldo conforme la ley.'}
+   946→                              {legalRef === 'Art. 140 CT' && 'Las comisiones, bonos y descuentos forman parte del salario conforme el Código de Trabajo.'}
+   947→                            </p>
+   948→                          </div>
+   949→                        </div>
+   950→                      )}
+   951→
+   952→                      {/* Action buttons for APROBADOR */}
+   953→                      {canApprove && inc.estado === 'PENDIENTE' && (
+   954→                        <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+   955→                          <Button
+   956→                            variant="outline"
+   957→                            size="sm"
+   958→                            className="flex-1 h-8 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/20"
+   959→                            onClick={() => handleApproveReject(inc.id, 'APROBADA')}
+   960→                          >
+   961→                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Aprobar
+   962→                          </Button>
+   963→                          <Button
+   964→                            variant="outline"
+   965→                            size="sm"
+   966→                            className="flex-1 h-8 text-xs text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
+   967→                            onClick={() => handleApproveReject(inc.id, 'RECHAZADA')}
+   968→                          >
+   969→                            <XCircle className="h-3.5 w-3.5 mr-1" /> Rechazar
+   970→                          </Button>
+   971→                        </div>
+   972→                      )}
+   973→                    </div>
+   974→                  )}
+   975→                </CardContent>
+   976→              </Card>
+   977→            );
+   978→          })}
+   979→        </div>
+   980→      )}
+   981→
+   982→      {/* ── Pagination ────────────────────────────────────────────────────── */}
+   983→      {pagination.totalPages > 1 && (
+   984→        <div className="flex items-center justify-center gap-2">
+   985→          <Button
+   986→            variant="outline"
+   987→            size="sm"
+   988→            disabled={pagination.page <= 1}
+   989→            onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
+   990→            className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+   991→          >
+   992→            <ChevronLeft className="h-4 w-4" /> Anterior
+   993→          </Button>
+   994→          <span className="text-sm text-slate-500 dark:text-slate-400">
+   995→            Página {pagination.page} de {pagination.totalPages}
+   996→          </span>
+   997→          <Button
+   998→            variant="outline"
+   999→            size="sm"
+  1000→            disabled={pagination.page >= pagination.totalPages}
+  1001→            onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+  1002→            className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+  1003→          >
+  1004→            Siguiente <ChevronRight className="h-4 w-4" />
+  1005→          </Button>
+  1006→        </div>
+  1007→      )}
+  1008→
+  1009→      {/* ── New Incidence Dialog (Wizard) ─────────────────────────────────── */}
+  1010→      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+  1011→        <DialogContent className="sm:max-w-2xl dark:bg-slate-900 dark:border-slate-800">
+  1012→          <DialogHeader>
+  1013→            <DialogTitle className="dark:text-slate-100 flex items-center gap-2">
+  1014→              <Plus className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+  1015→              Nueva Incidencia
+  1016→            </DialogTitle>
+  1017→            <DialogDescription className="dark:text-slate-400">
+  1018→              Registrar una incidencia de nómina — Paso {wizardStep} de 4
+  1019→            </DialogDescription>
+  1020→          </DialogHeader>
+  1021→
+  1022→          {/* Wizard Progress Bar */}
+  1023→          <div className="flex items-center gap-1 mb-2">
+  1024→            {WIZARD_STEPS.map((step, idx) => {
+  1025→              const StepIcon = step.icon;
+  1026→              const isActive = wizardStep === step.id;
+  1027→              const isComplete = wizardStep > step.id;
+  1028→              return (
+  1029→                <React.Fragment key={step.id}>
+  1030→                  <button
+  1031→                    onClick={() => { if (isComplete) setWizardStep(step.id); }}
+  1032→                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+  1033→                      isActive
+  1034→                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 shadow-sm'
+  1035→                        : isComplete
+  1036→                        ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+  1037→                        : 'bg-slate-50 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+  1038→                    }`}
+  1039→                  >
+  1040→                    <StepIcon className="h-3.5 w-3.5" />
+  1041→                    <span className="hidden sm:inline">{step.label}</span>
+  1042→                    {isComplete && <CheckCircle2 className="h-3 w-3" />}
+  1043→                  </button>
+  1044→                  {idx < WIZARD_STEPS.length - 1 && (
+  1045→                    <div className={`h-0.5 flex-1 rounded-full transition-colors ${wizardStep > step.id ? 'bg-emerald-400' : 'bg-slate-200 dark:bg-slate-700'}`} />
+  1046→                  )}
+  1047→                </React.Fragment>
+  1048→              );
+  1049→            })}
+  1050→          </div>
+  1051→
+  1052→          {/* Step 1: Select Employee */}
+  1053→          {wizardStep === 1 && (
+  1054→            <div className="space-y-4 animate-in slide-in-from-right-2 duration-200">
+  1055→              <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  1056→                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">Paso 1: Seleccionar Empleado</p>
+  1057→                <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Busque y seleccione el empleado para la incidencia</p>
+  1058→              </div>
+  1059→              <div>
+  1060→                <Label className="dark:text-slate-300 mb-2 block">Buscar empleado *</Label>
+  1061→                <div className="relative">
+  1062→                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+  1063→                  <Input
+  1064→                    placeholder="Buscar por nombre o código..."
+  1065→                    value={searchEmpleado}
+  1066→                    onChange={e => setSearchEmpleado(e.target.value)}
+  1067→                    className="h-10 pl-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 focus:border-emerald-400 focus:ring-emerald-400"
+  1068→                  />
+  1069→                </div>
+  1070→              </div>
+  1071→              <div className="max-h-64 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+  1072→                {filteredEmpleados.slice(0, 20).map(e => {
+  1073→                  const isSelected = form.empleado_id === e.id;
+  1074→                  return (
+  1075→                    <button
+  1076→                      key={e.id}
+  1077→                      type="button"
+  1078→                      onClick={() => setForm(p => ({ ...p, empleado_id: e.id }))}
+  1079→                      className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
+  1080→                        isSelected
+  1081→                          ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700'
+  1082→                          : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+  1083→                      }`}
+  1084→                    >
+  1085→                      <AvatarInitials nombre={e.primer_nombre} apellido={e.primer_apellido} size="sm" />
+  1086→                      <div className="min-w-0 flex-1">
+  1087→                        <p className={`text-sm font-medium truncate ${isSelected ? 'text-emerald-700 dark:text-emerald-300' : 'dark:text-slate-100'}`}>
+  1088→                          {e.primer_nombre} {e.primer_apellido}
+  1089→                        </p>
+  1090→                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{e.codigo_empleado}</p>
+  1091→                      </div>
+  1092→                      {isSelected && <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+  1093→                    </button>
+  1094→                  );
+  1095→                })}
+  1096→                {filteredEmpleados.length === 0 && (
+  1097→                  <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-4">No se encontraron empleados</p>
+  1098→                )}
+  1099→              </div>
+  1100→            </div>
+  1101→          )}
+  1102→
+  1103→          {/* Step 2: Select Type */}
+  1104→          {wizardStep === 2 && (
+  1105→            <div className="space-y-4 animate-in slide-in-from-right-2 duration-200">
+  1106→              <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  1107→                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">Paso 2: Tipo de Incidencia</p>
+  1108→                <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Seleccione el tipo de incidencia a registrar</p>
+  1109→              </div>
+  1110→              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+  1111→                {Object.entries(TIPO_LABELS).map(([key, label]) => {
+  1112→                  const tipoStyle = TIPO_COLORS[key];
+  1113→                  const TipoIcon = TIPO_ICONS[key] || AlertCircle;
+  1114→                  const legal = TIPO_LEGAL_REF[key];
+  1115→                  const isSelected = form.tipo === key;
+  1116→                  return (
+  1117→                    <button
+  1118→                      key={key}
+  1119→                      type="button"
+  1120→                      onClick={() => setForm(p => ({ ...p, tipo: key }))}
+  1121→                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border text-xs transition-all ${
+  1122→                        isSelected
+  1123→                          ? `${tipoStyle.bg} ${tipoStyle.border} ${tipoStyle.icon} ring-2 ring-emerald-400/50 shadow-md dark:ring-offset-slate-900 ring-offset-1`
+  1124→                          : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:shadow-sm'
+  1125→                      }`}
+  1126→                    >
+  1127→                      <div className={`p-2 rounded-lg ${isSelected ? tipoStyle.bg : 'bg-slate-100 dark:bg-slate-800'}`}>
+  1128→                        <TipoIcon className={`h-6 w-6 ${isSelected ? tipoStyle.icon : 'text-slate-500 dark:text-slate-400'}`} />
+  1129→                      </div>
+  1130→                      <span className="font-medium leading-tight text-center">{label}</span>
+  1131→                      {legal && (
+  1132→                        <span className={`text-[9px] ${isSelected ? tipoStyle.icon : 'text-slate-400 dark:text-slate-500'}`}>
+  1133→                          {legal}
+  1134→                        </span>
+  1135→                      )}
+  1136→                    </button>
+  1137→                  );
+  1138→                })}
+  1139→              </div>
+  1140→            </div>
+  1141→          )}
+  1142→
+  1143→          {/* Step 3: Enter Details */}
+  1144→          {wizardStep === 3 && (
+  1145→            <div className="space-y-4 animate-in slide-in-from-right-2 duration-200">
+  1146→              <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  1147→                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">Paso 3: Detalles de Incidencia</p>
+  1148→                <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Ingrese la información específica según el tipo seleccionado</p>
+  1149→              </div>
+  1150→
+  1151→              {/* Date range */}
+  1152→              <div className="grid grid-cols-2 gap-3">
+  1153→                <div>
+  1154→                  <Label className="dark:text-slate-300">Fecha Inicio *</Label>
+  1155→                  <Input type="date" value={form.fecha_inicio} onChange={e => setForm(p => ({ ...p, fecha_inicio: e.target.value }))} className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+  1156→                </div>
+  1157→                <div>
+  1158→                  <Label className="dark:text-slate-300">Fecha Fin</Label>
+  1159→                  <Input type="date" value={form.fecha_fin} onChange={e => setForm(p => ({ ...p, fecha_fin: e.target.value }))} className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+  1160→                </div>
+  1161→              </div>
+  1162→
+  1163→              {/* Conditional: HORAS_EXTRA */}
+  1164→              {form.tipo === 'HORAS_EXTRA' && (
+  1165→                <div className="space-y-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+  1166→                  <div className="flex items-center gap-2 mb-2">
+  1167→                    <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+  1168→                    <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Horas Extra — Art. 169 CT</span>
+  1169→                  </div>
+  1170→                  <div className="grid grid-cols-2 gap-3">
+  1171→                    <div>
+  1172→                      <Label className="text-amber-700 dark:text-amber-300">Cantidad de Horas *</Label>
+  1173→                      <Input
+  1174→                        type="number"
+  1175→                        step="0.5"
+  1176→                        value={form.cantidad_horas}
+  1177→                        onChange={e => { setForm(p => ({ ...p, cantidad_horas: e.target.value })); setHorasCalc(h => ({ ...h, hours: e.target.value })); }}
+  1178→                        className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+  1179→                      />
+  1180→                      <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+  1181→                        <AlertTriangle className="h-3 w-3" /> Máx. 4h/día, 147h/año
+  1182→                      </p>
+  1183→                      {form.cantidad_horas && parseFloat(form.cantidad_horas) > 4 && (
+  1184→                        <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5 flex items-center gap-1">
+  1185→                          <AlertCircle className="h-3 w-3" /> Excede el máximo de 4h/día
+  1186→                        </p>
+  1187→                      )}
+  1188→                    </div>
+  1189→                    <div>
+  1190→                      <Label className="text-amber-700 dark:text-amber-300">Tipo de Horas Extra</Label>
+  1191→                      <Select value={form.tipo_horas_extra} onValueChange={v => setForm(p => ({ ...p, tipo_horas_extra: v }))}>
+  1192→                        <SelectTrigger className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue /></SelectTrigger>
+  1193→                        <SelectContent>
+  1194→                          <SelectItem value="DIURNA">Diurna (2x)</SelectItem>
+  1195→                          <SelectItem value="NOCTURNA">Nocturna (2.5x)</SelectItem>
+  1196→                          <SelectItem value="DESCANSO">Día de Descanso (3x)</SelectItem>
+  1197→                          <SelectItem value="ASUETO">Asueto (3x)</SelectItem>
+  1198→                        </SelectContent>
+  1199→                      </Select>
+  1200→                    </div>
+  1201→                  </div>
+  1202→                  {/* Overtime Calculator */}
+  1203→                  <div className="p-3 rounded-md bg-white dark:bg-slate-800 border border-amber-100 dark:border-amber-900/40">
+  1204→                    <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+  1205→                      <Zap className="h-3 w-3" /> Calculadora de Horas Extra
+  1206→                    </p>
+  1207→                    <div className="grid grid-cols-2 gap-2 mb-2">
+  1208→                      <div>
+  1209→                        <Label className="text-[10px] text-slate-500 dark:text-slate-400">Salario Mensual</Label>
+  1210→                        <Input
+  1211→                          type="number"
+  1212→                          step="0.01"
+  1213→                          placeholder="$0.00"
+  1214→                          value={horasCalc.rate}
+  1215→                          onChange={e => setHorasCalc(h => ({ ...h, rate: e.target.value }))}
+  1216→                          className="h-8 text-xs mt-0.5 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200"
+  1217→                        />
+  1218→                      </div>
+  1219→                      <div>
+  1220→                        <Label className="text-[10px] text-slate-500 dark:text-slate-400">Horas</Label>
+  1221→                        <Input
+  1222→                          type="number"
+  1223→                          step="0.5"
+  1224→                          value={horasCalc.hours || form.cantidad_horas}
+  1225→                          onChange={e => { setHorasCalc(h => ({ ...h, hours: e.target.value })); if (!form.cantidad_horas) setForm(p => ({ ...p, cantidad_horas: e.target.value })); }}
+  1226→                          className="h-8 text-xs mt-0.5 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200"
+  1227→                        />
+  1228→                      </div>
+  1229→                    </div>
+  1230→                    {overtimeCalcResult && (
+  1231→                      <div className="text-[10px] text-slate-600 dark:text-slate-300 space-y-0.5">
+  1232→                        <p>Tarifa por hora: <span className="font-mono">${overtimeCalcResult.hourlyRate.toFixed(2)}</span></p>
+  1233→                        <p>Multiplicador: <span className="font-mono">{overtimeCalcResult.multiplier}x</span></p>
+  1234→                        <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+  1235→                          Total estimado: <span className="font-mono">${overtimeCalcResult.total.toFixed(2)}</span>
+  1236→                        </p>
+  1237→                      </div>
+  1238→                    )}
+  1239→                  </div>
+  1240→                </div>
+  1241→              )}
+  1242→
+  1243→              {/* Conditional: INCAPACIDAD_ISSS */}
+  1244→              {form.tipo === 'INCAPACIDAD_ISSS' && (
+  1245→                <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 space-y-2">
+  1246→                  <div className="flex items-center gap-2">
+  1247→                    <HeartPulse className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+  1248→                    <span className="text-sm font-medium text-rose-700 dark:text-rose-300">Incapacidad — Art. 61 Ley ISSS</span>
+  1249→                  </div>
+  1250→                  <Label className="text-rose-700 dark:text-rose-300">Número de Incapacidad *</Label>
+  1251→                  <Input value={form.numero_incapacidad} onChange={e => setForm(p => ({ ...p, numero_incapacidad: e.target.value }))} className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+  1252→                  <p className="text-[10px] text-rose-600 dark:text-rose-400 flex items-center gap-1">
+  1253→                    <Info className="h-3 w-3" /> Primeros 3 días a cargo del empleador, desde el 4° día ISSS
+  1254→                  </p>
+  1255→                </div>
+  1256→              )}
+  1257→
+  1258→              {/* Conditional: PERMISO */}
+  1259→              {form.tipo === 'PERMISO' && (
+  1260→                <div className="p-4 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+  1261→                  <div className="flex items-center gap-2 mb-2">
+  1262→                    <DoorOpen className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+  1263→                    <span className="text-sm font-medium text-teal-700 dark:text-teal-300">Permiso — Art. 177 CT</span>
+  1264→                  </div>
+  1265→                  <p className="text-[10px] text-teal-600 dark:text-teal-400">
+  1266→                    Los permisos con goce de sueldo están sujetos a las disposiciones del empleador y la ley.
+  1267→                  </p>
+  1268→                </div>
+  1269→              )}
+  1270→
+  1271→              {/* Conditional: COMISION/BONO/DESCUENTO_ESPECIAL */}
+  1272→              {['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && (
+  1273→                <div className={`p-4 rounded-lg border space-y-2 ${
+  1274→                  form.tipo === 'BONO'
+  1275→                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+  1276→                    : form.tipo === 'COMISION'
+  1277→                    ? 'bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-800'
+  1278→                    : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+  1279→                }`}>
+  1280→                  <div className="flex items-center gap-2">
+  1281→                    {form.tipo === 'BONO' && <Gift className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+  1282→                    {form.tipo === 'COMISION' && <Percent className="h-4 w-4 text-violet-600 dark:text-violet-400" />}
+  1283→                    {form.tipo === 'DESCUENTO_ESPECIAL' && <Ban className="h-4 w-4 text-red-600 dark:text-red-400" />}
+  1284→                    <span className={`text-sm font-medium ${
+  1285→                      form.tipo === 'BONO' ? 'text-emerald-700 dark:text-emerald-300' :
+  1286→                      form.tipo === 'COMISION' ? 'text-violet-700 dark:text-violet-300' :
+  1287→                      'text-red-700 dark:text-red-300'
+  1288→                    }`}>
+  1289→                      {TIPO_LABELS[form.tipo]} — Art. 140 CT
+  1290→                    </span>
+  1291→                  </div>
+  1292→                  <Label className={`${
+  1293→                    form.tipo === 'BONO' ? 'text-emerald-700 dark:text-emerald-300' :
+  1294→                    form.tipo === 'COMISION' ? 'text-violet-700 dark:text-violet-300' :
+  1295→                    'text-red-700 dark:text-red-300'
+  1296→                  }`}>Monto (USD) *</Label>
+  1297→                  <Input type="number" step="0.01" value={form.monto} onChange={e => setForm(p => ({ ...p, monto: e.target.value }))} className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+  1298→                </div>
+  1299→              )}
+  1300→
+  1301→              {/* Description */}
+  1302→              <div>
+  1303→                <Label className="dark:text-slate-300">Descripción</Label>
+  1304→                <Textarea
+  1305→                  value={form.descripcion}
+  1306→                  onChange={e => setForm(p => ({ ...p, descripcion: e.target.value }))}
+  1307→                  className="mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 min-h-20"
+  1308→                  placeholder="Describa el motivo o detalle de la incidencia..."
+  1309→                />
+  1310→              </div>
+  1311→            </div>
+  1312→          )}
+  1313→
+  1314→          {/* Step 4: Review */}
+  1315→          {wizardStep === 4 && (
+  1316→            <div className="space-y-4 animate-in slide-in-from-right-2 duration-200">
+  1317→              <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  1318→                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">Paso 4: Revisión</p>
+  1319→                <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Verifique la información antes de enviar</p>
+  1320→              </div>
+  1321→
+  1322→              <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-4">
+  1323→                {/* Employee */}
+  1324→                <div className="flex items-center gap-3">
+  1325→                  <AvatarInitials
+  1326→                    nombre={selectedEmpleadoName ? selectedEmpleadoName.split(' ')[0] : '?'}
+  1327→                    apellido={selectedEmpleadoName ? selectedEmpleadoName.split(' ').slice(1).join(' ') || selectedEmpleadoName[0] : '?'}
+  1328→                    size="lg"
+  1329→                  />
+  1330→                  <div>
+  1331→                    <p className="font-semibold text-slate-900 dark:text-slate-100">{selectedEmpleadoName || 'Sin empleado'}</p>
+  1332→                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{selectedEmpleadoCode}</p>
+  1333→                  </div>
+  1334→                </div>
+  1335→
+  1336→                <div className="grid grid-cols-2 gap-3">
+  1337→                  {/* Type */}
+  1338→                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+  1339→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Tipo</p>
+  1340→                    <div className="flex items-center gap-2">
+  1341→                      {(() => {
+  1342→                        const TipoIcon = TIPO_ICONS[form.tipo] || AlertCircle;
+  1343→                        const tipoStyle = TIPO_COLORS[form.tipo];
+  1344→                        return (
+  1345→                          <>
+  1346→                            <TipoIcon className={`h-4 w-4 ${tipoStyle.icon}`} />
+  1347→                            <span className="text-sm font-medium dark:text-slate-200">{TIPO_LABELS[form.tipo]}</span>
+  1348→                          </>
+  1349→                        );
+  1350→                      })()}
+  1351→                    </div>
+  1352→                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-1">
+  1353→                      <BookOpen className="h-2.5 w-2.5" /> {TIPO_LEGAL_REF[form.tipo]}
+  1354→                    </p>
+  1355→                  </div>
+  1356→
+  1357→                  {/* Status */}
+  1358→                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+  1359→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Estado</p>
+  1360→                    <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-xs">
+  1361→                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" />
+  1362→                      PENDIENTE
+  1363→                    </Badge>
+  1364→                  </div>
+  1365→
+  1366→                  {/* Dates */}
+  1367→                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+  1368→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Fecha Inicio</p>
+  1369→                    <p className="text-sm font-medium dark:text-slate-200 flex items-center gap-1.5">
+  1370→                      <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
+  1371→                      {form.fecha_inicio ? formatDate(form.fecha_inicio) : '—'}
+  1372→                    </p>
+  1373→                  </div>
+  1374→                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+  1375→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Fecha Fin</p>
+  1376→                    <p className="text-sm font-medium dark:text-slate-200 flex items-center gap-1.5">
+  1377→                      <CalendarCheck className="h-3.5 w-3.5 text-slate-400" />
+  1378→                      {form.fecha_fin ? formatDate(form.fecha_fin) : '—'}
+  1379→                    </p>
+  1380→                  </div>
+  1381→                </div>
+  1382→
+  1383→                {/* Conditional details */}
+  1384→                {form.tipo === 'HORAS_EXTRA' && form.cantidad_horas && (
+  1385→                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+  1386→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Horas Extra</p>
+  1387→                    <div className="flex items-center justify-between">
+  1388→                      <span className="text-lg font-bold text-amber-600 dark:text-amber-400">{form.cantidad_horas}h</span>
+  1389→                      <span className="text-xs text-amber-600 dark:text-amber-400">{form.tipo_horas_extra}</span>
+  1390→                    </div>
+  1391→                    {overtimeCalcResult && (
+  1392→                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">
+  1393→                        Monto estimado: <span className="font-mono">${overtimeCalcResult.total.toFixed(2)}</span>
+  1394→                      </p>
+  1395→                    )}
+  1396→                  </div>
+  1397→                )}
+  1398→                {['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && form.monto && (
+  1399→                  <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  1400→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Monto</p>
+  1401→                    <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+  1402→                      ${parseFloat(form.monto).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+  1403→                    </p>
+  1404→                  </div>
+  1405→                )}
+  1406→                {form.tipo === 'INCAPACIDAD_ISSS' && form.numero_incapacidad && (
+  1407→                  <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
+  1408→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Incapacidad</p>
+  1409→                    <p className="text-sm font-medium dark:text-slate-200">#{form.numero_incapacidad}</p>
+  1410→                  </div>
+  1411→                )}
+  1412→
+  1413→                {form.descripcion && (
+  1414→                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+  1415→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Descripción</p>
+  1416→                    <p className="text-sm dark:text-slate-300">{form.descripcion}</p>
+  1417→                  </div>
+  1418→                )}
+  1419→              </div>
+  1420→
+  1421→              {/* Legal Validation Messages */}
+  1422→              {form.tipo === 'HORAS_EXTRA' && form.cantidad_horas && parseFloat(form.cantidad_horas) > 4 && (
+  1423→                <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+  1424→                  <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+  1425→                  <div>
+  1426→                    <p className="text-xs font-medium text-red-700 dark:text-red-300">Excede límite diario</p>
+  1427→                    <p className="text-[10px] text-red-600 dark:text-red-400">Art. 169 CT: Máximo 4 horas extra por día</p>
+  1428→                  </div>
+  1429→                </div>
+  1430→              )}
+  1431→            </div>
+  1432→          )}
+  1433→
+  1434→          {/* ── Wizard Navigation ──────────────────────────────────────────── */}
+  1435→          <div className="flex justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+  1436→            <div>
+  1437→              {wizardStep > 1 && (
+  1438→                <Button
+  1439→                  variant="outline"
+  1440→                  onClick={() => setWizardStep(s => s - 1)}
+  1441→                  className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+  1442→                >
+  1443→                  <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+  1444→                </Button>
+  1445→              )}
+  1446→            </div>
+  1447→            <div className="flex gap-2">
+  1448→              <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">
+  1449→                Cancelar
+  1450→              </Button>
+  1451→              {wizardStep < 4 ? (
+  1452→                <Button
+  1453→                  className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800"
+  1454→                  disabled={!canAdvanceWizard()}
+  1455→                  onClick={() => setWizardStep(s => s + 1)}
+  1456→                >
+  1457→                  Siguiente <ChevronRight className="h-4 w-4 ml-1" />
+  1458→                </Button>
+  1459→              ) : (
+  1460→                <Button
+  1461→                  className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800"
+  1462→                  onClick={handleCreate}
+  1463→                  disabled={saving}
+  1464→                >
+  1465→                  {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
+  1466→                  Confirmar Incidencia
+  1467→                </Button>
+  1468→              )}
+  1469→            </div>
+  1470→          </div>
+  1471→        </DialogContent>
+  1472→      </Dialog>
+  1473→    </div>
+  1474→  );
+  1475→}
+  1476→

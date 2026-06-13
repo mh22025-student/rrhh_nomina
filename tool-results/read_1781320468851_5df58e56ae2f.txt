@@ -1,0 +1,452 @@
+   700→                />
+   701→              ))}
+   702→            </div>
+   703→            <div className="flex items-center gap-1.5">
+   704→              {nominaTrend.direction === 'up' ? (
+   705→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30">
+   706→                  <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+   707→                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">+{nominaTrend.value.toFixed(1)}%</span>
+   708→                </div>
+   709→              ) : (
+   710→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30">
+   711→                  <ArrowDownRight className="h-3 w-3 text-red-500" />
+   712→                  <span className="text-xs font-semibold text-red-600 dark:text-red-400">-{nominaTrend.value.toFixed(1)}%</span>
+   713→                </div>
+   714→              )}
+   715→              <span className="text-xs text-slate-400 dark:text-slate-500">vs mes anterior</span>
+   716→            </div>
+   717→          </CardContent>
+   718→        </Card>
+   719→
+   720→        {/* KPI 2: Empleados Pagados */}
+   721→        <Card className="shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+   722→          <div className="absolute inset-0 bg-gradient-to-br from-teal-50 via-cyan-50/50 to-transparent dark:from-teal-950/30 dark:via-cyan-950/20 dark:to-transparent pointer-events-none" />
+   723→          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-500 to-cyan-500" />
+   724→          <CardContent className="p-5 relative">
+   725→            <div className="flex items-center justify-between mb-3">
+   726→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Empleados Pagados</span>
+   727→              <div className="p-2.5 rounded-xl bg-teal-100 dark:bg-teal-900/40 group-hover:scale-110 transition-transform duration-300">
+   728→                <Users className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+   729→              </div>
+   730→            </div>
+   731→            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+   732→              {empleadosPagados}
+   733→              <span className="text-sm font-normal text-slate-400 dark:text-slate-500 ml-1.5">de {data.kpis.total_empleados_activos}</span>
+   734→            </p>
+   735→            {/* Mini progress bar */}
+   736→            <div className="mt-3 mb-1.5">
+   737→              <Progress
+   738→                value={data.kpis.total_empleados_activos > 0 ? (empleadosPagados / data.kpis.total_empleados_activos) * 100 : 0}
+   739→                className="h-2 bg-teal-100 dark:bg-teal-900/30"
+   740→              />
+   741→            </div>
+   742→            <div className="flex items-center gap-1.5">
+   743→              {data.kpis.tendencia_empleados.startsWith('-') ? (
+   744→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30">
+   745→                  <ArrowDownRight className="h-3 w-3 text-red-500" />
+   746→                  <span className="text-xs font-semibold text-red-600 dark:text-red-400">{data.kpis.tendencia_empleados}%</span>
+   747→                </div>
+   748→              ) : (
+   749→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/30">
+   750→                  <ArrowUpRight className="h-3 w-3 text-teal-500" />
+   751→                  <span className="text-xs font-semibold text-teal-600 dark:text-teal-400">+{data.kpis.tendencia_empleados}%</span>
+   752→                </div>
+   753→              )}
+   754→              <span className="text-xs text-slate-400 dark:text-slate-500">vs mes anterior</span>
+   755→            </div>
+   756→          </CardContent>
+   757→        </Card>
+   758→
+   759→        {/* KPI 3: Planillas Activas */}
+   760→        <Card className="shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+   761→          <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-transparent dark:from-amber-950/30 dark:via-orange-950/20 dark:to-transparent pointer-events-none" />
+   762→          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-500 to-orange-500" />
+   763→          <CardContent className="p-5 relative">
+   764→            <div className="flex items-center justify-between mb-3">
+   765→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Planillas Activas</span>
+   766→              <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 group-hover:scale-110 transition-transform duration-300">
+   767→                <Activity className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+   768→              </div>
+   769→            </div>
+   770→            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+   771→              {planillasActivas}
+   772→              <span className="text-sm font-normal text-slate-400 dark:text-slate-500 ml-1.5">en proceso</span>
+   773→            </p>
+   774→            {/* Status dots for active planillas */}
+   775→            <div className="flex items-center gap-1.5 mt-3 mb-1.5">
+   776→              {data.planillas_recientes
+   777→                .filter(p => p.estado !== 'PAGADA' && p.estado !== 'ANULADA')
+   778→                .slice(0, 5)
+   779→                .map((p, i) => (
+   780→                  <div key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/20">
+   781→                    <span className={`w-1.5 h-1.5 rounded-full ${estadoDot[p.estado]}`} />
+   782→                    <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400">{p.estado.slice(0, 4)}</span>
+   783→                  </div>
+   784→                ))
+   785→              }
+   786→              {planillasActivas === 0 && (
+   787→                <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+   788→                  <CheckCircle className="h-3 w-3" /> Todas pagadas
+   789→                </span>
+   790→              )}
+   791→            </div>
+   792→            <div className="flex items-center gap-1.5">
+   793→              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/30">
+   794→                <Zap className="h-3 w-3 text-amber-500" />
+   795→                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{data.planillas_recientes.length} total</span>
+   796→              </div>
+   797→            </div>
+   798→          </CardContent>
+   799→        </Card>
+   800→
+   801→        {/* KPI 4: Cumplimiento % */}
+   802→        <Card className="shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+   803→          <div className={`absolute inset-0 pointer-events-none ${
+   804→            data.kpis.semaforo === 'verde'
+   805→              ? 'bg-gradient-to-br from-emerald-50 via-green-50/50 to-transparent dark:from-emerald-950/30 dark:via-green-950/20 dark:to-transparent'
+   806→              : data.kpis.semaforo === 'amarillo'
+   807→                ? 'bg-gradient-to-br from-amber-50 via-yellow-50/50 to-transparent dark:from-amber-950/30 dark:via-yellow-950/20 dark:to-transparent'
+   808→                : 'bg-gradient-to-br from-red-50 via-rose-50/50 to-transparent dark:from-red-950/30 dark:via-rose-950/20 dark:to-transparent'
+   809→          }`} />
+   810→          <div className={`absolute top-0 left-0 w-1.5 h-full ${
+   811→            data.kpis.semaforo === 'verde' ? 'bg-gradient-to-b from-emerald-500 to-green-500' :
+   812→            data.kpis.semaforo === 'amarillo' ? 'bg-gradient-to-b from-amber-500 to-yellow-500' :
+   813→            'bg-gradient-to-b from-red-500 to-rose-500'
+   814→          }`} />
+   815→          <CardContent className="p-5 relative">
+   816→            <div className="flex items-center justify-between mb-3">
+   817→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Cumplimiento</span>
+   818→              <div className="flex items-center gap-1 p-1 bg-slate-900 dark:bg-slate-800 rounded-full">
+   819→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'rojo' ? 'bg-red-500 shadow-sm shadow-red-500/50' : 'bg-red-900/40'}`} />
+   820→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
+   821→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
+   822→              </div>
+   823→            </div>
+   824→            <div className="flex items-center gap-4">
+   825→              <ComplianceRing percentage={data.kpis.cumplimiento_previsional} size={96} />
+   826→              <div className="flex-1 space-y-2">
+   827→                <Badge variant="outline" className={`text-[10px] px-2 border ${
+   828→                  data.kpis.semaforo === 'verde' ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-700' :
+   829→                  data.kpis.semaforo === 'amarillo' ? 'border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700' :
+   830→                  'border-red-300 text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700'
+   831→                }`}>
+   832→                  {semaforoLabel}
+   833→                </Badge>
+   834→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30">
+   835→                  <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+   836→                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">+1.2%</span>
+   837→                </div>
+   838→              </div>
+   839→            </div>
+   840→          </CardContent>
+   841→        </Card>
+   842→      </div>
+   843→
+   844→      {/* ── Current Planilla Banner + Status Timeline ── */}
+   845→      {data.kpis.planilla_actual && (
+   846→        <Card className="shadow-sm border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-50 to-white dark:from-emerald-950/30 dark:to-card hover:shadow-md transition-shadow duration-300">
+   847→          <CardContent className="p-4">
+   848→            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+   849→              <div className="flex items-center gap-3">
+   850→                <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
+   851→                  <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   852→                </div>
+   853→                <div>
+   854→                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Planilla en Progreso</p>
+   855→                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+   856→                    <span className="font-mono font-medium">{data.kpis.planilla_actual.codigo}</span>
+   857→                    <span className="mx-1.5">·</span>
+   858→                    {data.kpis.planilla_actual.tipo}
+   859→                    {data.kpis.planilla_actual.calculada_por && (
+   860→                      <>
+   861→                        <span className="mx-1.5">·</span>
+   862→                        Calculada por: {data.kpis.planilla_actual.calculada_por}
+   863→                      </>
+   864→                    )}
+   865→                  </p>
+   866→                </div>
+   867→              </div>
+   868→              <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium`}>
+   869→                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${estadoDot[data.kpis.planilla_actual.estado] || 'bg-slate-400'}`} />
+   870→                {data.kpis.planilla_actual.estado}
+   871→              </Badge>
+   872→            </div>
+   873→
+   874→            {/* ── Payroll Status Timeline ── */}
+   875→            <div className="mt-4 pt-4 border-t border-emerald-200/60 dark:border-emerald-800/40">
+   876→              <div className="flex items-center justify-between relative">
+   877→                <div className="absolute top-4 left-[12.5%] right-[12.5%] h-0.5 bg-slate-200 dark:bg-slate-700" />
+   878→                <div
+   879→                  className="absolute top-4 left-[12.5%] h-0.5 bg-emerald-500 transition-all duration-700 ease-out"
+   880→                  style={{ width: timelineActiveStep >= 2 ? '75%' : timelineActiveStep >= 1 ? '37.5%' : '0%' }}
+   881→                />
+   882→                {TIMELINE_STEPS.map((step, idx) => {
+   883→                  const isActive = idx === timelineActiveStep;
+   884→                  const isCompleted = idx < timelineActiveStep;
+   885→                  return (
+   886→                    <div key={step} className="flex flex-col items-center relative z-10" style={{ width: '25%' }}>
+   887→                      <div className={`
+   888→                        w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-500
+   889→                        ${isCompleted
+   890→                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/30'
+   891→                          : isActive
+   892→                            ? 'bg-amber-400 border-amber-400 text-white shadow-md shadow-amber-400/30 ring-4 ring-amber-100 dark:ring-amber-900/40'
+   893→                            : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-400'
+   894→                        }
+   895→                      `}>
+   896→                        {isCompleted ? (
+   897→                          <CheckCircle className="h-4 w-4" />
+   898→                        ) : (
+   899→                          idx + 1
+   900→                        )}
+   901→                      </div>
+   902→                      <span className={`text-[10px] mt-1.5 font-semibold uppercase tracking-wider ${
+   903→                        isCompleted ? 'text-emerald-600 dark:text-emerald-400' :
+   904→                        isActive ? 'text-amber-600 dark:text-amber-400' :
+   905→                        'text-slate-400 dark:text-slate-500'
+   906→                      }`}>
+   907→                        {step === 'CALCULADA' ? 'Calculada' : step === 'APROBADA' ? 'Aprobada' : 'Pagada'}
+   908→                      </span>
+   909→                    </div>
+   910→                  );
+   911→                })}
+   912→              </div>
+   913→            </div>
+   914→          </CardContent>
+   915→        </Card>
+   916→      )}
+   917→
+   918→      {/* ── Main content grid: Planillas Table + Status Donut ── */}
+   919→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   920→        {/* Recent planillas - improved table */}
+   921→        <Card className="shadow-sm lg:col-span-2 hover:shadow-md transition-shadow duration-300">
+   922→          <CardHeader className="pb-3">
+   923→            <CardTitle className="text-base flex items-center gap-2">
+   924→              <BarChart3 className="h-4 w-4 text-slate-500" /> Planillas Recientes
+   925→            </CardTitle>
+   926→            <CardDescription>Últimas planillas procesadas</CardDescription>
+   927→          </CardHeader>
+   928→          <CardContent className="p-0">
+   929→            <div className="overflow-x-auto">
+   930→              <table className="w-full text-sm">
+   931→                <thead>
+   932→                  <tr className="border-t border-b bg-slate-50/80 dark:bg-slate-800/50">
+   933→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Código</th>
+   934→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Tipo</th>
+   935→                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Estado</th>
+   936→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Total Neto</th>
+   937→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Empleados</th>
+   938→                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Fecha</th>
+   939→                  </tr>
+   940→                </thead>
+   941→                <tbody>
+   942→                  {data.planillas_recientes.length === 0 ? (
+   943→                    <tr>
+   944→                      <td colSpan={6} className="p-8 text-center text-slate-400">
+   945→                        <div className="flex flex-col items-center">
+   946→                          <Info className="h-8 w-8 mb-2 text-slate-300" />
+   947→                          <p className="font-medium">No hay planillas registradas</p>
+   948→                          <p className="text-xs">Las planillas aparecerán aquí al calcularlas</p>
+   949→                        </div>
+   950→                      </td>
+   951→                    </tr>
+   952→                  ) : (
+   953→                    data.planillas_recientes.map(p => (
+   954→                      <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-emerald-50/30 dark:hover:bg-slate-800/50 transition-colors">
+   955→                        <td className="p-3 font-mono text-xs font-medium text-slate-700 dark:text-slate-300">{p.codigo}</td>
+   956→                        <td className="p-3 text-slate-600 dark:text-slate-400">{p.tipo}</td>
+   957→                        <td className="p-3">
+   958→                          <Badge className={`text-[10px] border ${estadoColors[p.estado] || 'bg-slate-100 text-slate-700'}`} variant="secondary">
+   959→                            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${estadoDot[p.estado] || 'bg-slate-400'}`} />
+   960→                            {p.estado}
+   961→                          </Badge>
+   962→                        </td>
+   963→                        <td className="p-3 text-right font-mono font-medium text-slate-900 dark:text-slate-100">{fmt(p.total_neto)}</td>
+   964→                        <td className="p-3 text-right text-slate-600 dark:text-slate-400">{p.empleados}</td>
+   965→                        <td className="p-3 text-right text-xs text-slate-500 dark:text-slate-500">{fmtDate(p.fecha_creacion)}</td>
+   966→                      </tr>
+   967→                    ))
+   968→                  )}
+   969→                </tbody>
+   970→              </table>
+   971→            </div>
+   972→          </CardContent>
+   973→        </Card>
+   974→
+   975→        {/* ── Status Summary Donut Widget ── */}
+   976→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+   977→          <CardHeader className="pb-3">
+   978→            <CardTitle className="text-base flex items-center gap-2">
+   979→              <PieChart className="h-4 w-4 text-slate-500" /> Estado de Planillas
+   980→            </CardTitle>
+   981→            <CardDescription>Distribución por estado</CardDescription>
+   982→          </CardHeader>
+   983→          <CardContent>
+   984→            <StatusDonut statusCounts={statusCounts} />
+   985→          </CardContent>
+   986→        </Card>
+   987→      </div>
+   988→
+   989→      {/* ── Monthly Comparison + Employee Count Mini-Chart ── */}
+   990→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   991→        {/* Monthly Comparison Widget */}
+   992→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+   993→          <CardHeader className="pb-3">
+   994→            <CardTitle className="text-base flex items-center gap-2">
+   995→              <BarChart3 className="h-4 w-4 text-emerald-500" /> Comparación Mensual
+   996→            </CardTitle>
+   997→            <CardDescription>Mes actual vs. mes anterior</CardDescription>
+   998→          </CardHeader>
+   999→          <CardContent>
+  1000→            <div className="space-y-4">
+  1001→              {/* Total Bruto */}
+  1002→              {(() => {
+  1003→                const brutoDelta = monthlyComparison.brutoPrev > 0
+  1004→                  ? ((monthlyComparison.brutoCurrent - monthlyComparison.brutoPrev) / monthlyComparison.brutoPrev) * 100
+  1005→                  : 0;
+  1006→                const netoDelta = monthlyComparison.netoPrev > 0
+  1007→                  ? ((monthlyComparison.netoCurrent - monthlyComparison.netoPrev) / monthlyComparison.netoPrev) * 100
+  1008→                  : 0;
+  1009→                const dedDelta = monthlyComparison.deduccionesPrev > 0
+  1010→                  ? ((monthlyComparison.deduccionesCurrent - monthlyComparison.deduccionesPrev) / monthlyComparison.deduccionesPrev) * 100
+  1011→                  : 0;
+  1012→                const comparisons = [
+  1013→                  { label: 'Total Bruto', current: monthlyComparison.brutoCurrent, prev: monthlyComparison.brutoPrev, delta: brutoDelta, color: 'text-emerald-600 dark:text-emerald-400', bgBar: 'bg-emerald-500', bgBarPrev: 'bg-emerald-200 dark:bg-emerald-800' },
+  1014→                  { label: 'Total Neto', current: monthlyComparison.netoCurrent, prev: monthlyComparison.netoPrev, delta: netoDelta, color: 'text-teal-600 dark:text-teal-400', bgBar: 'bg-teal-500', bgBarPrev: 'bg-teal-200 dark:bg-teal-800' },
+  1015→                  { label: 'Deducciones', current: monthlyComparison.deduccionesCurrent, prev: monthlyComparison.deduccionesPrev, delta: dedDelta, color: 'text-amber-600 dark:text-amber-400', bgBar: 'bg-amber-500', bgBarPrev: 'bg-amber-200 dark:bg-amber-800' },
+  1016→                ];
+  1017→                const maxVal = Math.max(...comparisons.map(c => Math.max(c.current, c.prev)), 1);
+  1018→                return comparisons.map(comp => (
+  1019→                  <div key={comp.label} className="space-y-2">
+  1020→                    <div className="flex items-center justify-between">
+  1021→                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{comp.label}</span>
+  1022→                      <div className="flex items-center gap-1.5">
+  1023→                        {comp.delta !== 0 && (
+  1024→                          <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold ${
+  1025→                            comp.delta > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+  1026→                          }`}>
+  1027→                            {comp.delta > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+  1028→                            {Math.abs(comp.delta).toFixed(1)}%
+  1029→                          </span>
+  1030→                        )}
+  1031→                        <span className={`text-sm font-bold font-mono ${comp.color}`}>
+  1032→                          {fmt(comp.current)}
+  1033→                        </span>
+  1034→                      </div>
+  1035→                    </div>
+  1036→                    <div className="space-y-1">
+  1037→                      {/* Current month bar */}
+  1038→                      <div className="flex items-center gap-2">
+  1039→                        <span className="text-[9px] text-slate-400 w-8 shrink-0">Actual</span>
+  1040→                        <div className="flex-1 h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+  1041→                          <div
+  1042→                            className={`h-3 rounded-full ${comp.bgBar} transition-all duration-700`}
+  1043→                            style={{ width: `${Math.max((comp.current / maxVal) * 100, 2)}%` }}
+  1044→                          />
+  1045→                        </div>
+  1046→                      </div>
+  1047→                      {/* Previous month bar */}
+  1048→                      <div className="flex items-center gap-2">
+  1049→                        <span className="text-[9px] text-slate-400 w-8 shrink-0">Anterior</span>
+  1050→                        <div className="flex-1 h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+  1051→                          <div
+  1052→                            className={`h-2.5 rounded-full ${comp.bgBarPrev} transition-all duration-700`}
+  1053→                            style={{ width: `${Math.max((comp.prev / maxVal) * 100, 2)}%` }}
+  1054→                          />
+  1055→                        </div>
+  1056→                        <span className="text-[9px] text-slate-400 font-mono w-16 text-right shrink-0">{fmt(comp.prev)}</span>
+  1057→                      </div>
+  1058→                    </div>
+  1059→                  </div>
+  1060→                ));
+  1061→              })()}
+  1062→            </div>
+  1063→          </CardContent>
+  1064→        </Card>
+  1065→
+  1066→        {/* Employee Count Mini-Chart (CSS-only area chart with gradient fill) */}
+  1067→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+  1068→          <CardHeader className="pb-3">
+  1069→            <CardTitle className="text-base flex items-center gap-2">
+  1070→              <Users className="h-4 w-4 text-teal-500" /> Evolución de Empleados
+  1071→            </CardTitle>
+  1072→            <CardDescription>Últimos 6 meses</CardDescription>
+  1073→          </CardHeader>
+  1074→          <CardContent>
+  1075→            <div className="relative">
+  1076→              {/* CSS-only area chart */}
+  1077→              <div className="relative h-40">
+  1078→                {(() => {
+  1079→                  const maxCount = Math.max(...EMPLOYEE_COUNT_HISTORY.map(e => e.count), 1);
+  1080→                  const minCount = Math.min(...EMPLOYEE_COUNT_HISTORY.map(e => e.count));
+  1081→                  const range = maxCount - minCount || 1;
+  1082→                  const points = EMPLOYEE_COUNT_HISTORY.map((e, i) => {
+  1083→                    const x = (i / (EMPLOYEE_COUNT_HISTORY.length - 1)) * 100;
+  1084→                    const y = 100 - ((e.count - minCount) / range) * 80 - 10;
+  1085→                    return `${x},${y}`;
+  1086→                  });
+  1087→                  const areaPoints = [...points, `100,100`, `0,100`];
+  1088→                  return (
+  1089→                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+  1090→                      <defs>
+  1091→                        <linearGradient id="areaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+  1092→                          <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.3" />
+  1093→                          <stop offset="100%" stopColor="#14b8a6" stopOpacity="0.02" />
+  1094→                        </linearGradient>
+  1095→                      </defs>
+  1096→                      <polygon
+  1097→                        points={areaPoints.join(' ')}
+  1098→                        fill="url(#areaGrad)"
+  1099→                        className="transition-all duration-700"
+  1100→                      />
+  1101→                      <polyline
+  1102→                        points={points.join(' ')}
+  1103→                        fill="none"
+  1104→                        stroke="#14b8a6"
+  1105→                        strokeWidth="0.8"
+  1106→                        strokeLinejoin="round"
+  1107→                        strokeLinecap="round"
+  1108→                      />
+  1109→                      {/* Data points */}
+  1110→                      {EMPLOYEE_COUNT_HISTORY.map((e, i) => {
+  1111→                        const x = (i / (EMPLOYEE_COUNT_HISTORY.length - 1)) * 100;
+  1112→                        const y = 100 - ((e.count - minCount) / range) * 80 - 10;
+  1113→                        return (
+  1114→                          <circle key={i} cx={x} cy={y} r="1.5" fill="#14b8a6" stroke="white" strokeWidth="0.5" />
+  1115→                        );
+  1116→                      })}
+  1117→                    </svg>
+  1118→                  );
+  1119→                })()}
+  1120→              </div>
+  1121→              {/* Month labels and values */}
+  1122→              <div className="flex justify-between mt-2 px-1">
+  1123→                {EMPLOYEE_COUNT_HISTORY.map((e, i) => (
+  1124→                  <div key={i} className="flex flex-col items-center gap-0.5">
+  1125→                    <span className="text-[10px] font-mono font-bold text-teal-600 dark:text-teal-400">{e.count}</span>
+  1126→                    <span className="text-[9px] text-slate-400 dark:text-slate-500">{e.month}</span>
+  1127→                  </div>
+  1128→                ))}
+  1129→              </div>
+  1130→              {/* Current count badge */}
+  1131→              <div className="flex items-center justify-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+  1132→                <span className="text-xs text-slate-500 dark:text-slate-400">Empleados Activos</span>
+  1133→                <span className="text-lg font-bold text-teal-600 dark:text-teal-400 font-mono">
+  1134→                  {data.kpis.total_empleados_activos || EMPLOYEE_COUNT_HISTORY[EMPLOYEE_COUNT_HISTORY.length - 1].count}
+  1135→                </span>
+  1136→                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded-full">
+  1137→                  <ArrowUpRight className="h-3 w-3" />
+  1138→                  +{(data.kpis.tendencia_empleados === 'up' ? 3.2 : 0).toFixed(1)}%
+  1139→                </span>
+  1140→              </div>
+  1141→            </div>
+  1142→          </CardContent>
+  1143→        </Card>
+  1144→      </div>
+  1145→
+  1146→      {/* ── Charts row: Enhanced Trend + Donut Breakdown ── */}
+  1147→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1148→        {/* ── Enhanced Monthly Trend Chart ── */}
+  1149→        <Card className="shadow-sm hover:shadow-md transition-shadow duration-300">
+
+[showing lines 700-1149 of 1683; use offset=1150 with limit to continue reading]

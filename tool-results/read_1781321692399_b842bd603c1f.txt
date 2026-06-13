@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useCallback, useEffect, createContext, useContext, useMemo } from 'react';
+     4→import {
+     5→  Users, Briefcase, Calculator, FileText, Settings, User, Shield,
+     6→  ChevronDown, ChevronRight, LogOut, Lock, Menu, X, LayoutDashboard,
+     7→  DollarSign, CheckCircle, Send, Gift, ClipboardList, ListChecks,
+     8→  BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye, EyeOff, Mail,
+     9→  AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle,
+    10→  Sun, Moon, TrendingUp, TrendingDown, Bell, Info, AlertTriangle,
+    11→  PieChart, CalendarDays, Megaphone, Search, Clock, Star, Pin,
+    12→  PanelLeftClose, PanelLeft, ChevronsLeft, ChevronsRight
+    13→} from 'lucide-react';
+    14→import { Button } from '@/components/ui/button';
+    15→import { Input } from '@/components/ui/input';
+    16→import { Label } from '@/components/ui/label';
+    17→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    18→import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+    19→import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+    20→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    21→import { Progress } from '@/components/ui/progress';
+    22→import { Badge } from '@/components/ui/badge';
+    23→import { Separator } from '@/components/ui/separator';
+    24→import { ScrollArea } from '@/components/ui/scroll-area';
+    25→import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+    26→import { useToast } from '@/hooks/use-toast';
+    27→import { useTheme } from 'next-themes';
+    28→
+    29→// Module components
+    30→import EmployeeDirectory from '@/components/modules/EmployeeDirectory';
+    31→import EmployeeDetail from '@/components/modules/EmployeeDetail';
+    32→import NewEmployeeForm from '@/components/modules/NewEmployeeForm';
+    33→import IncidenceManager from '@/components/modules/IncidenceManager';
+    34→import UserManagement from '@/components/modules/UserManagement';
+    35→import PayrollDashboard from '@/components/modules/PayrollDashboard';
+    36→import PayrollPeriods from '@/components/modules/PayrollPeriods';
+    37→import PayrollCalculation from '@/components/modules/PayrollCalculation';
+    38→import PayrollApproval from '@/components/modules/PayrollApproval';
+    39→import BankDispersion from '@/components/modules/BankDispersion';
+    40→import AguinaldoView from '@/components/modules/AguinaldoView';
+    41→import LiquidationView from '@/components/modules/LiquidationView';
+    42→import ProfileCatalog from '@/components/modules/ProfileCatalog';
+    43→import SalaryBands from '@/components/modules/SalaryBands';
+    44→import IsssReport from '@/components/modules/IsssReport';
+    45→import AfpReport from '@/components/modules/AfpReport';
+    46→import IsrReport from '@/components/modules/IsrReport';
+    47→import TalentReport from '@/components/modules/TalentReport';
+    48→import LegalParameters from '@/components/modules/LegalParameters';
+    49→import OrgChart from '@/components/modules/OrgChart';
+    50→import Integrations from '@/components/modules/Integrations';
+    51→import AuditLog from '@/components/modules/AuditLog';
+    52→import SelfServicePortal from '@/components/modules/SelfServicePortal';
+    53→import ProfileDescriptiveForm from '@/components/modules/ProfileDescriptiveForm';
+    54→import ChangePasswordDialog from '@/components/ChangePasswordDialog';
+    55→import NotificationBell from '@/components/NotificationBell';
+    56→import CommandPalette from '@/components/CommandPalette';
+    57→
+    58→// ============================================================
+    59→// Types
+    60→// ============================================================
+    61→type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+    62→
+    63→interface UserData {
+    64→  id: string;
+    65→  email: string;
+    66→  nombre: string;
+    67→  apellido: string;
+    68→  rol: UserRole;
+    69→  debe_cambiar_password: boolean;
+    70→  empleadoId?: string;
+    71→}
+    72→
+    73→interface AuthContextType {
+    74→  user: UserData | null;
+    75→  accessToken: string | null;
+    76→  login: (email: string, password: string) => Promise<void>;
+    77→  logout: () => Promise<void>;
+    78→  refreshAccessToken: () => Promise<string | null>;
+    79→  isLoading: boolean;
+    80→}
+    81→
+    82→// ============================================================
+    83→// Auth Context
+    84→// ============================================================
+    85→const AuthContext = createContext<AuthContextType | null>(null);
+    86→
+    87→function useAuth() {
+    88→  const ctx = useContext(AuthContext);
+    89→  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+    90→  return ctx;
+    91→}
+    92→
+    93→// ============================================================
+    94→// View Types
+    95→// ============================================================
+    96→type ViewId =
+    97→  | 'dashboard'
+    98→  | '02-01' | '02-02' | '02-03' | '02-04'
+    99→  | '03-01' | '03-02' | '03-03'
+   100→  | '04-01' | '04-02' | '04-03' | '04-04' | '04-05' | '04-06' | '04-07'
+   101→  | '05-01' | '05-02' | '05-03' | '05-04'
+   102→  | '06-01' | '06-02' | '06-03' | '06-04' | '06-05'
+   103→  | '01-03';
+   104→
+   105→interface NavItem {
+   106→  id: ViewId;
+   107→  label: string;
+   108→  icon: React.ElementType;
+   109→}
+   110→
+   111→interface NavGroup {
+   112→  title: string;
+   113→  icon: React.ElementType;
+   114→  items: NavItem[];
+   115→  roles: UserRole[];
+   116→}
+   117→
+   118→// ============================================================
+   119→// Navigation Configuration (RBAC)
+   120→// ============================================================
+   121→const NAV_GROUPS: NavGroup[] = [
+   122→  {
+   123→    title: 'Seguridad',
+   124→    icon: Shield,
+   125→    roles: ['ADMIN'],
+   126→    items: [
+   127→      { id: '01-03', label: 'Gestión Usuarios', icon: Users },
+   128→    ],
+   129→  },
+   130→  {
+   131→    title: 'Módulo 02 - Empleados',
+   132→    icon: Users,
+   133→    roles: ['ADMIN', 'ANALISTA', 'AUDITOR'],
+   134→    items: [
+   135→      { id: '02-01', label: 'Directorio', icon: ListChecks },
+   136→      { id: '02-03', label: 'Nuevo Empleado', icon: User },
+   137→      { id: '02-04', label: 'Incidencias', icon: AlertCircle },
+   138→    ],
+   139→  },
+   140→  {
+   141→    title: 'Módulo 03 - Perfiles',
+   142→    icon: Briefcase,
+   143→    roles: ['ADMIN', 'ANALISTA', 'APROBADOR', 'AUDITOR'],
+   144→    items: [
+   145→      { id: '03-01', label: 'Catálogo', icon: BookOpen },
+   146→      { id: '03-02', label: 'Formulario de Perfil', icon: FileText },
+   147→      { id: '03-03', label: 'Bandas Salariales', icon: DollarSign },
+   148→    ],
+   149→  },
+   150→  {
+   151→    title: 'Módulo 04 - Nómina',
+   152→    icon: Calculator,
+   153→    roles: ['ADMIN', 'ANALISTA', 'APROBADOR', 'GERENCIA', 'AUDITOR'],
+   154→    items: [
+   155→      { id: '04-01', label: 'Dashboard', icon: LayoutDashboard },
+   156→      { id: '04-02', label: 'Períodos', icon: CalendarIcon },
+   157→      { id: '04-03', label: 'Cálculo', icon: Calculator },
+   158→      { id: '04-04', label: 'Aprobación', icon: CheckCircle },
+   159→      { id: '04-05', label: 'Dispersión', icon: Send },
+   160→      { id: '04-06', label: 'Aguinaldo', icon: Gift },
+   161→      { id: '04-07', label: 'Liquidaciones', icon: ClipboardList },
+   162→    ],
+   163→  },
+   164→  {
+   165→    title: 'Módulo 05 - Reportes',
+   166→    icon: FileText,
+   167→    roles: ['ADMIN', 'GERENCIA', 'AUDITOR'],
+   168→    items: [
+   169→      { id: '05-01', label: 'Planilla ISSS', icon: FileText },
+   170→      { id: '05-02', label: 'Planilla AFP', icon: FileText },
+   171→      { id: '05-03', label: 'Retenciones ISR', icon: FileText },
+   172→      { id: '05-04', label: 'Gestión Talento', icon: BarChart3 },
+   173→    ],
+   174→  },
+   175→  {
+   176→    title: 'Módulo 06 - Admin',
+   177→    icon: Settings,
+   178→    roles: ['ADMIN', 'APROBADOR'],
+   179→    items: [
+   180→      { id: '06-01', label: 'Parámetros Legales', icon: ScaleIcon },
+   181→      { id: '06-02', label: 'Organigrama', icon: GitBranch },
+   182→      { id: '06-03', label: 'Integraciones', icon: Plug },
+   183→      { id: '06-04', label: 'Bitácora', icon: ScrollText },
+   184→    ],
+   185→  },
+   186→  {
+   187→    title: 'Vista Empleado',
+   188→    icon: User,
+   189→    roles: ['EMPLEADO'],
+   190→    items: [
+   191→      { id: '06-05', label: 'Mi Portal', icon: Eye },
+   192→    ],
+   193→  },
+   194→];
+   195→
+   196→// Filter items within a group based on more granular RBAC
+   197→function getVisibleItems(group: NavGroup, role: UserRole): NavItem[] {
+   198→  const roleItemMap: Record<UserRole, Record<string, string[]>> = {
+   199→    ADMIN: {
+   200→      'Seguridad': ['01-03'],
+   201→      'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
+   202→      'Módulo 03 - Perfiles': ['03-01', '03-02', '03-03'],
+   203→      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-04', '04-05', '04-06', '04-07'],
+   204→      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+   205→      'Módulo 06 - Admin': ['06-01', '06-02', '06-03', '06-04'],
+   206→      'Vista Empleado': [],
+   207→    },
+   208→    ANALISTA: {
+   209→      'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
+   210→      'Módulo 03 - Perfiles': ['03-01', '03-02'],
+   211→      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-06'],
+   212→    },
+   213→    APROBADOR: {
+   214→      'Módulo 03 - Perfiles': ['03-03'],
+   215→      'Módulo 04 - Nómina': ['04-04', '04-05', '04-07'],
+   216→      'Módulo 06 - Admin': ['06-01'],
+   217→    },
+   218→    GERENCIA: {
+   219→      'Módulo 04 - Nómina': ['04-01'],
+   220→      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+   221→    },
+   222→    AUDITOR: {
+   223→      'Módulo 02 - Empleados': ['02-01'],
+   224→      'Módulo 03 - Perfiles': ['03-01'],
+   225→      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03'],
+   226→      'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
+   227→      'Módulo 06 - Admin': ['06-04'],
+   228→    },
+   229→    EMPLEADO: {
+   230→      'Vista Empleado': ['06-05'],
+   231→    },
+   232→  };
+   233→
+   234→  const allowedIds = roleItemMap[role]?.[group.title] ?? [];
+   235→  return group.items.filter(item => allowedIds.includes(item.id));
+   236→}
+   237→
+   238→// Custom calendar icon since we can't import it from lucide
+   239→function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
+   240→  return (
+   241→    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+   242→      <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+   243→      <line x1="16" x2="16" y1="2" y2="6"/>
+   244→      <line x1="8" x2="8" y1="2" y2="6"/>
+   245→      <line x1="3" x2="21" y1="10" y2="10"/>
+   246→    </svg>
+   247→  );
+   248→}
+   249→
+   250→function ScaleIcon(props: React.SVGProps<SVGSVGElement>) {
+   251→  return (
+   252→    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+   253→      <path d="M16 3h5v5"/>
+   254→      <path d="M8 3H3v5"/>
+   255→      <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/>
+   256→      <path d="m15 9 6-6"/>
+   257→    </svg>
+   258→  );
+   259→}
+   260→
+   261→// ============================================================
+   262→// VIEW LABELS MAP
+   263→// ============================================================
+   264→const VIEW_LABELS: Record<ViewId, string> = {
+   265→  'dashboard': 'Dashboard',
+   266→  '01-03': 'Gestión de Usuarios',
+   267→  '02-01': 'Directorio de Empleados',
+   268→  '02-02': 'Detalle de Empleado',
+   269→  '02-03': 'Nuevo Empleado',
+   270→  '02-04': 'Incidencias',
+   271→  '03-01': 'Catálogo de Perfiles',
+   272→  '03-02': 'Formulario de Perfil',
+   273→  '03-03': 'Bandas Salariales',
+   274→  '04-01': 'Dashboard Nómina',
+   275→  '04-02': 'Períodos de Nómina',
+   276→  '04-03': 'Cálculo de Nómina',
+   277→  '04-04': 'Aprobación de Nómina',
+   278→  '04-05': 'Dispersión de Pago',
+   279→  '04-06': 'Aguinaldo',
+   280→  '04-07': 'Liquidaciones',
+   281→  '05-01': 'Planilla ISSS',
+   282→  '05-02': 'Planilla AFP',
+   283→  '05-03': 'Retenciones ISR',
+   284→  '05-04': 'Gestión de Talento',
+   285→  '06-01': 'Parámetros Legales',
+   286→  '06-02': 'Organigrama',
+   287→  '06-03': 'Integraciones',
+   288→  '06-04': 'Bitácora',
+   289→  '06-05': 'Mi Portal',
+   290→};
+   291→
+   292→// ============================================================
+   293→// LOGIN PAGE
+   294→// ============================================================
+   295→function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: string) => Promise<void>; isLoading: boolean }) {
+   296→  const [email, setEmail] = useState('');
+   297→  const [password, setPassword] = useState('');
+   298→  const [showPassword, setShowPassword] = useState(false);
+   299→  const [showRecovery, setShowRecovery] = useState(false);
+   300→  const [rememberMe, setRememberMe] = useState(false);
+   301→  const [loginError, setLoginError] = useState<string | null>(null);
+   302→  const [failedAttempts, setFailedAttempts] = useState(0);
+   303→  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+   304→  const [lockoutCountdown, setLockoutCountdown] = useState('');
+   305→
+   306→  // Lockout timer effect
+   307→  useEffect(() => {
+   308→    if (!lockoutUntil) return;
+   309→    const interval = setInterval(() => {
+   310→      const remaining = lockoutUntil - Date.now();
+   311→      if (remaining <= 0) {
+   312→        setLockoutUntil(null);
+   313→        setFailedAttempts(0);
+   314→        setLockoutCountdown('');
+   315→        clearInterval(interval);
+   316→        return;
+   317→      }
+   318→      const mins = Math.floor(remaining / 60000);
+   319→      const secs = Math.floor((remaining % 60000) / 1000);
+   320→      setLockoutCountdown(`${mins}:${secs.toString().padStart(2, '0')}`);
+   321→    }, 1000);
+   322→    return () => clearInterval(interval);
+   323→  }, [lockoutUntil]);
+   324→
+   325→  const handleSubmit = async (e: React.FormEvent) => {
+   326→    e.preventDefault();
+   327→    if (lockoutUntil && Date.now() < lockoutUntil) return;
+   328→
+   329→    setLoginError(null);
+   330→    try {
+   331→      await onLogin(email, password);
+   332→    } catch (err) {
+   333→      const newAttempts = failedAttempts + 1;
+   334→      setFailedAttempts(newAttempts);
+   335→      const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
+   336→      setLoginError(errorMsg);
+   337→      // Lockout after 5 failed attempts
+   338→      if (newAttempts >= 5) {
+   339→        setLockoutUntil(Date.now() + 5 * 60 * 1000); // 5 minute lockout
+   340→        setLoginError('Cuenta bloqueada por múltiples intentos fallidos. Intente nuevamente en 5 minutos.');
+   341→      }
+   342→    }
+   343→  };
+   344→
+   345→  const isLocked = lockoutUntil !== null && Date.now() < lockoutUntil;
+   346→  const maxAttempts = 5;
+   347→  const remainingAttempts = maxAttempts - failedAttempts;
+   348→
+   349→  const roleConfig: Record<string, { label: string; color: string; bg: string; border: string; hoverBg: string }> = {
+   350→    ADMIN: { label: 'ADMIN', color: 'text-red-700 dark:text-red-300', bg: 'bg-red-100 dark:bg-red-950/50', border: 'border-red-200 dark:border-red-800/60', hoverBg: 'hover:bg-red-50 dark:hover:bg-red-950/30' },
+   351→    ANALISTA: { label: 'ANALISTA', color: 'text-teal-700 dark:text-teal-300', bg: 'bg-teal-100 dark:bg-teal-950/50', border: 'border-teal-200 dark:border-teal-800/60', hoverBg: 'hover:bg-teal-50 dark:hover:bg-teal-950/30' },
+   352→    APROBADOR: { label: 'APROBADOR', color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-100 dark:bg-emerald-950/50', border: 'border-emerald-200 dark:border-emerald-800/60', hoverBg: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/30' },
+   353→    GERENCIA: { label: 'GERENCIA', color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-100 dark:bg-amber-950/50', border: 'border-amber-200 dark:border-amber-800/60', hoverBg: 'hover:bg-amber-50 dark:hover:bg-amber-950/30' },
+   354→    AUDITOR: { label: 'AUDITOR', color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-100 dark:bg-violet-950/50', border: 'border-violet-200 dark:border-violet-800/60', hoverBg: 'hover:bg-violet-50 dark:hover:bg-violet-950/30' },
+   355→    EMPLEADO: { label: 'EMPLEADO', color: 'text-cyan-700 dark:text-cyan-300', bg: 'bg-cyan-100 dark:bg-cyan-950/50', border: 'border-cyan-200 dark:border-cyan-800/60', hoverBg: 'hover:bg-cyan-50 dark:hover:bg-cyan-950/30' },
+   356→  };
+   357→
+   358→  const quickLoginCreds = [
+   359→    { email: 'admin@nomina.gob.sv', pass: 'Admin2026!', role: 'ADMIN' },
+   360→    { email: 'analista@nomina.gob.sv', pass: 'Analista2026!', role: 'ANALISTA' },
+   361→    { email: 'aprobador@nomina.gob.sv', pass: 'Aprobador2026!', role: 'APROBADOR' },
+   362→    { email: 'gerencia@nomina.gob.sv', pass: 'Gerencia2026!', role: 'GERENCIA' },
+   363→    { email: 'auditor@nomina.gob.sv', pass: 'Auditor2026!', role: 'AUDITOR' },
+   364→    { email: 'empleado@nomina.gob.sv', pass: 'Empleado2026!', role: 'EMPLEADO' },
+   365→  ];
+   366→
+   367→  return (
+   368→    <div className="min-h-screen flex flex-col lg:flex-row">
+   369→      {/* Left Decorative Panel - hidden on mobile, visible on lg */}
+   370→      <div className="hidden lg:flex lg:w-[45%] xl:w-[50%] relative overflow-hidden bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 flex-col justify-between p-10 xl:p-16">
+   371→        {/* Decorative SVG patterns */}
+   372→        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+   373→          {/* Large hexagon pattern */}
+   374→          <svg className="absolute top-0 right-0 w-[500px] h-[500px] opacity-[0.07]" viewBox="0 0 200 200" fill="none">
+   375→            <path d="M100 10L180 50V130L100 170L20 130V50L100 10Z" stroke="white" strokeWidth="1"/>
+   376→            <path d="M100 30L160 60V120L100 150L40 120V60L100 30Z" stroke="white" strokeWidth="0.5"/>
+   377→            <path d="M100 50L140 70V110L100 130L60 110V70L100 50Z" stroke="white" strokeWidth="0.5"/>
+   378→          </svg>
+   379→          {/* Floating circles */}
+   380→          <div className="absolute top-[15%] left-[10%] w-64 h-64 bg-white/5 rounded-full blur-xl" />
+   381→          <div className="absolute bottom-[20%] right-[15%] w-80 h-80 bg-teal-400/10 rounded-full blur-2xl" />
+   382→          <div className="absolute top-[60%] left-[5%] w-40 h-40 bg-emerald-300/8 rounded-full blur-lg" />
+   383→          {/* Dot grid */}
+   384→          <div className="absolute inset-0 opacity-[0.04]" style={{
+   385→            backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
+   386→            backgroundSize: '32px 32px'
+   387→          }} />
+   388→          {/* Decorative lines */}
+   389→          <svg className="absolute bottom-0 left-0 w-full h-48 opacity-[0.06]" viewBox="0 0 400 100" fill="none" preserveAspectRatio="none">
+   390→            <path d="M0 80 Q100 20 200 60 T400 40" stroke="white" strokeWidth="1.5" fill="none"/>
+   391→            <path d="M0 90 Q100 40 200 70 T400 55" stroke="white" strokeWidth="1" fill="none"/>
+   392→            <path d="M0 100 Q100 55 200 80 T400 70" stroke="white" strokeWidth="0.5" fill="none"/>
+   393→          </svg>
+   394→        </div>
+   395→
+   396→        {/* Logo & Brand */}
+   397→        <div className="relative z-10">
+   398→          <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 mb-6">
+   399→            <svg viewBox="0 0 40 40" className="w-9 h-9 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
+   400→              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
+   401→              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
+   402→              <path d="M4 12V28L20 36V20L4 12Z" stroke="currentColor" strokeWidth="2"/>
+   403→              <path d="M36 12V28L20 36V20L36 12Z" stroke="currentColor" strokeWidth="2"/>
+   404→            </svg>
+   405→          </div>
+   406→          <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight">
+   407→            Sistema de Nómina<br />y Perfiles de Puestos
+   408→          </h1>
+   409→          <p className="text-emerald-100/80 mt-3 text-base leading-relaxed max-w-md">
+   410→            Plataforma integral de gestión salarial conforme a la legislación laboral de la República de El Salvador
+   411→          </p>
+   412→        </div>
+   413→
+   414→        {/* Feature highlights */}
+   415→        <div className="relative z-10 space-y-4">
+   416→          <div className="flex items-start gap-3">
+   417→            <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
+   418→              <Shield className="w-4 h-4 text-emerald-200" />
+   419→            </div>
+   420→            <div>
+   421→              <p className="text-white/90 font-medium text-sm">Cumplimiento Legal</p>
+   422→              <p className="text-emerald-200/60 text-xs">Cálculos de ISSS, AFP, ISR según normativa vigente</p>
+   423→            </div>
+   424→          </div>
+   425→          <div className="flex items-start gap-3">
+   426→            <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
+   427→              <Lock className="w-4 h-4 text-emerald-200" />
+   428→            </div>
+   429→            <div>
+   430→              <p className="text-white/90 font-medium text-sm">Seguridad y Auditoría</p>
+   431→              <p className="text-emerald-200/60 text-xs">Control de acceso basado en roles con trazabilidad completa</p>
+   432→            </div>
+   433→          </div>
+   434→          <div className="flex items-start gap-3">
+   435→            <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
+   436→              <CheckCircle className="w-4 h-4 text-emerald-200" />
+   437→            </div>
+   438→            <div>
+   439→              <p className="text-white/90 font-medium text-sm">Aprobación y Dispersión</p>
+   440→              <p className="text-emerald-200/60 text-xs">Flujo de trabajo completo desde el cálculo hasta el pago</p>
+   441→            </div>
+   442→          </div>
+   443→        </div>
+   444→
+   445→        {/* Footer */}
+   446→        <div className="relative z-10">
+   447→          <div className="h-[1px] bg-white/10 mb-4" />
+   448→          <p className="text-emerald-200/40 text-xs">© 2026 Ministerio de Hacienda — República de El Salvador</p>
+   449→        </div>
+   450→      </div>
+   451→
+   452→      {/* Mobile Header - visible only on mobile/tablet */}
+   453→      <div className="lg:hidden bg-gradient-to-br from-emerald-600 to-teal-700 p-6 pt-10 pb-8 relative overflow-hidden">
+   454→        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+   455→          <div className="absolute -top-20 -right-20 w-48 h-48 bg-white/5 rounded-full blur-xl" />
+   456→          <div className="absolute bottom-0 left-0 w-32 h-32 bg-teal-400/10 rounded-full blur-lg" />
+   457→          <div className="absolute inset-0 opacity-[0.04]" style={{
+   458→            backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
+   459→            backgroundSize: '24px 24px'
+   460→          }} />
+   461→        </div>
+   462→        <div className="relative z-10 text-center">
+   463→          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 mb-3">
+   464→            <svg viewBox="0 0 40 40" className="w-8 h-8 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
+   465→              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
+   466→              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
+   467→              <path d="M4 12V28L20 36V20L4 12Z" stroke="currentColor" strokeWidth="2"/>
+   468→              <path d="M36 12V28L20 36V20L36 12Z" stroke="currentColor" strokeWidth="2"/>
+   469→            </svg>
+   470→          </div>
+   471→          <h1 className="text-xl font-bold text-white">Sistema de Nómina</h1>
+   472→          <p className="text-emerald-100/70 text-sm mt-1">República de El Salvador</p>
+   473→        </div>
+   474→      </div>
+   475→
+   476→      {/* Right Side - Login Form */}
+   477→      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-10 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20 relative overflow-y-auto">
+   478→        {/* Background decorative elements (right side only) */}
+   479→        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+   480→          <div className="absolute -top-20 -right-20 w-64 h-64 bg-emerald-100/30 dark:bg-emerald-900/15 rounded-full blur-3xl" />
+   481→          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-teal-100/20 dark:bg-teal-900/10 rounded-full blur-3xl" />
+   482→        </div>
+   483→
+   484→        <div className="w-full max-w-md relative z-10 animate-fade-in">
+   485→          {/* Login Card */}
+   486→          <Card className="shadow-xl shadow-slate-200/50 dark:shadow-slate-900/40 border border-slate-200/80 dark:border-slate-800 dark:bg-slate-900/95 animate-scale-in">
+   487→            <CardHeader className="pb-2 pt-6 px-6">
+   488→              <div className="flex items-center justify-center mb-3">
+   489→                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-emerald-800/30">
+   490→                  <Shield className="w-6 h-6 text-white" />
+   491→                </div>
+   492→              </div>
+   493→              <CardTitle className="text-xl text-center dark:text-slate-100">Iniciar Sesión</CardTitle>
+   494→              <CardDescription className="text-center dark:text-slate-400">Ingrese sus credenciales para acceder al sistema</CardDescription>
+   495→            </CardHeader>
+   496→            <CardContent className="px-6 pb-6">
+   497→              <form onSubmit={handleSubmit} className="space-y-4">
+   498→                {/* Email field with Mail icon prefix */}
+   499→                <div className="space-y-2">
+   500→                  <Label htmlFor="login-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">Correo Electrónico</Label>
+   501→                  <div className="relative">
+   502→                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
+   503→                    <Input
+   504→                      id="login-email"
+   505→                      type="email"
+   506→                      placeholder="usuario@nomina.gob.sv"
+   507→                      value={email}
+   508→                      onChange={(e) => setEmail(e.target.value)}
+   509→                      required
+   510→                      disabled={isLoading || isLocked}
+   511→                      className="h-11 pl-10 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 dark:bg-slate-800 dark:border-slate-700"
+   512→                    />
+   513→                  </div>
+   514→                </div>
+   515→
+   516→                {/* Password field with Lock icon prefix and show/hide toggle */}
+   517→                <div className="space-y-2">
+   518→                  <Label htmlFor="login-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">Contraseña</Label>
+   519→                  <div className="relative">
+   520→                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
+   521→                    <Input
+   522→                      id="login-password"
+   523→                      type={showPassword ? 'text' : 'password'}
+   524→                      placeholder="••••••••"
+   525→                      value={password}
+   526→                      onChange={(e) => setPassword(e.target.value)}
+   527→                      required
+   528→                      disabled={isLoading || isLocked}
+   529→                      className="h-11 pl-10 pr-10 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 dark:bg-slate-800 dark:border-slate-700"
+   530→                    />
+   531→                    <button
+   532→                      type="button"
+   533→                      onClick={() => setShowPassword(!showPassword)}
+   534→                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
+   535→                      tabIndex={-1}
+   536→                    >
+   537→                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+   538→                    </button>
+   539→                  </div>
+   540→                </div>
+   541→
+   542→                {/* Remember me + Forgot password */}
+   543→                <div className="flex items-center justify-between">
+   544→                  <div className="flex items-center gap-2">
+   545→                    <input
+   546→                      type="checkbox"
+   547→                      id="remember"
+   548→                      checked={rememberMe}
+   549→                      onChange={(e) => setRememberMe(e.target.checked)}
+   550→                      className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 focus:ring-2"
+   551→                    />
+   552→                    <Label htmlFor="remember" className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer select-none">Recordarme</Label>
+   553→                  </div>
+   554→                  <button
+   555→                    type="button"
+   556→                    onClick={() => setShowRecovery(true)}
+   557→                    className="text-sm text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:underline transition-colors"
+   558→                  >
+   559→                    ¿Olvidó su contraseña?
+   560→                  </button>
+   561→                </div>
+   562→
+   563→                {/* Security warnings */}
+   564→                {isLocked && lockoutCountdown && (
+   565→                  <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/40 p-3 rounded-lg border border-red-200 dark:border-red-800/60 animate-fade-in">
+   566→                    <Lock className="h-4 w-4 shrink-0" />
+   567→                    <span>Cuenta bloqueada. Intente en <strong>{lockoutCountdown}</strong></span>
+   568→                  </div>
+   569→                )}
+   570→
+   571→                {!isLocked && failedAttempts >= 3 && remainingAttempts > 0 && (
+   572→                  <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-lg border border-amber-200 dark:border-amber-800/60 animate-fade-in">
+   573→                    <AlertTriangle className="h-4 w-4 shrink-0" />
+   574→                    <span>Quedan <strong>{remainingAttempts}</strong> intento{remainingAttempts !== 1 ? 's' : ''} antes del bloqueo</span>
+   575→                  </div>
+   576→                )}
+   577→
+   578→                {loginError && !isLocked && (
+   579→                  <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 p-3 rounded-lg border border-red-200 dark:border-red-800/60 animate-fade-in">
+   580→                    <AlertCircle className="h-4 w-4 shrink-0" />
+   581→                    <span>{loginError}</span>
+   582→                  </div>
+   583→                )}
+   584→
+   585→                {failedAttempts >= 2 && !isLocked && (
+   586→                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 animate-fade-in">
+   587→                    <Info className="h-3.5 w-3.5 shrink-0" />
+   588→                    <span>Múltiples intentos fallidos pueden bloquear su cuenta temporalmente</span>
+   589→                  </div>
+   590→                )}
+   591→
+   592→                {/* Login button */}
+   593→                <Button
+   594→                  type="submit"
+   595→                  className="w-full h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20 hover:shadow-lg hover:shadow-emerald-600/30 transition-all duration-200 active:scale-[0.98] disabled:opacity-60"
+   596→                  disabled={isLoading || isLocked}
+   597→                >
+   598→                  {isLoading ? (
+   599→                    <>
+   600→                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+   601→                      Verificando...
+   602→                    </>
+   603→                  ) : (
+   604→                    <span className="flex items-center gap-2">
+   605→                      Iniciar Sesión
+   606→                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+   607→                    </span>
+   608→                  )}
+   609→                </Button>
+   610→              </form>
+   611→            </CardContent>
+   612→          </Card>
+   613→
+   614→          {/* Quick Login Section */}
+   615→          <div className="mt-5 animate-fade-in" style={{ animationDelay: '150ms' }}>
+   616→            <div className="flex items-center gap-3 mb-3">
+   617→              <div className="h-[1px] flex-1 bg-slate-200 dark:bg-slate-700" />
+   618→              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+   619→                <KeyRound className="h-3.5 w-3.5" />
+   620→                Acceso Rápido (Demo)
+   621→              </span>
+   622→              <div className="h-[1px] flex-1 bg-slate-200 dark:bg-slate-700" />
+   623→            </div>
+   624→            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+   625→              {quickLoginCreds.map((cred) => {
+   626→                const config = roleConfig[cred.role];
+   627→                return (
+   628→                  <button
+   629→                    key={cred.email}
+   630→                    type="button"
+   631→                    onClick={() => { setEmail(cred.email); setPassword(cred.pass); }}
+   632→                    disabled={isLoading || isLocked}
+   633→                    className={`flex flex-col items-start p-2.5 rounded-lg border ${config.border} ${config.hoverBg} transition-all duration-200 text-left group active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none bg-white dark:bg-slate-900/80`}
+   634→                  >
+   635→                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${config.bg} ${config.color} mb-1.5`}>
+   636→                      {config.label}
+   637→                    </span>
+   638→                    <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate w-full leading-tight">
+   639→                      {cred.email}
+   640→                    </span>
+   641→                  </button>
+   642→                );
+   643→              })}
+   644→            </div>
+   645→          </div>
+   646→        </div>
+   647→      </div>
+   648→
+   649→      {/* Password Recovery Dialog */}
+   650→      <PasswordRecoveryDialog open={showRecovery} onOpenChange={setShowRecovery} />
+   651→    </div>
+   652→  );
+   653→}
+   654→
+   655→// ============================================================
+   656→// PASSWORD RECOVERY DIALOG
+   657→// ============================================================
+   658→interface PasswordRecoveryDialogProps {
+   659→  open: boolean;
+   660→  onOpenChange: (open: boolean) => void;
+   661→}
+   662→
+   663→function PasswordRecoveryDialog({ open, onOpenChange }: PasswordRecoveryDialogProps) {
+   664→  const [step, setStep] = useState(1);
+   665→  const [email, setEmail] = useState('');
+   666→  const [otp, setOtp] = useState('');
+   667→  const [otpId, setOtpId] = useState('');
+   668→  const [newPassword, setNewPassword] = useState('');
+   669→  const [confirmPassword, setConfirmPassword] = useState('');
+   670→  const [demoOtp, setDemoOtp] = useState<string | null>(null);
+   671→  const [isLoading, setIsLoading] = useState(false);
+   672→  const [error, setError] = useState<string | null>(null);
+   673→  const [success, setSuccess] = useState<string | null>(null);
+   674→  const { toast } = useToast();
+   675→
+   676→  const handleReset = () => {
+   677→    setStep(1);
+   678→    setEmail('');
+   679→    setOtp('');
+   680→    setOtpId('');
+   681→    setNewPassword('');
+   682→    setConfirmPassword('');
+   683→    setDemoOtp(null);
+   684→    setIsLoading(false);
+   685→    setError(null);
+   686→    setSuccess(null);
+   687→  };
+   688→
+   689→  const handleClose = (newOpen: boolean) => {
+   690→    if (!newOpen) handleReset();
+   691→    onOpenChange(newOpen);
+   692→  };
+   693→
+   694→  const handleStep1 = async () => {
+   695→    setError(null);
+   696→    setIsLoading(true);
+   697→    try {
+   698→      const res = await fetch('/api/auth/forgot-password', {
+   699→        method: 'POST',
+   700→        headers: { 'Content-Type': 'application/json' },
+   701→        body: JSON.stringify({ email }),
+   702→      });
+   703→      const data = await res.json();
+   704→      if (!res.ok) {
+   705→        setError(data.error || 'Error al solicitar código');
+   706→        return;
+   707→      }
+   708→      setDemoOtp(data.demo_otp);
+   709→      setSuccess('Código enviado. Verifique su correo.');
+   710→      setStep(2);
+   711→    } catch {
+   712→      setError('Error de conexión');
+   713→    } finally {
+   714→      setIsLoading(false);
+   715→    }
+   716→  };
+   717→
+   718→  const handleStep2 = async () => {
+   719→    setError(null);
+   720→    setIsLoading(true);
+   721→    try {
+   722→      const res = await fetch('/api/auth/verify-otp', {
+   723→        method: 'POST',
+   724→        headers: { 'Content-Type': 'application/json' },
+   725→        body: JSON.stringify({ email, otp }),
+   726→      });
+   727→      const data = await res.json();
+   728→      if (!res.ok) {
+   729→        setError(data.error || 'Código inválido');
+   730→        return;
+   731→      }
+   732→      setOtpId(data.otp_id);
+   733→      setSuccess('Código verificado');
+   734→      setStep(3);
+   735→    } catch {
+   736→      setError('Error de conexión');
+   737→    } finally {
+   738→      setIsLoading(false);
+   739→    }
+   740→  };
+   741→
+   742→  const handleStep3 = async () => {
+   743→    setError(null);
+   744→    if (newPassword !== confirmPassword) {
+   745→      setError('Las contraseñas no coinciden');
+   746→      return;
+   747→    }
+   748→    if (newPassword.length < 8) {
+   749→      setError('La contraseña debe tener al menos 8 caracteres');
+   750→      return;
+   751→    }
+   752→    setIsLoading(true);
+   753→    try {
+   754→      const res = await fetch('/api/auth/reset-password', {
+   755→        method: 'POST',
+   756→        headers: { 'Content-Type': 'application/json' },
+   757→        body: JSON.stringify({ otp_id: otpId, email, new_password: newPassword }),
+   758→      });
+   759→      const data = await res.json();
+   760→      if (!res.ok) {
+   761→        setError(data.error || 'Error al actualizar contraseña');
+   762→        return;
+   763→      }
+   764→      toast({
+   765→        title: 'Contraseña actualizada',
+   766→        description: 'Puede iniciar sesión con su nueva contraseña',
+   767→      });
+   768→      handleClose(false);
+   769→    } catch {
+   770→      setError('Error de conexión');
+   771→    } finally {
+   772→      setIsLoading(false);
+   773→    }
+   774→  };
+   775→
+   776→  const stepLabels = ['Email', 'Verificación', 'Nueva Contraseña'];
+   777→  const progressValue = (step / 3) * 100;
+   778→
+   779→  return (
+   780→    <Dialog open={open} onOpenChange={handleClose}>
+   781→      <DialogContent className="sm:max-w-md">
+   782→        <DialogHeader>
+   783→          <DialogTitle className="flex items-center gap-2">
+   784→            <Lock className="h-5 w-5 text-emerald-600" />
+   785→            Recuperar Contraseña
+   786→          </DialogTitle>
+   787→          <DialogDescription>
+   788→            Siga los pasos para restablecer su contraseña
+   789→          </DialogDescription>
+   790→        </DialogHeader>
+   791→
+   792→        {/* Progress indicator */}
+   793→        <div className="space-y-2">
+   794→          <div className="flex justify-between text-xs text-slate-500">
+   795→            {stepLabels.map((label, i) => (
+   796→              <span key={i} className={step > i ? 'text-emerald-600 font-medium' : step === i + 1 ? 'text-slate-900 font-medium' : ''}>
+   797→                {i + 1}. {label}
+   798→              </span>
+   799→            ))}
+   800→          </div>
+   801→          <Progress value={progressValue} className="h-2" />
+   802→        </div>
+   803→
+   804→        <div className="space-y-4">
+   805→          {error && (
+   806→            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+   807→              <AlertCircle className="h-4 w-4 shrink-0" />
+   808→              <span>{error}</span>
+   809→            </div>
+   810→          )}
+   811→
+   812→          {success && step > 1 && (
+   813→            <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 p-3 rounded-lg">
+   814→              <CheckCircle className="h-4 w-4 shrink-0" />
+   815→              <span>{success}</span>
+   816→            </div>
+   817→          )}
+   818→
+   819→          {/* Step 1: Email */}
+   820→          {step === 1 && (
+   821→            <div className="space-y-4">
+   822→              <div className="space-y-2">
+   823→                <Label>Correo Electrónico</Label>
+   824→                <Input
+   825→                  type="email"
+   826→                  placeholder="usuario@nomina.gob.sv"
+   827→                  value={email}
+   828→                  onChange={(e) => setEmail(e.target.value)}
+   829→                  disabled={isLoading}
+   830→                />
+   831→              </div>
+   832→              <Button onClick={handleStep1} disabled={isLoading || !email} className="w-full bg-emerald-600 hover:bg-emerald-700">
+   833→                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+   834→                Enviar Código
+   835→              </Button>
+   836→            </div>
+   837→          )}
+   838→
+   839→          {/* Step 2: OTP */}
+   840→          {step === 2 && (
+   841→            <div className="space-y-4">
+   842→              <div className="space-y-2">
+   843→                <Label>Código de Verificación</Label>
+   844→                <Input
+   845→                  placeholder="000000"
+   846→                  value={otp}
+   847→                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+   848→                  disabled={isLoading}
+   849→                  className="text-center text-lg tracking-[0.5em] font-mono"
+   850→                  maxLength={6}
+   851→                />
+   852→              </div>
+   853→              {demoOtp && (
+   854→                <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded">
+   855→                  Demo - Código: <strong>{demoOtp}</strong>
+   856→                </p>
+   857→              )}
+   858→              <div className="flex gap-2">
+   859→                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+   860→                  <ArrowLeft className="mr-1 h-4 w-4" /> Volver
+   861→                </Button>
+   862→                <Button onClick={handleStep2} disabled={isLoading || otp.length !== 6} className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+   863→                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+   864→                  Verificar
+   865→                </Button>
+   866→              </div>
+   867→            </div>
+   868→          )}
+   869→
+   870→          {/* Step 3: New Password */}
+   871→          {step === 3 && (
+   872→            <div className="space-y-4">
+   873→              <div className="space-y-2">
+   874→                <Label>Nueva Contraseña</Label>
+   875→                <Input
+   876→                  type="password"
+   877→                  placeholder="Mínimo 8 caracteres"
+   878→                  value={newPassword}
+   879→                  onChange={(e) => setNewPassword(e.target.value)}
+   880→                  disabled={isLoading}
+   881→                />
+   882→              </div>
+   883→              <div className="space-y-2">
+   884→                <Label>Confirmar Contraseña</Label>
+   885→                <Input
+   886→                  type="password"
+   887→                  placeholder="Repita la contraseña"
+   888→                  value={confirmPassword}
+   889→                  onChange={(e) => setConfirmPassword(e.target.value)}
+   890→                  disabled={isLoading}
+   891→                />
+   892→              </div>
+   893→              <Button onClick={handleStep3} disabled={isLoading || !newPassword || !confirmPassword} className="w-full bg-emerald-600 hover:bg-emerald-700">
+   894→                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+   895→                Actualizar Contraseña
+   896→              </Button>
+   897→            </div>
+   898→          )}
+   899→        </div>
+   900→      </DialogContent>
+   901→    </Dialog>
+   902→  );
+   903→}
+   904→
+   905→// ============================================================
+   906→// SIDEBAR - Enhanced with Search, Keyboard Nav, Favorites, Collapse
+   907→// ============================================================
+   908→
+   909→// Badge counts for specific nav items (can be dynamic from API later)
+   910→const NAV_BADGES: Partial<Record<ViewId, number>> = {
+   911→  '02-04': 3, // Incidencias - pending count
+   912→  '04-04': 1, // Aprobación - pending count
+   913→};
+   914→
+   915→const MAX_FAVORITES = 5;
+   916→const FAVORITES_KEY = 'sidebar-favorites';
+   917→const SIDEBAR_COLLAPSED_KEY = 'sidebar-collapsed';
+   918→
+   919→function getStoredFavorites(): ViewId[] {
+   920→  if (typeof window === 'undefined') return [];
+   921→  try {
+   922→    const stored = localStorage.getItem(FAVORITES_KEY);
+   923→    return stored ? JSON.parse(stored) : [];
+   924→  } catch {
+   925→    return [];
+   926→  }
+   927→}
+   928→
+   929→function setStoredFavorites(favs: ViewId[]) {
+   930→  try {
+   931→    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+   932→  } catch {
+   933→    // ignore
+   934→  }
+   935→}
+   936→
+   937→function getStoredCollapsed(): boolean {
+   938→  if (typeof window === 'undefined') return false;
+   939→  try {
+   940→    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+   941→  } catch {
+   942→    return false;
+   943→  }
+   944→}
+   945→
+   946→function setStoredCollapsed(val: boolean) {
+   947→  try {
+   948→    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(val));
+   949→  } catch {
+   950→    // ignore
+   951→  }
+   952→}
+   953→
+   954→interface SidebarProps {
+   955→  user: UserData;
+   956→  currentView: ViewId;
+   957→  onNavigate: (view: ViewId) => void;
+   958→  collapsed: boolean;       // desktop icon-only mode
+   959→  onToggle: () => void;     // toggle desktop collapsed
+   960→  mobileOpen: boolean;      // mobile overlay open
+   961→  onMobileToggle: () => void; // toggle mobile overlay
+   962→}
+   963→
+   964→function Sidebar({ user, currentView, onNavigate, collapsed, onToggle, mobileOpen, onMobileToggle }: SidebarProps) {
+   965→  // Expanded groups
+   966→  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+   967→    const initial = new Set<string>();
+   968→    NAV_GROUPS.forEach(g => {
+   969→      if (g.roles.includes(user.rol)) {
+   970→        initial.add(g.title);
+   971→      }
+   972→    });
+   973→    return initial;
+   974→  });
+   975→
+   976→  // Search state
+   977→  const [searchQuery, setSearchQuery] = useState('');
+   978→
+   979→  // Favorites state
+   980→  const [favorites, setFavorites] = useState<ViewId[]>(() => getStoredFavorites());
+   981→
+   982→  // Keyboard navigation state
+   983→  const [focusedIndex, setFocusedIndex] = useState(-1);
+   984→  const sidebarNavRef = React.useRef<HTMLDivElement>(null);
+   985→
+   986→  const toggleGroup = (title: string) => {
+   987→    setExpandedGroups(prev => {
+   988→      const next = new Set(prev);
+   989→      if (next.has(title)) next.delete(title);
+   990→      else next.add(title);
+   991→      return next;
+   992→    });
+   993→  };
+   994→
+   995→  // Toggle favorite
+   996→  const toggleFavorite = (viewId: ViewId, e: React.MouseEvent) => {
+   997→    e.stopPropagation();
+   998→    e.preventDefault();
+   999→    setFavorites(prev => {
+  1000→      let next: ViewId[];
+  1001→      if (prev.includes(viewId)) {
+  1002→        next = prev.filter(id => id !== viewId);
+  1003→      } else {
+  1004→        if (prev.length >= MAX_FAVORITES) return prev;
+  1005→        next = [...prev, viewId];
+  1006→      }
+  1007→      setStoredFavorites(next);
+  1008→      return next;
+  1009→    });
+  1010→  };
+  1011→
+  1012→  // Build flat list of all visible nav items for keyboard navigation and search
+  1013→  const allNavItems = React.useMemo(() => {
+  1014→    const items: { id: ViewId; label: string; icon: React.ElementType; groupTitle: string }[] = [];
+  1015→    // Dashboard as first item
+  1016→    items.push({ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, groupTitle: '' });
+  1017→    NAV_GROUPS.forEach(group => {
+  1018→      const visibleItems = getVisibleItems(group, user.rol);
+  1019→      visibleItems.forEach(item => {
+  1020→        items.push({ id: item.id, label: item.label, icon: item.icon, groupTitle: group.title });
+  1021→      });
+  1022→    });
+  1023→    return items;
+  1024→  }, [user.rol]);
+  1025→
+  1026→  // Filtered items based on search
+  1027→  const filteredItems = React.useMemo(() => {
+  1028→    if (!searchQuery.trim()) return allNavItems;
+  1029→    const q = searchQuery.toLowerCase();
+  1030→    return allNavItems.filter(item =>
+  1031→      item.label.toLowerCase().includes(q) ||
+  1032→      item.groupTitle.toLowerCase().includes(q) ||
+  1033→      item.id.toLowerCase().includes(q)
+  1034→    );
+  1035→  }, [allNavItems, searchQuery]);
+  1036→
+  1037→  // Favorites items (resolved from stored IDs)
+  1038→  const favoriteItems = React.useMemo(() => {
+  1039→    return favorites
+  1040→      .map(favId => allNavItems.find(item => item.id === favId))
+  1041→      .filter((item): item is NonNullable<typeof item> => item != null);
+  1042→  }, [favorites, allNavItems]);
+  1043→
+  1044→  // Keyboard navigation handler
+  1045→  const handleSidebarKeyDown = useCallback((e: React.KeyboardEvent) => {
+  1046→    if (collapsed) return; // No keyboard nav in collapsed mode
+  1047→    const totalItems = searchQuery.trim() ? filteredItems.length : allNavItems.length;
+  1048→
+  1049→    if (e.key === 'ArrowDown') {
+  1050→      e.preventDefault();
+  1051→      setFocusedIndex(prev => (prev + 1) % totalItems);
+  1052→    } else if (e.key === 'ArrowUp') {
+  1053→      e.preventDefault();
+  1054→      setFocusedIndex(prev => (prev - 1 + totalItems) % totalItems);
+  1055→    } else if (e.key === 'Enter' && focusedIndex >= 0) {
+  1056→      e.preventDefault();
+  1057→      const items = searchQuery.trim() ? filteredItems : allNavItems;
+  1058→      if (focusedIndex < items.length) {
+  1059→        const item = items[focusedIndex];
+  1060→        onNavigate(item.id);
+  1061→        if (window.innerWidth < 1024) onMobileToggle();
+  1062→      }
+  1063→    } else if (e.key === 'Escape') {
+  1064→      if (searchQuery) {
+  1065→        setSearchQuery('');
+  1066→        setFocusedIndex(-1);
+  1067→      }
+  1068→    }
+  1069→  }, [collapsed, searchQuery, filteredItems, allNavItems, focusedIndex, onNavigate, onMobileToggle]);
+  1070→
+  1071→  // Scroll focused item into view
+  1072→  useEffect(() => {
+  1073→    if (focusedIndex >= 0 && sidebarNavRef.current) {
+  1074→      const focusedEl = sidebarNavRef.current.querySelector(`[data-nav-index="${focusedIndex}"]`);
+  1075→      if (focusedEl) {
+  1076→        focusedEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  1077→      }
+  1078→    }
+  1079→  }, [focusedIndex]);
+  1080→
+  1081→  // Helper: render a nav item button
+  1082→  const renderNavItem = (
+  1083→    item: { id: ViewId; label: string; icon: React.ElementType; groupTitle: string },
+  1084→    index: number,
+  1085→    isFavoriteItem = false
+  1086→  ) => {
+  1087→    const isActive = currentView === item.id;
+  1088→    const isFocused = focusedIndex === index;
+  1089→    const isFav = favorites.includes(item.id);
+  1090→    const ItemIcon = item.icon;
+  1091→    const badgeCount = NAV_BADGES[item.id];
+  1092→
+  1093→    if (collapsed) {
+  1094→      return (
+  1095→        <TooltipProvider key={item.id}>
+  1096→          <Tooltip>
+  1097→            <TooltipTrigger asChild>
+  1098→              <button
+  1099→                onClick={() => {
+  1100→                  onNavigate(item.id);
+  1101→                  if (window.innerWidth < 1024) onMobileToggle();
+  1102→                }}
+  1103→                className={`flex items-center justify-center w-full h-10 rounded-lg transition-all relative ${
+  1104→                  isActive
+  1105→                    ? 'bg-emerald-600/20 text-emerald-400'
+  1106→                    : 'text-slate-500 hover:bg-slate-800/70 hover:text-white'
+  1107→                }`}
+  1108→              >
+  1109→                {isActive && (
+  1110→                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-emerald-400 rounded-r-full" />
+  1111→                )}
+  1112→                <ItemIcon className="h-4 w-4" />
+  1113→                {badgeCount ? (
+  1114→                  <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-[9px] font-bold text-white">
+  1115→                    {badgeCount}
+  1116→                  </span>
+  1117→                ) : null}
+  1118→              </button>
+  1119→            </TooltipTrigger>
+  1120→            <TooltipContent side="right" className="font-medium">
+  1121→              {item.label}
+  1122→              {badgeCount ? ` (${badgeCount})` : ''}
+  1123→            </TooltipContent>
+  1124→          </Tooltip>
+  1125→        </TooltipProvider>
+  1126→      );
+  1127→    }
+  1128→
+  1129→    return (
+  1130→      <button
+  1131→        key={item.id}
+  1132→        data-nav-index={index}
+  1133→        onClick={() => {
+  1134→          onNavigate(item.id);
+  1135→          if (window.innerWidth < 1024) onMobileToggle();
+  1136→        }}
+  1137→        onFocus={() => setFocusedIndex(index)}
+  1138→        className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-all duration-150 relative group/item outline-none ${
+  1139→          isActive
+  1140→            ? 'bg-emerald-500/15 text-emerald-400 font-semibold'
+  1141→            : isFocused
+  1142→              ? 'bg-slate-700/50 text-white ring-1 ring-emerald-500/30'
+  1143→              : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+  1144→        }`}
+  1145→      >
+  1146→        {/* Left accent bar for active */}
+  1147→        {isActive && (
+  1148→          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-emerald-400 rounded-r-full shadow-sm shadow-emerald-400/50" />
+  1149→        )}
+  1150→        <ItemIcon className={`h-4 w-4 shrink-0 transition-colors duration-150 ${isActive ? 'text-emerald-400' : 'text-slate-600 group-hover/item:text-slate-400'}`} />
+  1151→        <span className="truncate flex-1 text-left">{item.label}</span>
+  1152→
+  1153→        {/* Badge */}
+  1154→        {badgeCount ? (
+  1155→          <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-bold shrink-0">
+  1156→            {badgeCount}
+  1157→          </span>
+  1158→        ) : null}
+  1159→
+  1160→        {/* Favorite star */}
+  1161→        <span
+  1162→          onClick={(e) => toggleFavorite(item.id, e)}
+  1163→          className={`shrink-0 p-0.5 rounded transition-all duration-150 ${
+  1164→            isFav
+  1165→              ? 'text-amber-400 hover:text-amber-300'
+  1166→              : 'text-transparent group-hover/item:text-slate-600 hover:!text-amber-400'
+  1167→          }`}
+  1168→          title={isFav ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+  1169→        >
+  1170→          <Star className={`h-3 w-3 ${isFav ? 'fill-current' : ''}`} />
+  1171→        </span>
+  1172→
+  1173→        {/* Active indicator dot */}
+  1174→        {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />}
+  1175→      </button>
+  1176→    );
+  1177→  };
+  1178→
+  1179→  return (
+  1180→    <>
+  1181→      {/* Mobile overlay */}
+  1182→      {mobileOpen && (
+  1183→        <div
+  1184→          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
+  1185→          onClick={onMobileToggle}
+  1186→        />
+  1187→      )}
+  1188→
+  1189→      <aside
+  1190→        className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 text-white transition-all duration-300 ease-in-out ${
+  1191→          mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+  1192→        } ${collapsed ? 'lg:w-[68px]' : 'w-64'}`}
+  1193→      >
+  1194→        {/* Brand */}
+  1195→        <div className={`flex items-center gap-3 h-14 border-b border-slate-700/50 shrink-0 ${collapsed ? 'px-3 justify-center' : 'px-4'}`}>
+  1196→          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0 shadow-lg shadow-emerald-900/40">
+  1197→            <svg viewBox="0 0 40 40" className="w-5 h-5 text-white" fill="none">
+  1198→              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
+  1199→              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
+  1200→            </svg>
+  1201→          </div>
+  1202→          {!collapsed && (
+  1203→            <div className="overflow-hidden flex-1">
+  1204→              <p className="font-bold text-sm leading-tight whitespace-nowrap tracking-tight">Nómina SV</p>
+  1205→              <p className="text-[10px] text-slate-500 whitespace-nowrap">El Salvador</p>
+  1206→            </div>
+  1207→          )}
+  1208→          {!collapsed && (
+  1209→            <button onClick={onMobileToggle} className="ml-auto lg:hidden text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors">
+  1210→              <X className="h-5 w-5" />
+  1211→            </button>
+  1212→          )}
+  1213→        </div>
+  1214→
+  1215→        {/* Search input - only in expanded mode */}
+  1216→        {!collapsed && (
+  1217→          <div className="px-3 pt-3 pb-1 shrink-0">
+  1218→            <div className="relative">
+  1219→              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+  1220→              <input
+  1221→                type="text"
+  1222→                value={searchQuery}
+  1223→                onChange={(e) => { setSearchQuery(e.target.value); setFocusedIndex(-1); }}
+  1224→                placeholder="Buscar módulo..."
+  1225→                className="w-full h-8 pl-8 pr-7 rounded-lg bg-slate-800/60 border border-slate-700/50 text-xs text-slate-300 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition-all"
+  1226→              />
+  1227→              {searchQuery && (
+  1228→                <button
+  1229→                  onClick={() => { setSearchQuery(''); setFocusedIndex(-1); }}
+  1230→                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-700 transition-colors"
+  1231→                >
+  1232→                  <X className="h-3 w-3" />
+  1233→                </button>
+  1234→              )}
+  1235→            </div>
+  1236→          </div>
+  1237→        )}
+  1238→
+  1239→        {/* Navigation */}
+  1240→        <ScrollArea className="flex-1 py-1 dark-scrollbar">
+  1241→          <div
+  1242→            ref={sidebarNavRef}
+  1243→            onKeyDown={handleSidebarKeyDown}
+  1244→            tabIndex={0}
+  1245→            className="outline-none"
+  1246→          >
+  1247→            <nav className={`space-y-0.5 ${collapsed ? 'px-2' : 'px-2'}`}>
+  1248→
+  1249→              {/* Favorites section */}
+  1250→              {!collapsed && favoriteItems.length > 0 && !searchQuery && (
+  1251→                <div className="mb-2">
+  1252→                  <div className="flex items-center gap-2 px-2 py-1.5">
+  1253→                    <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+  1254→                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Favoritos</span>
+  1255→                  </div>
+  1256→                  <div className="space-y-0.5">
+  1257→                    {favoriteItems.map((item, idx) => renderNavItem(item, idx, true))}
+  1258→                  </div>
+  1259→                  <div className="mx-2 my-2 border-t border-slate-700/40" />
+  1260→                </div>
+  1261→              )}
+  1262→
+  1263→              {/* Collapsed mode: show icons only */}
+  1264→              {collapsed ? (
+  1265→                <div className="space-y-1 py-1">
+  1266→                  {/* Dashboard */}
+  1267→                  {(() => {
+  1268→                    const isActive = currentView === 'dashboard';
+  1269→                    return (
+  1270→                      <TooltipProvider>
+  1271→                        <Tooltip>
+  1272→                          <TooltipTrigger asChild>
+  1273→                            <button
+  1274→                              onClick={() => { onNavigate('dashboard'); if (window.innerWidth < 1024) onMobileToggle(); }}
+  1275→                              className={`flex items-center justify-center w-full h-10 rounded-lg transition-all relative ${
+  1276→                                isActive
+  1277→                                  ? 'bg-emerald-600/20 text-emerald-400'
+  1278→                                  : 'text-slate-500 hover:bg-slate-800/70 hover:text-white'
+  1279→                              }`}
+  1280→                            >
+  1281→                              {isActive && (
+  1282→                                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-emerald-400 rounded-r-full" />
+  1283→                              )}
+  1284→                              <LayoutDashboard className="h-4 w-4" />
+  1285→                            </button>
+  1286→                          </TooltipTrigger>
+  1287→                          <TooltipContent side="right" className="font-medium">Dashboard</TooltipContent>
+  1288→                        </Tooltip>
+  1289→                      </TooltipProvider>
+  1290→                    );
+  1291→                  })()}
+  1292→
+  1293→                  <div className="mx-1 my-1 border-t border-slate-700/30" />
+  1294→
+  1295→                  {NAV_GROUPS.map(group => {
+  1296→                    const visibleItems = getVisibleItems(group, user.rol);
+  1297→                    if (visibleItems.length === 0) return null;
+  1298→                    return (
+  1299→                      <React.Fragment key={group.title}>
+  1300→                        {visibleItems.map(item => renderNavItem(
+  1301→                          { id: item.id, label: item.label, icon: item.icon, groupTitle: group.title },
+  1302→                          -1
+  1303→                        ))}
+  1304→                      </React.Fragment>
+  1305→                    );
+  1306→                  })}
+  1307→                </div>
+  1308→              ) : searchQuery.trim() ? (
+  1309→                /* Search results - flattened, no group headers */
+  1310→                <div className="space-y-0.5 py-1">
+  1311→                  {filteredItems.length === 0 ? (
+  1312→                    <div className="px-3 py-6 text-center">
+  1313→                      <Search className="h-6 w-6 text-slate-700 mx-auto mb-2" />
+  1314→                      <p className="text-xs text-slate-600">Sin resultados para &quot;{searchQuery}&quot;</p>
+  1315→                    </div>
+  1316→                  ) : (
+  1317→                    filteredItems.map((item, idx) => renderNavItem(item, idx))
+  1318→                  )}
+  1319→                </div>
+  1320→              ) : (
+  1321→                /* Normal navigation with groups */
+  1322→                <>
+  1323→                  {/* Dashboard link at top */}
+  1324→                  {renderNavItem(
+  1325→                    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, groupTitle: '' },
+  1326→                    0
+  1327→                  )}
+  1328→
+  1329→                  <div className="mx-2 my-2 border-t border-slate-700/30" />
+  1330→
+  1331→                  {NAV_GROUPS.map(group => {
+  1332→                    const visibleItems = getVisibleItems(group, user.rol);
+  1333→                    if (visibleItems.length === 0) return null;
+  1334→
+  1335→                    const isExpanded = expandedGroups.has(group.title);
+  1336→                    const GroupIcon = group.icon;
+  1337→
+  1338→                    return (
+  1339→                      <div key={group.title}>
+  1340→                        <button
+  1341→                          onClick={() => toggleGroup(group.title)}
+  1342→                          className="flex items-center gap-2 w-full px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:text-slate-400 transition-colors duration-150 rounded-md hover:bg-slate-800/30"
+  1343→                        >
+  1344→                          <GroupIcon className="h-3 w-3 shrink-0" />
+  1345→                          <span className="truncate flex-1 text-left">{group.title}</span>
+  1346→                          <ChevronDown className={`h-3 w-3 shrink-0 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+  1347→                        </button>
+  1348→
+  1349→                        <div className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+  1350→                          <div className="space-y-0.5 mt-0.5 mb-1.5">
+  1351→                            {visibleItems.map(item => {
+  1352→                              // Calculate global index for keyboard nav
+  1353→                              const globalIdx = allNavItems.findIndex(ai => ai.id === item.id);
+  1354→                              return renderNavItem(
+  1355→                                { id: item.id, label: item.label, icon: item.icon, groupTitle: group.title },
+  1356→                                globalIdx
+  1357→                              );
+  1358→                            })}
+  1359→                          </div>
+  1360→                        </div>
+  1361→
+  1362→                        {/* Separator between groups */}
+  1363→                        <div className="mx-2 my-1 border-t border-slate-700/20" />
+  1364→                      </div>
+  1365→                    );
+  1366→                  })}
+  1367→                </>
+  1368→              )}
+  1369→            </nav>
+  1370→          </div>
+  1371→        </ScrollArea>
+  1372→
+  1373→        {/* Bottom section: Collapse toggle + User info */}
+  1374→        <div className="border-t border-slate-700/50 shrink-0">
+  1375→          {/* Collapse/expand toggle */}
+  1376→          <div className={`flex ${collapsed ? 'justify-center' : 'justify-end'} px-2 pt-2 pb-1`}>
+  1377→            <TooltipProvider>
+  1378→              <Tooltip>
+  1379→                <TooltipTrigger asChild>
+  1380→                  <button
+  1381→                    onClick={() => {
+  1382→                      onToggle();
+  1383→                      setStoredCollapsed(!collapsed);
+  1384→                    }}
+  1385→                    className="flex items-center justify-center w-7 h-7 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-all duration-200"
+  1386→                  >
+  1387→                    {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+  1388→                  </button>
+  1389→                </TooltipTrigger>
+  1390→                <TooltipContent side="right">
+  1391→                  {collapsed ? 'Expandir barra lateral' : 'Colapsar barra lateral'}
+  1392→                </TooltipContent>
+  1393→              </Tooltip>
+  1394→            </TooltipProvider>
+  1395→          </div>
+  1396→
+  1397→          {/* User info */}
+  1398→          <div className={`${collapsed ? 'px-2 py-3 flex justify-center' : 'p-3'}`}>
+  1399→            {collapsed ? (
+  1400→              <TooltipProvider>
+  1401→                <Tooltip>
+  1402→                  <TooltipTrigger asChild>
+  1403→                    <div>
+  1404→                      <Avatar className="h-8 w-8 bg-gradient-to-br from-emerald-500 to-teal-600 cursor-default">
+  1405→                        <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-[10px] font-semibold">
+  1406→                          {user.nombre[0]}{user.apellido[0]}
+  1407→                        </AvatarFallback>
+  1408→                      </Avatar>
+  1409→                    </div>
+  1410→                  </TooltipTrigger>
+  1411→                  <TooltipContent side="right">
+  1412→                    {user.nombre} {user.apellido} — {user.rol}
+  1413→                  </TooltipContent>
+  1414→                </Tooltip>
+  1415→              </TooltipProvider>
+  1416→            ) : (
+  1417→              <div className="flex items-center gap-2.5">
+  1418→                <Avatar className="h-9 w-9 bg-gradient-to-br from-emerald-500 to-teal-600 shrink-0">
+  1419→                  <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-xs font-semibold">
+  1420→                    {user.nombre[0]}{user.apellido[0]}
+  1421→                  </AvatarFallback>
+  1422→                </Avatar>
+  1423→                <div className="overflow-hidden flex-1 min-w-0">
+  1424→                  <p className="text-sm font-medium truncate">{user.nombre} {user.apellido}</p>
+  1425→                  <div className="flex items-center gap-1">
+  1426→                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+  1427→                    <p className="text-[10px] text-slate-400 truncate">{user.rol}</p>
+  1428→                  </div>
+  1429→                </div>
+  1430→              </div>
+  1431→            )}
+  1432→          </div>
+  1433→        </div>
+  1434→      </aside>
+  1435→    </>
+  1436→  );
+  1437→}
+  1438→
+  1439→// ============================================================
+  1440→// TOP HEADER BAR
+  1441→// ============================================================
+  1442→interface HeaderBarProps {
+  1443→  user: UserData;
+  1444→  currentView: ViewId;
+  1445→  accessToken: string | null;
+  1446→  onToggleSidebar: () => void;
+  1447→  onToggleMobileSidebar: () => void;
+  1448→  onLogout: () => void;
+  1449→  onNavigate?: (viewId: ViewId) => void;
+  1450→  onOpenCommandPalette?: () => void;
+  1451→}
+  1452→
+  1453→function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onToggleMobileSidebar, onLogout, onNavigate, onOpenCommandPalette }: HeaderBarProps) {
+  1454→  const { toast } = useToast();
+  1455→  const [showChangePassword, setShowChangePassword] = useState(false);
+  1456→  const { theme, setTheme } = useTheme();
+  1457→
+  1458→  const handleLogout = async () => {
+  1459→    try {
+  1460→      await fetch('/api/auth/logout', { method: 'POST' });
+  1461→    } catch {
+  1462→      // ignore
+  1463→    }
+  1464→    onLogout();
+  1465→  };
+  1466→
+  1467→  return (
+  1468→    <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-700/50 shadow-sm dark:shadow-slate-900/50 flex items-center px-4 gap-3 shrink-0 z-30">
+  1469→      {/* Mobile menu toggle */}
+  1470→      <button
+  1471→        onClick={onToggleMobileSidebar}
+  1472→        className="lg:hidden text-slate-600 hover:text-slate-900 p-1 rounded-md hover:bg-slate-100 transition-colors"
+  1473→      >
+  1474→        <Menu className="h-5 w-5" />
+  1475→      </button>
+  1476→
+  1477→      {/* Desktop sidebar toggle (collapse/expand) */}
+  1478→      <TooltipProvider>
+  1479→        <Tooltip>
+  1480→          <TooltipTrigger asChild>
+  1481→            <button
+  1482→              onClick={onToggleSidebar}
+  1483→              className="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+  1484→            >
+  1485→              <PanelLeft className="h-4 w-4" />
+  1486→            </button>
+  1487→          </TooltipTrigger>
+  1488→          <TooltipContent>Alternar barra lateral</TooltipContent>
+  1489→        </Tooltip>
+  1490→      </TooltipProvider>
+  1491→
+  1492→      {/* Breadcrumb / Current view name */}
+  1493→      <div className="flex-1 min-w-0">
+  1494→        <div className="flex items-center gap-2">
+  1495→          <h2 className="text-sm font-semibold text-slate-900 truncate">
+  1496→            {VIEW_LABELS[currentView] || 'Dashboard'}
+  1497→          </h2>
+  1498→          {currentView !== 'dashboard' && (
+  1499→            <Badge variant="secondary" className="text-[9px] shrink-0 bg-slate-100 text-slate-500">
+  1500→              {currentView}
+  1501→            </Badge>
+  1502→          )}
+  1503→        </div>
+  1504→      </div>
+  1505→
+  1506→      {/* Search / Command Palette trigger */}
+  1507→      <TooltipProvider>
+  1508→        <Tooltip>
+  1509→          <TooltipTrigger asChild>
+  1510→            <button
+  1511→              onClick={onOpenCommandPalette}
+  1512→              className="flex items-center gap-2 h-8 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-sm"
+  1513→              aria-label="Buscar (⌘K)"
+  1514→            >
+  1515→              <Search className="h-3.5 w-3.5" />
+  1516→              <span className="hidden md:inline text-xs">Buscar...</span>
+  1517→              <kbd className="hidden sm:inline-flex items-center rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-1 py-0.5 text-[9px] font-medium text-slate-400 dark:text-slate-500">⌘K</kbd>
+  1518→            </button>
+  1519→          </TooltipTrigger>
+  1520→          <TooltipContent>Buscar vistas, empleados, acciones (⌘K)</TooltipContent>
+  1521→        </Tooltip>
+  1522→      </TooltipProvider>
+  1523→
+  1524→      {/* Dark mode toggle */}
+  1525→      <TooltipProvider>
+  1526→        <Tooltip>
+  1527→          <TooltipTrigger asChild>
+  1528→            <button
+  1529→              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+  1530→              className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+  1531→              aria-label="Cambiar tema"
+  1532→            >
+  1533→              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+  1534→              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+  1535→            </button>
+  1536→          </TooltipTrigger>
+  1537→          <TooltipContent>{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</TooltipContent>
+  1538→        </Tooltip>
+  1539→      </TooltipProvider>
+  1540→
+  1541→      {/* Notification bell */}
+  1542→      <NotificationBell accessToken={accessToken} onNavigate={onNavigate} />
+  1543→
+  1544→      {/* User dropdown */}
+  1545→      <DropdownMenu>
+  1546→        <DropdownMenuTrigger asChild>
+  1547→          <button className="flex items-center gap-2 hover:bg-slate-50 rounded-lg px-2 py-1.5 transition-colors">
+  1548→            <Avatar className="h-8 w-8">
+  1549→              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-xs font-medium">
+  1550→                {user.nombre[0]}{user.apellido[0]}
+  1551→              </AvatarFallback>
+  1552→            </Avatar>
+  1553→            <div className="hidden sm:block text-left">
+  1554→              <p className="text-sm font-medium text-slate-700 leading-tight">{user.nombre} {user.apellido}</p>
+  1555→              <p className="text-[10px] text-slate-400 leading-tight">{user.rol}</p>
+  1556→            </div>
+  1557→            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+  1558→          </button>
+  1559→        </DropdownMenuTrigger>
+  1560→        <DropdownMenuContent align="end" className="w-56">
+  1561→          <div className="px-2 py-1.5">
+  1562→            <p className="text-sm font-medium">{user.nombre} {user.apellido}</p>
+  1563→            <p className="text-xs text-slate-500">{user.email}</p>
+  1564→          </div>
+  1565→          <DropdownMenuSeparator />
+  1566→          <DropdownMenuItem onClick={() => toast({ title: 'Perfil', description: 'Módulo de perfil en desarrollo' })}>
+  1567→            <User className="mr-2 h-4 w-4" />
+  1568→            Mi Perfil
+  1569→          </DropdownMenuItem>
+  1570→          <DropdownMenuItem onClick={() => setShowChangePassword(true)}>
+  1571→            <Lock className="mr-2 h-4 w-4" />
+  1572→            Cambiar Contraseña
+  1573→          </DropdownMenuItem>
+  1574→          <DropdownMenuSeparator />
+  1575→          <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
+  1576→            <LogOut className="mr-2 h-4 w-4" />
+  1577→            Cerrar Sesión
+  1578→          </DropdownMenuItem>
+  1579→        </DropdownMenuContent>
+  1580→      </DropdownMenu>
+  1581→
+  1582→      <ChangePasswordDialog
+  1583→        open={showChangePassword}
+  1584→        onOpenChange={setShowChangePassword}
+  1585→        accessToken={accessToken}
+  1586→      />
+  1587→    </header>
+  1588→  );
+  1589→}
+  1590→
+  1591→// ============================================================
+  1592→// DASHBOARD / WELCOME VIEW
+  1593→// ============================================================
+  1594→
+  1595→// Mock payroll trend data for the bar chart
+  1596→const PAYROLL_TREND_DATA = [
+  1597→  { month: 'Ene', value: 45200 },
+  1598→  { month: 'Feb', value: 43800 },
+  1599→  { month: 'Mar', value: 47100 },
+  1600→  { month: 'Abr', value: 46500 },
+  1601→  { month: 'May', value: 48900 },
+  1602→  { month: 'Jun', value: 50200 },
+  1603→  { month: 'Jul', value: 49800 },
+  1604→  { month: 'Ago', value: 51300 },
+  1605→  { month: 'Sep', value: 52600 },
+  1606→  { month: 'Oct', value: 54100 },
+  1607→  { month: 'Nov', value: 53800 },
+  1608→  { month: 'Dic', value: 55400 },
+  1609→];
+  1610→
+  1611→// Mock area distribution data
+  1612→const AREA_DISTRIBUTION_DATA = [
+  1613→  { name: 'Administración', count: 12, color: 'bg-teal-500' },
+  1614→  { name: 'Ventas', count: 18, color: 'bg-emerald-500' },
+  1615→  { name: 'Tecnología', count: 15, color: 'bg-cyan-500' },
+  1616→  { name: 'Recursos Humanos', count: 8, color: 'bg-amber-500' },
+  1617→  { name: 'Finanzas', count: 10, color: 'bg-violet-500' },
+  1618→  { name: 'Operaciones', count: 14, color: 'bg-rose-500' },
+  1619→];
+  1620→
+  1621→// Mock announcements
+  1622→const MOCK_ANNOUNCEMENTS = [
+  1623→  { id: '1', title: 'Cierre de nómina febrero 2025', message: 'El plazo para el cierre de nómina del mes de febrero finaliza el 28 de febrero. Asegúrese de registrar todas las incidencias.', severity: 'high' as const, date: '2025-02-20', icon: CalendarDays },
+  1624→  { id: '2', title: 'Actualización de parámetros ISSS', message: 'Se han actualizado los topes de cotización ISSS según la última resolución vigente.', severity: 'info' as const, date: '2025-02-15', icon: Info },
+  1625→  { id: '3', title: 'Mantenimiento programado', message: 'El sistema estará en mantenimiento el próximo sábado de 02:00 a 06:00 AM. Guarde sus cambios antes de esa hora.', severity: 'warning' as const, date: '2025-02-18', icon: AlertTriangle },
+  1626→];
+  1627→
+  1628→// Enhanced sparkline bars component for KPI cards (3-5 small bars showing trend)
+  1629→function SparklineBars({ trend, color }: { trend: 'up' | 'down' | 'neutral'; color: string }) {
+  1630→  const heights = trend === 'up' ? [4, 6, 5, 8, 7, 10] : trend === 'down' ? [10, 7, 8, 5, 6, 4] : [6, 7, 6, 7, 6, 7];
+  1631→  return (
+  1632→    <div className="flex items-end gap-[3px] h-4">
+  1633→      {heights.map((h, i) => (
+  1634→        <div
+  1635→          key={i}
+  1636→          className={`w-1.5 rounded-sm ${color}`}
+  1637→          style={{ height: `${h}px`, opacity: 0.3 + (i / heights.length) * 0.7 }}
+  1638→        />
+  1639→      ))}
+  1640→    </div>
+  1641→  );
+  1642→}
+  1643→
+  1644→// Time-of-day greeting helper
+  1645→function getGreeting(): string {
+  1646→  const hour = new Date().getHours();
+  1647→  if (hour < 12) return 'Buenos días';
+  1648→  if (hour < 18) return 'Buenas tardes';
+  1649→  return 'Buenas noches';
+  1650→}
+  1651→
+  1652→// Get Spanish formatted date
+  1653→function getSpanishDate(): string {
+  1654→  return new Date().toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  1655→}
+  1656→
+  1657→// Get motivational message based on compliance level
+  1658→function getMotivationalMessage(compliance: number | undefined): string {
+  1659→  if (!compliance || compliance >= 90) return 'Cumplimiento laboral excelente. Continúe manteniendo los estándares del Código de Trabajo.';
+  1660→  if (compliance >= 70) return 'Buen nivel de cumplimiento. Revise los elementos pendientes para alcanzar la conformidad total.';
+  1661→  if (compliance >= 50) return 'Atención: Hay obligaciones laborales pendientes. Priorice los vencimientos próximos.';
+  1662→  return 'Alerta: Cumplimiento por debajo del mínimo. Acción inmediata requerida según legislación salvadoreña.';
+  1663→}
+  1664→
+  1665→// Audit action-specific icons (create=plus, update=pencil, delete=trash, login=key)
+  1666→function getEnhancedAuditIcon(accion: string) {
+  1667→  const upper = accion.toUpperCase();
+  1668→  if (upper.includes('LOGIN') || upper.includes('AUTH')) return <KeyRound className="h-4 w-4" />;
+  1669→  if (upper.includes('CREATE') || upper.includes('INSERT')) return <Plus className="h-4 w-4" />;
+  1670→  if (upper.includes('UPDATE') || upper.includes('EDIT') || upper.includes('MODIFY')) return <FileText className="h-4 w-4" />;
+  1671→  if (upper.includes('DELETE') || upper.includes('REMOVE')) return <AlertCircle className="h-4 w-4" />;
+  1672→  if (upper.includes('APPROVE') || upper.includes('APROBAR')) return <CheckCircle className="h-4 w-4" />;
+  1673→  return <ScrollText className="h-4 w-4" />;
+  1674→}
+  1675→
+  1676→// Enhanced audit color-coding by severity level
+  1677→function getEnhancedAuditColor(nivel: string) {
+  1678→  if (nivel === 'ALTA') return 'text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-400 ring-1 ring-red-200 dark:ring-red-800';
+  1679→  if (nivel === 'MEDIA') return 'text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400 ring-1 ring-amber-200 dark:ring-amber-800';
+  1680→  return 'text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 ring-1 ring-teal-200 dark:ring-teal-800';
+  1681→}
+  1682→
+  1683→function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; accessToken: string | null; onNavigate: (view: ViewId) => void }) {
+  1684→  const [dashboardData, setDashboardData] = useState<{
+  1685→    total_empleados_activos: number;
+  1686→    nomina_mes: number;
+  1687→    cumplimiento_previsional: number;
+  1688→    semaforo: string;
+  1689→    cumplimientos: { nombre: string; presentado: boolean; peso: number }[];
+  1690→    vencimientos: { nombre: string; fecha: string; dias: number }[];
+  1691→  } | null>(null);
+  1692→  const [totalPerfiles, setTotalPerfiles] = useState(0);
+  1693→  const [auditEntries, setAuditEntries] = useState<Array<{
+  1694→    id: string;
+  1695→    accion: string;
+  1696→    tabla_afectada: string | null;
+  1697→    fecha_accion: string;
+  1698→    nivel_criticidad: string;
+  1699→    usuario_email: string | null;
+  1700→    usuario: { nombre: string; apellido: string } | null;
+  1701→  }>>([]);
+  1702→  const [loading, setLoading] = useState(true);
+  1703→
+  1704→  // System stats state
+  1705→  const [planillasCount, setPlanillasCount] = useState(0);
+  1706→  const [incidenciasCount, setIncidenciasCount] = useState(0);
+  1707→  const [usuariosActivos, setUsuariosActivos] = useState(0);
+  1708→  const [areaDistribution, setAreaDistribution] = useState(AREA_DISTRIBUTION_DATA);
+  1709→  const [statsLoading, setStatsLoading] = useState(true);
+  1710→  const [lastPayrollDate, setLastPayrollDate] = useState<string>('');
+  1711→  const [nextDeadlineDate, setNextDeadlineDate] = useState<string>('');
+  1712→
+  1713→  // Live clock state - El Salvador timezone
+  1714→  const [svTime, setSvTime] = useState<Date>(new Date());
+  1715→
+  1716→  useEffect(() => {
+  1717→    const tick = () => setSvTime(new Date());
+  1718→    const interval = setInterval(tick, 1000);
+  1719→    return () => clearInterval(interval);
+  1720→  }, []);
+  1721→
+  1722→  // Format time in El Salvador timezone
+  1723→  const svTimeString = svTime.toLocaleTimeString('es-SV', {
+  1724→    timeZone: 'America/El_Salvador',
+  1725→    hour: '2-digit',
+  1726→    minute: '2-digit',
+  1727→    second: '2-digit',
+  1728→    hour12: true,
+  1729→  });
+  1730→
+  1731→  const svDateString = svTime.toLocaleDateString('es-SV', {
+  1732→    timeZone: 'America/El_Salvador',
+  1733→    weekday: 'long',
+  1734→    year: 'numeric',
+  1735→    month: 'long',
+  1736→    day: 'numeric',
+  1737→  });
+  1738→
+  1739→  const svDayOfWeek = svTime.toLocaleDateString('es-SV', {
+  1740→    timeZone: 'America/El_Salvador',
+  1741→    weekday: 'long',
+  1742→  });
+  1743→
+  1744→  // Relative time helper for activity feed
+  1745→  const getRelativeTime = (dateStr: string): string => {
+  1746→    try {
+  1747→      const date = new Date(dateStr);
+  1748→      const now = new Date();
+  1749→      const diffMs = now.getTime() - date.getTime();
+  1750→      const diffMins = Math.floor(diffMs / 60000);
+  1751→      if (diffMins < 1) return 'hace un momento';
+  1752→      if (diffMins < 60) return `hace ${diffMins} min`;
+  1753→      const diffHours = Math.floor(diffMins / 60);
+  1754→      if (diffHours < 24) return `hace ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
+  1755→      const diffDays = Math.floor(diffHours / 24);
+  1756→      if (diffDays < 7) return `hace ${diffDays} día${diffDays > 1 ? 's' : ''}`;
+  1757→      return date.toLocaleDateString('es-SV', { day: '2-digit', month: 'short' });
+  1758→    } catch {
+  1759→      return dateStr;
+  1760→    }
+  1761→  };
+  1762→
+  1763→  // Compliance deadline status for "Estado del Día" widget
+  1764→  const complianceStatus = useMemo(() => {
+  1765→    if (!dashboardData?.vencimientos || dashboardData.vencimientos.length === 0) {
+  1766→      return { level: 'green' as const, label: 'Todo al día', daysUntil: null, nextName: '' };
+  1767→    }
+  1768→    const upcoming = dashboardData.vencimientos
+  1769→      .filter(v => v.dias > 0)
+  1770→      .sort((a, b) => a.dias - b.dias);
+  1771→    if (upcoming.length === 0) {
+  1772→      return { level: 'red' as const, label: 'Vencidos', daysUntil: 0, nextName: dashboardData.vencimientos[0]?.nombre || '' };
+  1773→    }
+  1774→    const next = upcoming[0];
+  1775→    if (next.dias <= 3) {
+  1776→      return { level: 'red' as const, label: 'Urgente', daysUntil: next.dias, nextName: next.nombre };
+  1777→    }
+  1778→    if (next.dias <= 7) {
+  1779→      return { level: 'amber' as const, label: 'Próximo', daysUntil: next.dias, nextName: next.nombre };
+  1780→    }
+  1781→    return { level: 'green' as const, label: 'Todo al día', daysUntil: next.dias, nextName: next.nombre };
+  1782→  }, [dashboardData?.vencimientos]);
+  1783→
+  1784→  useEffect(() => {
+  1785→    if (!accessToken) return;
+  1786→    const fetchData = async () => {
+  1787→      try {
+  1788→        const headers = { Authorization: `Bearer ${accessToken}` };
+  1789→        const [dashRes, perfilesRes, auditRes] = await Promise.all([
+  1790→          fetch('/api/nomina/dashboard', { headers }),
+  1791→          fetch('/api/perfiles-puesto', { headers }),
+  1792→          fetch('/api/admin/bitacora?page=1&page_size=5', { headers }),
+  1793→        ]);
+  1794→        if (dashRes.ok) {
+  1795→          const dashData = await dashRes.json();
+  1796→          setDashboardData(dashData.kpis);
+  1797→          // Extract next deadline from vencimientos
+  1798→          if (dashData.kpis?.vencimientos?.length > 0) {
+  1799→            const sorted = [...dashData.kpis.vencimientos].sort((a: { dias: number }, b: { dias: number }) => a.dias - b.dias);
+  1800→            const next = sorted.find((v: { dias: number }) => v.dias > 0);
+  1801→            if (next) setNextDeadlineDate(next.fecha);
+  1802→          }
+  1803→        }
+  1804→        if (perfilesRes.ok) {
+  1805→          const perfData = await perfilesRes.json();
+  1806→          setTotalPerfiles(perfData.data?.length || 0);
+  1807→        }
+  1808→        if (auditRes.ok) {
+  1809→          const auditData = await auditRes.json();
+  1810→          setAuditEntries(auditData.entries || []);
+  1811→        }
+  1812→      } catch (err) {
+  1813→        console.error('Error fetching dashboard data:', err);
+  1814→      } finally {
+  1815→        setLoading(false);
+  1816→      }
+  1817→    };
+  1818→    fetchData();
+  1819→  }, [accessToken]);
+  1820→
+  1821→  // Fetch system stats
+  1822→  useEffect(() => {
+  1823→    if (!accessToken) return;
+  1824→    const fetchStats = async () => {
+  1825→      try {
+  1826→        const headers = { Authorization: `Bearer ${accessToken}` };
+  1827→        const [planillasRes, incidenciasRes, usuariosRes, empleadosRes] = await Promise.all([
+  1828→          fetch('/api/nomina/planillas?limit=50', { headers }).catch(() => null),
+  1829→          fetch('/api/incidencias', { headers }).catch(() => null),
+  1830→          fetch('/api/usuarios', { headers }).catch(() => null),
+  1831→          fetch('/api/empleados?page=1&pageSize=100', { headers }).catch(() => null),
+  1832→        ]);
+  1833→
+  1834→        if (planillasRes?.ok) {
+  1835→          const data = await planillasRes.json();
+  1836→          const now = new Date();
+  1837→          const currentMonth = now.getMonth();
+  1838→          const currentYear = now.getFullYear();
+  1839→          const planillas = data.data || data.planillas || data || [];
+  1840→          const thisMonth = Array.isArray(planillas)
+  1841→            ? planillas.filter((p: { fecha_creacion?: string; fecha?: string; periodo?: string }) => {
+  1842→                const d = new Date(p.fecha_creacion || p.fecha || p.periodo || '');
+  1843→                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  1844→              })
+  1845→            : [];
+  1846→          setPlanillasCount(thisMonth.length || (Array.isArray(planillas) ? planillas.length : 0));
+  1847→          // Get last payroll date
+  1848→          if (Array.isArray(planillas) && planillas.length > 0) {
+  1849→            const sorted = [...planillas].sort((a: { fecha_creacion?: string; fecha?: string }, b: { fecha_creacion?: string; fecha?: string }) => {
+  1850→              const da = new Date(a.fecha_creacion || a.fecha || '');
+  1851→              const db = new Date(b.fecha_creacion || b.fecha || '');
+  1852→              return db.getTime() - da.getTime();
+  1853→            });
+  1854→            const lastDate = sorted[0]?.fecha_creacion || sorted[0]?.fecha;
+  1855→            if (lastDate) setLastPayrollDate(lastDate);
+  1856→          }
+  1857→        }
+  1858→
+  1859→        if (incidenciasRes?.ok) {
+  1860→          const data = await incidenciasRes.json();
+  1861→          const incidencias = data.data || data.incidencias || data || [];
+  1862→          if (Array.isArray(incidencias)) {
+  1863→            const pending = incidencias.filter((inc: { estado?: string }) =>
+  1864→              inc.estado === 'PENDIENTE' || inc.estado === 'pendiente' || inc.estado === 'Pendiente'
+  1865→            );
+  1866→            setIncidenciasCount(pending.length || incidencias.length);
+  1867→          }
+  1868→        }
+  1869→
+  1870→        if (usuariosRes?.ok) {
+  1871→          const data = await usuariosRes.json();
+  1872→          const usuarios = data.data || data.usuarios || data || [];
+  1873→          if (Array.isArray(usuarios)) {
+  1874→            const active = usuarios.filter((u: { activo?: boolean; estado?: string }) =>
+  1875→              u.activo === true || u.activo === 1 || u.estado === 'ACTIVO'
+  1876→            );
+  1877→            setUsuariosActivos(active.length || usuarios.length);
+  1878→          }
+  1879→        }
+  1880→
+  1881→        if (empleadosRes?.ok) {
+  1882→          const data = await empleadosRes.json();
+  1883→          const empleados = data.data || data.empleados || data || [];
+  1884→          if (Array.isArray(empleados) && empleados.length > 0) {
+  1885→            const areaMap: Record<string, number> = {};
+  1886→            empleados.forEach((emp: { area?: string; departamento?: string; seccion?: string }) => {
+  1887→              const areaName = emp.area || emp.departamento || emp.seccion || 'Sin Área';
+  1888→              areaMap[areaName] = (areaMap[areaName] || 0) + 1;
+  1889→            });
+  1890→            const colors = ['bg-teal-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-amber-500', 'bg-violet-500', 'bg-rose-500', 'bg-lime-500', 'bg-orange-500'];
+  1891→            const distEntries = Object.entries(areaMap)
+  1892→              .sort(([, a], [, b]) => b - a)
+  1893→              .slice(0, 8)
+  1894→              .map(([name, count], i) => ({
+  1895→                name,
+  1896→                count,
+  1897→                color: colors[i % colors.length],
+  1898→              }));
+  1899→            if (distEntries.length > 0) {
+  1900→              setAreaDistribution(distEntries);
+  1901→            }
+  1902→          }
+  1903→        }
+  1904→      } catch (err) {
+  1905→        console.error('Error fetching system stats:', err);
+  1906→      } finally {
+  1907→        setStatsLoading(false);
+  1908→      }
+  1909→    };
+  1910→    fetchStats();
+  1911→  }, [accessToken]);
+  1912→
+  1913→  // Enhanced KPI data with gradient borders, sparklines and change indicators
+  1914→  const kpis = [
+  1915→    {
+  1916→      label: 'Empleados Activos',
+  1917→      value: dashboardData?.total_empleados_activos ?? 0,
+  1918→      icon: Users,
+  1919→      color: 'text-teal-600 dark:text-teal-400',
+  1920→      bg: 'bg-teal-50 dark:bg-teal-900/30',
+  1921→      gradient: 'from-teal-50/80 to-white dark:from-teal-950/40 dark:to-slate-900',
+  1922→      borderAccent: 'border-l-teal-500',
+  1923→      sparkColor: 'bg-teal-500',
+  1924→      trend: 'up' as const,
+  1925→      change: '+3.2%',
+  1926→      changeLabel: 'vs mes anterior',
+  1927→    },
+  1928→    {
+  1929→      label: 'Perfiles de Puesto',
+  1930→      value: totalPerfiles,
+  1931→      icon: Briefcase,
+  1932→      color: 'text-emerald-600 dark:text-emerald-400',
+  1933→      bg: 'bg-emerald-50 dark:bg-emerald-900/30',
+  1934→      gradient: 'from-emerald-50/80 to-white dark:from-emerald-950/40 dark:to-slate-900',
+  1935→      borderAccent: 'border-l-emerald-500',
+  1936→      sparkColor: 'bg-emerald-500',
+  1937→      trend: 'up' as const,
+  1938→      change: '+1.5%',
+  1939→      changeLabel: 'vs mes anterior',
+  1940→    },
+  1941→    {
+  1942→      label: 'Nómina del Mes',
+  1943→      value: dashboardData?.nomina_mes ? `$${dashboardData.nomina_mes.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00',
+  1944→      icon: Calculator,
+  1945→      color: 'text-cyan-600 dark:text-cyan-400',
+  1946→      bg: 'bg-cyan-50 dark:bg-cyan-900/30',
+  1947→      gradient: 'from-cyan-50/80 to-white dark:from-cyan-950/40 dark:to-slate-900',
+  1948→      borderAccent: 'border-l-cyan-500',
+  1949→      sparkColor: 'bg-cyan-500',
+  1950→      trend: 'up' as const,
+  1951→      change: '+2.5%',
+  1952→      changeLabel: 'vs mes anterior',
+  1953→    },
+  1954→    {
+  1955→      label: 'Cumplimiento',
+  1956→      value: dashboardData ? `${dashboardData.cumplimiento_previsional}%` : '0%',
+  1957→      icon: Shield,
+  1958→      color: 'text-amber-600 dark:text-amber-400',
+  1959→      bg: 'bg-amber-50 dark:bg-amber-900/30',
+  1960→      gradient: 'from-amber-50/80 to-white dark:from-amber-950/40 dark:to-slate-900',
+  1961→      borderAccent: 'border-l-amber-500',
+  1962→      sparkColor: 'bg-amber-500',
+  1963→      trend: (dashboardData?.cumplimiento_previsional ?? 0) >= 80 ? 'up' as const : 'down' as const,
+  1964→      change: dashboardData && dashboardData.cumplimiento_previsional >= 80 ? '+5.0%' : '-2.3%',
+  1965→      changeLabel: 'vs mes anterior',
+  1966→    },
+  1967→  ];
+  1968→
+  1969→  // Enhanced quick actions with gradient icon backgrounds and count summaries
+  1970→  const quickActions: Array<{ label: string; desc: string; icon: React.ElementType; color: string; bg: string; gradientBg: string; viewId: ViewId; roles: UserRole[]; count?: string }> = [
+  1971→    { label: 'Directorio Empleados', desc: 'Buscar y gestionar empleados', icon: Users, color: 'text-teal-700 dark:text-teal-300', bg: 'bg-teal-50', gradientBg: 'bg-gradient-to-br from-teal-400 to-teal-600', viewId: '02-01', roles: ['ADMIN', 'ANALISTA', 'AUDITOR'], count: `${dashboardData?.total_empleados_activos ?? 0} activos` },
+  1972→    { label: 'Dashboard Nómina', desc: 'Ver resumen de nómina', icon: LayoutDashboard, color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50', gradientBg: 'bg-gradient-to-br from-emerald-400 to-emerald-600', viewId: '04-01', roles: ['ADMIN', 'ANALISTA', 'GERENCIA', 'AUDITOR'], count: `${planillasCount} planillas` },
+  1973→    { label: 'Calcular Nómina', desc: 'Iniciar cálculo del período', icon: Calculator, color: 'text-cyan-700 dark:text-cyan-300', bg: 'bg-cyan-50', gradientBg: 'bg-gradient-to-br from-cyan-400 to-cyan-600', viewId: '04-03', roles: ['ADMIN', 'ANALISTA'] },
+  1974→    { label: 'Aprobar Nómina', desc: 'Revisar y aprobar nóminas', icon: CheckCircle, color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-50', gradientBg: 'bg-gradient-to-br from-amber-400 to-amber-600', viewId: '04-04', roles: ['ADMIN', 'APROBADOR'], count: incidenciasCount > 0 ? `${incidenciasCount} pendientes` : undefined },
+  1975→    { label: 'Gestionar Usuarios', desc: 'Crear, editar y desactivar', icon: Users, color: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50', gradientBg: 'bg-gradient-to-br from-rose-400 to-rose-600', viewId: '01-03', roles: ['ADMIN'], count: `${usuariosActivos} activos` },
+  1976→    { label: 'Reportes', desc: 'Planillas ISSS, AFP, ISR', icon: BarChart3, color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50', gradientBg: 'bg-gradient-to-br from-violet-400 to-violet-600', viewId: '05-01', roles: ['ADMIN', 'GERENCIA', 'AUDITOR'] },
+  1977→    { label: 'Mi Portal', desc: 'Vacaciones, recibos, solicitudes', icon: Eye, color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50', gradientBg: 'bg-gradient-to-br from-emerald-400 to-emerald-600', viewId: '06-05', roles: ['EMPLEADO'] },
+  1978→  ];
+  1979→
+  1980→  const visibleActions = quickActions.filter(a => a.roles.includes(user.rol));
+  1981→
+  1982→  // System health status items
+  1983→  const systemHealthItems = [
+  1984→    {
+  1985→      label: 'Estado del Sistema',
+  1986→      value: 'Operativo',
+  1987→      statusColor: 'bg-emerald-500',
+  1988→      statusGlow: 'shadow-emerald-500/50',
+  1989→      icon: <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+  1990→      iconBg: 'bg-emerald-100 dark:bg-emerald-900/40',
+  1991→    },
+  1992→    {
+  1993→      label: 'Usuarios Activos',
+  1994→      value: statsLoading ? '...' : `${usuariosActivos}`,
+  1995→      statusColor: 'bg-emerald-500',
+  1996→      statusGlow: 'shadow-emerald-500/50',
+  1997→      icon: <Users className="h-4 w-4 text-teal-600 dark:text-teal-400" />,
+  1998→      iconBg: 'bg-teal-100 dark:bg-teal-900/40',
+  1999→    },
+  2000→    {
+
+[showing lines 1-2000 of 2987; use offset=2001 with limit to continue reading]

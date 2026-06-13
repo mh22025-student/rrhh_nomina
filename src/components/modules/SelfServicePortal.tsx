@@ -7,7 +7,7 @@ import {
   ChevronRight, AlertCircle, Sun, Moon, XCircle, Filter, AlertTriangle,
   ChevronDown, ChevronUp, Shield, Heart, Banknote, Megaphone, TrendingUp,
   Edit3, Phone, Mail, Building, CalendarDays, Ban, Info, Award, PiggyBank,
-  CircleDot, Activity
+  CircleDot, Activity, GraduationCap, Link2, BarChart3, FileDown, Bug
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -167,6 +167,147 @@ function SalaryBarChart({ data: chartData }: { data: { label: string; value: num
   );
 }
 
+// Salary Progression SVG Line Chart
+function SalaryLineChart({ data: chartData }: { data: { label: string; value: number }[] }) {
+  if (chartData.length < 2) {
+    return (
+      <div className="flex flex-col items-center justify-center py-6 text-slate-400 dark:text-slate-500">
+        <TrendingUp className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
+        <p className="text-xs">Historial no disponible</p>
+        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Se necesitan al menos 2 períodos de datos</p>
+      </div>
+    );
+  }
+
+  const width = 280;
+  const height = 100;
+  const padding = { top: 10, right: 10, bottom: 20, left: 10 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  const values = chartData.map(d => d.value);
+  const minVal = Math.min(...values) * 0.95;
+  const maxVal = Math.max(...values) * 1.05;
+  const range = maxVal - minVal || 1;
+
+  const points = chartData.map((d, i) => ({
+    x: padding.left + (i / (chartData.length - 1)) * chartWidth,
+    y: padding.top + chartHeight - ((d.value - minVal) / range) * chartHeight,
+  }));
+
+  const polylinePoints = points.map(p => `${p.x},${p.y}`).join(' ');
+  const areaPoints = `${padding.left},${padding.top + chartHeight} ${polylinePoints} ${padding.left + chartWidth},${padding.top + chartHeight}`;
+
+  return (
+    <div className="w-full">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="salaryGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" className="text-emerald-400" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="currentColor" className="text-emerald-400" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {/* Area fill */}
+        <polygon points={areaPoints} fill="url(#salaryGrad)" />
+        {/* Line */}
+        <polyline
+          points={polylinePoints}
+          fill="none"
+          stroke="currentColor"
+          className="text-emerald-500 dark:text-emerald-400"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {/* Data points */}
+        {points.map((p, i) => (
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r="3.5" className="fill-white dark:fill-slate-800 stroke-emerald-500 dark:stroke-emerald-400" strokeWidth="2" />
+            {/* Label */}
+            <text
+              x={p.x}
+              y={height - 2}
+              textAnchor="middle"
+              className="fill-slate-400 dark:fill-slate-500"
+              fontSize="7"
+              fontFamily="sans-serif"
+            >
+              {chartData[i].label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// Deduction Breakdown Bar
+function DeductionBreakdownBar({ isss, afp, isr, other, total }: { isss: number; afp: number; isr: number; other: number; total: number }) {
+  if (total <= 0) return null;
+  const segments = [
+    { label: 'ISSS', value: isss, color: 'bg-emerald-500 dark:bg-emerald-400', textColor: 'text-emerald-700 dark:text-emerald-300' },
+    { label: 'AFP', value: afp, color: 'bg-teal-500 dark:bg-teal-400', textColor: 'text-teal-700 dark:text-teal-300' },
+    { label: 'ISR', value: isr, color: 'bg-amber-500 dark:bg-amber-400', textColor: 'text-amber-700 dark:text-amber-300' },
+    { label: 'Otros', value: other, color: 'bg-slate-400 dark:bg-slate-500', textColor: 'text-slate-600 dark:text-slate-400' },
+  ].filter(s => s.value > 0);
+
+  return (
+    <div className="space-y-3">
+      {/* Stacked bar */}
+      <div className="flex h-6 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
+        {segments.map((seg, i) => {
+          const pct = total > 0 ? (seg.value / total) * 100 : 0;
+          return (
+            <div
+              key={i}
+              className={`${seg.color} transition-all duration-500 flex items-center justify-center`}
+              style={{ width: `${pct}%` }}
+              title={`${seg.label}: ${fmt(seg.value)} (${pct.toFixed(1)}%)`}
+            >
+              {pct >= 12 && (
+                <span className="text-[8px] font-bold text-white drop-shadow-sm">{pct.toFixed(0)}%</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {/* Legend with amounts */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+        {segments.map((seg, i) => {
+          const pct = total > 0 ? (seg.value / total) * 100 : 0;
+          return (
+            <div key={i} className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-sm ${seg.color} shrink-0`} />
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{seg.label}</span>
+              <span className={`text-[10px] font-semibold ml-auto ${seg.textColor} font-mono`}>{fmt(seg.value)}</span>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500">({pct.toFixed(1)}%)</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Animated entrance wrapper
+function AnimatedCard({ children, className, delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), delay);
+    return () => clearTimeout(timer);
+  }, [delay]);
+  return (
+    <div
+      className={`transition-all duration-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'} ${className || ''}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Month names for vacation calendar
+const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
 export default function SelfServicePortal({ accessToken }: SelfServicePortalProps) {
   const { toast } = useToast();
   const [data, setData] = useState<SelfServiceData | null>(null);
@@ -242,7 +383,7 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
     return data.solicitudes.filter(s => s.estado === solicitudesFilter);
   }, [data, solicitudesFilter]);
 
-  // Salary trend data (last 6 months)
+  // Salary trend data (last 6 months) for bar chart
   const salaryTrend = useMemo(() => {
     if (!data) return [];
     return [...data.recibos]
@@ -252,6 +393,56 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
         label: new Date(r.periodo_inicio).toLocaleDateString('es-SV', { month: 'short' }),
         value: r.salario_neto,
       }));
+  }, [data]);
+
+  // Salary progression data for SVG line chart
+  const salaryProgression = useMemo(() => {
+    if (!data) return [];
+    return [...data.recibos]
+      .reverse()
+      .map(r => ({
+        label: new Date(r.periodo_inicio).toLocaleDateString('es-SV', { month: 'short' }),
+        value: r.salario_bruto,
+      }));
+  }, [data]);
+
+  // Year summary calculations
+  const yearSummary = useMemo(() => {
+    if (!data || data.recibos.length === 0) return null;
+    const currentYear = new Date().getFullYear();
+    const yearRecibos = data.recibos.filter(r => {
+      try { return new Date(r.periodo_inicio).getFullYear() === currentYear; } catch { return false; }
+    });
+    const recibosToSum = yearRecibos.length > 0 ? yearRecibos : data.recibos;
+    return {
+      totalGross: recibosToSum.reduce((s, r) => s + r.salario_bruto, 0),
+      totalDeductions: recibosToSum.reduce((s, r) => s + r.total_descuentos, 0),
+      totalNet: recibosToSum.reduce((s, r) => s + r.salario_neto, 0),
+      totalISR: recibosToSum.reduce((s, r) => s + r.isr_retenido, 0),
+      count: recibosToSum.length,
+      year: yearRecibos.length > 0 ? currentYear : null,
+    };
+  }, [data]);
+
+  // Latest pay slip for deduction breakdown
+  const latestRecibo = useMemo(() => {
+    if (!data || data.recibos.length === 0) return null;
+    return data.recibos[0];
+  }, [data]);
+
+  // Vacation calendar data - which months have vacation days taken
+  const vacationCalendar = useMemo(() => {
+    if (!data) return Array(12).fill(0);
+    const months = Array(12).fill(0);
+    data.solicitudes
+      .filter(s => s.tipo === 'VACACION' && (s.estado === 'APROBADA' || s.estado === 'PENDIENTE'))
+      .forEach(s => {
+        try {
+          const fecha = new Date(s.fecha_solicitud);
+          months[fecha.getMonth()] += 1;
+        } catch { /* skip */ }
+      });
+    return months;
   }, [data]);
 
   const handleSubmitRequest = async () => {
@@ -495,6 +686,12 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
     return (
       <div className="space-y-4 max-w-4xl mx-auto p-1">
         <Skeleton className="h-44 w-full rounded-xl" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Skeleton className="h-20 rounded-xl" />
+          <Skeleton className="h-20 rounded-xl" />
+          <Skeleton className="h-20 rounded-xl" />
+          <Skeleton className="h-20 rounded-xl" />
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Skeleton className="h-72 w-full rounded-xl" />
           <Skeleton className="h-72 w-full rounded-xl" />
@@ -533,6 +730,10 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
   const annualAFP = monthlyAFP * 12;
   const aguinaldoEstimate = emp.salario_base * (tenure.years >= 1 ? 1 : tenure.months / 12);
   const seniorityBonusEligible = tenure.years >= 1;
+
+  // AFP balance estimate: monthly contribution × months worked
+  const totalMonthsWorked = tenure.years * 12 + tenure.months;
+  const afpBalanceEstimate = monthlyAFP * totalMonthsWorked;
 
   // Announcements
   const announcements = data.notificaciones?.length ? data.notificaciones : defaultAnnouncements;
@@ -574,243 +775,924 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto p-1">
-      {/* ========== ENHANCED HEADER CARD ========== */}
-      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.1),transparent_50%)]" />
-        <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-        <div className="absolute top-1/3 right-1/4 w-16 h-16 bg-white/[0.03] rounded-lg rotate-12" />
-        <div className="absolute bottom-1/4 right-2/3 w-10 h-10 bg-white/[0.04] rounded-full" />
-
-        <div className="flex items-start gap-5 relative z-10">
-          {/* Avatar with initials */}
-          <Avatar className="h-20 w-20 ring-3 ring-white/30 shadow-lg">
-            <AvatarFallback className="bg-white/20 backdrop-blur-sm text-2xl font-bold text-white">
-              {emp.primer_nombre[0]}{emp.primer_apellido[0]}
-            </AvatarFallback>
-          </Avatar>
-
-          <div className="flex-1 min-w-0">
-            <h2 className="text-2xl font-bold truncate leading-tight">
-              {emp.primer_nombre} {emp.segundo_nombre || ''} {emp.primer_apellido} {emp.segundo_apellido || ''}
-            </h2>
-            <p className="text-emerald-100 text-sm flex items-center gap-1.5 mt-1">
-              <Briefcase className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{data.perfil_puesto?.nombre_puesto || 'Sin puesto'}</span>
-            </p>
-            <div className="flex flex-wrap items-center gap-2 mt-2.5">
-              <Badge variant="secondary" className="bg-white/20 text-white border-0 text-[11px] hover:bg-white/30">
-                <Building className="h-3 w-3 mr-1" />
-                {data.area?.nombre || 'Sin área'}
-              </Badge>
-              <Badge variant="secondary" className="bg-white/20 text-white border-0 text-[11px] hover:bg-white/30">
-                <MapPin className="h-3 w-3 mr-1" />
-                {emp.codigo_empleado}
-              </Badge>
-              <Badge variant="secondary" className="bg-emerald-300/40 text-white border-emerald-400/30 text-[11px]">
-                <CheckCircle className="h-3 w-3 mr-1" />
-                ACTIVO
-              </Badge>
+      {/* ========== QUICK LINKS BAR ========== */}
+      <AnimatedCard delay={0}>
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+          <button
+            onClick={() => setShowCertDialog(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/20 transition-all shrink-0 min-h-[44px] group"
+          >
+            <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-800/50 group-hover:scale-110 transition-transform">
+              <FileBadge className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            {/* Tenure info */}
-            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/15">
-              <div className="flex items-center gap-1.5 text-emerald-100 text-xs">
-                <CalendarDays className="h-3.5 w-3.5" />
-                <span>Desde {fmtDateLong(emp.fecha_ingreso)}</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">Mi Constancia</span>
+          </button>
+          <button
+            onClick={() => {
+              if (data.recibos.length > 0) handleDownloadBoleta(data.recibos[0].id);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 hover:border-teal-300 dark:hover:border-teal-700 hover:bg-teal-50/50 dark:hover:bg-teal-900/20 transition-all shrink-0 min-h-[44px] group"
+          >
+            <div className="p-1.5 rounded-lg bg-teal-100 dark:bg-teal-800/50 group-hover:scale-110 transition-transform">
+              <FileDown className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+            </div>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">Descargar Recibo</span>
+          </button>
+          <button
+            onClick={() => setShowVacationDialog(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 hover:bg-amber-50/50 dark:hover:bg-amber-900/20 transition-all shrink-0 min-h-[44px] group"
+          >
+            <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-800/50 group-hover:scale-110 transition-transform">
+              <Plane className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">Solicitar Vacación</span>
+          </button>
+          <button
+            onClick={() => setShowIncidenceDialog(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 hover:border-orange-300 dark:hover:border-orange-700 hover:bg-orange-50/50 dark:hover:bg-orange-900/20 transition-all shrink-0 min-h-[44px] group"
+          >
+            <div className="p-1.5 rounded-lg bg-orange-100 dark:bg-orange-800/50 group-hover:scale-110 transition-transform">
+              <Bug className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
+            </div>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">Reportar Incidencia</span>
+          </button>
+        </div>
+      </AnimatedCard>
+
+      {/* ========== ENHANCED HEADER CARD ========== */}
+      <AnimatedCard delay={50}>
+        <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.12),transparent_50%)]" />
+          <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+          <div className="absolute top-1/3 right-1/4 w-16 h-16 bg-white/[0.03] rounded-lg rotate-12" />
+          <div className="absolute bottom-1/4 right-2/3 w-10 h-10 bg-white/[0.04] rounded-full" />
+
+          <div className="flex items-start gap-5 relative z-10">
+            {/* Avatar with initials */}
+            <Avatar className="h-20 w-20 ring-3 ring-white/30 shadow-lg">
+              <AvatarFallback className="bg-white/20 backdrop-blur-sm text-2xl font-bold text-white">
+                {emp.primer_nombre[0]}{emp.primer_apellido[0]}
+              </AvatarFallback>
+            </Avatar>
+
+            <div className="flex-1 min-w-0">
+              <h2 className="text-2xl font-bold truncate leading-tight">
+                {emp.primer_nombre} {emp.segundo_nombre || ''} {emp.primer_apellido} {emp.segundo_apellido || ''}
+              </h2>
+              <p className="text-emerald-100 text-sm flex items-center gap-1.5 mt-1">
+                <Briefcase className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{data.perfil_puesto?.nombre_puesto || 'Sin puesto'}</span>
+              </p>
+              <div className="flex flex-wrap items-center gap-2 mt-2.5">
+                <Badge variant="secondary" className="bg-white/20 text-white border-0 text-[11px] hover:bg-white/30">
+                  <Building className="h-3 w-3 mr-1" />
+                  {data.area?.nombre || 'Sin área'}
+                </Badge>
+                <Badge variant="secondary" className="bg-white/20 text-white border-0 text-[11px] hover:bg-white/30">
+                  <MapPin className="h-3 w-3 mr-1" />
+                  {emp.codigo_empleado}
+                </Badge>
+                <Badge variant="secondary" className="bg-emerald-300/40 text-white border-emerald-400/30 text-[11px]">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  ACTIVO
+                </Badge>
               </div>
-              <div className="flex items-center gap-1.5 text-white text-xs font-semibold">
-                <Award className="h-3.5 w-3.5" />
-                <span>{tenure.years} año{tenure.years !== 1 ? 's' : ''} {tenure.months} mes{tenure.months !== 1 ? 'es' : ''} de servicio</span>
+              {/* Tenure info */}
+              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/15">
+                <div className="flex items-center gap-1.5 text-emerald-100 text-xs">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  <span>Desde {fmtDateLong(emp.fecha_ingreso)}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-white text-xs font-semibold">
+                  <Award className="h-3.5 w-3.5" />
+                  <span>{tenure.years} año{tenure.years !== 1 ? 's' : ''} {tenure.months} mes{tenure.months !== 1 ? 'es' : ''} de servicio</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </AnimatedCard>
 
       {/* ========== QUICK STATS ROW ========== */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3.5 border border-emerald-100 dark:border-emerald-800/50">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-800/50">
-              <DollarSign className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+      <AnimatedCard delay={100}>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3.5 border border-emerald-100 dark:border-emerald-800/50">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-800/50">
+                <DollarSign className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">Salario</span>
             </div>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">Salario</span>
+            <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(emp.salario_base)}</p>
           </div>
-          <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(emp.salario_base)}</p>
-        </div>
-        <div className="bg-teal-50 dark:bg-teal-900/20 rounded-xl p-3.5 border border-teal-100 dark:border-teal-800/50">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-lg bg-teal-100 dark:bg-teal-800/50">
-              <Sun className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+          <div className="bg-teal-50 dark:bg-teal-900/20 rounded-xl p-3.5 border border-teal-100 dark:border-teal-800/50">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-lg bg-teal-100 dark:bg-teal-800/50">
+                <Sun className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+              </div>
+              <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold uppercase tracking-wider">Vacaciones</span>
             </div>
-            <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold uppercase tracking-wider">Vacaciones</span>
+            <p className="text-lg font-bold text-teal-700 dark:text-teal-300">{totalDiasPendientes} <span className="text-xs font-normal text-teal-500">días</span></p>
           </div>
-          <p className="text-lg font-bold text-teal-700 dark:text-teal-300">{totalDiasPendientes} <span className="text-xs font-normal text-teal-500">días</span></p>
-        </div>
-        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3.5 border border-amber-100 dark:border-amber-800/50">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-800/50">
-              <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3.5 border border-amber-100 dark:border-amber-800/50">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-800/50">
+                <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wider">Pendientes</span>
             </div>
-            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wider">Pendientes</span>
+            <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{data.solicitudes.filter(s => s.estado === 'PENDIENTE').length} <span className="text-xs font-normal text-amber-500">solicitudes</span></p>
           </div>
-          <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{data.solicitudes.filter(s => s.estado === 'PENDIENTE').length} <span className="text-xs font-normal text-amber-500">solicitudes</span></p>
-        </div>
-        <div className="bg-rose-50 dark:bg-rose-900/20 rounded-xl p-3.5 border border-rose-100 dark:border-rose-800/50">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-800/50">
-              <Receipt className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+          <div className="bg-rose-50 dark:bg-rose-900/20 rounded-xl p-3.5 border border-rose-100 dark:border-rose-800/50">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-800/50">
+                <Receipt className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+              </div>
+              <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold uppercase tracking-wider">Recibos</span>
             </div>
-            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold uppercase tracking-wider">Recibos</span>
+            <p className="text-lg font-bold text-rose-700 dark:text-rose-300">{data.recibos.length} <span className="text-xs font-normal text-rose-500">disponibles</span></p>
           </div>
-          <p className="text-lg font-bold text-rose-700 dark:text-rose-300">{data.recibos.length} <span className="text-xs font-normal text-rose-500">disponibles</span></p>
         </div>
-      </div>
+      </AnimatedCard>
+
+      {/* ========== YEAR SUMMARY CARD ========== */}
+      {yearSummary && (
+        <AnimatedCard delay={150}>
+          <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 via-white to-slate-50 dark:from-slate-800/50 dark:via-slate-800/30 dark:to-slate-800/50 overflow-hidden">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Resumen Anual {yearSummary.year || ''}
+                </CardTitle>
+                <Badge variant="secondary" className="text-[10px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+                  {yearSummary.count} períodos
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white/70 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50 backdrop-blur-sm">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Total Bruto</p>
+                  <p className="text-base font-bold text-slate-800 dark:text-slate-200 font-mono mt-1">{fmt(yearSummary.totalGross)}</p>
+                </div>
+                <div className="bg-white/70 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50 backdrop-blur-sm">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Total Descuentos</p>
+                  <p className="text-base font-bold text-rose-600 dark:text-rose-400 font-mono mt-1">{fmt(yearSummary.totalDeductions)}</p>
+                </div>
+                <div className="bg-white/70 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50 backdrop-blur-sm">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Total Neto</p>
+                  <p className="text-base font-bold text-emerald-700 dark:text-emerald-300 font-mono mt-1">{fmt(yearSummary.totalNet)}</p>
+                </div>
+                <div className="bg-white/70 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50 backdrop-blur-sm">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">ISR Retenido YTD</p>
+                  <p className="text-base font-bold text-amber-700 dark:text-amber-300 font-mono mt-1">{fmt(yearSummary.totalISR)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </AnimatedCard>
+      )}
 
       {/* ========== MAIN CONTENT GRID ========== */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
         {/* ===== ENHANCED VACATION SECTION ===== */}
-        <Card className="shadow-sm md:row-span-2">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Plane className="h-4 w-4 text-teal-600 dark:text-teal-400" /> Saldo de Vacaciones
-              </CardTitle>
-              <Button
-                size="sm"
-                className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-8 gap-1.5 min-h-[44px]"
-                onClick={() => setShowVacationDialog(true)}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Solicitar
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Circular progress with available indicator */}
-            <div className="flex items-center gap-5">
-              <CircularProgress
-                value={vacationRemaining}
-                size={96}
-                strokeWidth={10}
-                colorClass="text-emerald-500 dark:text-emerald-400"
-              >
-                <span className="text-xl font-bold text-slate-800 dark:text-slate-200">{totalDiasPendientes}</span>
-                <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-medium">Disponibles</span>
-              </CircularProgress>
-              <div className="flex-1 min-w-0 space-y-3">
-                {/* Color legend */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                    <span className="text-xs text-slate-600 dark:text-slate-400">Disponibles</span>
-                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-auto">{totalDiasPendientes} días</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-amber-400 dark:bg-amber-500" />
-                    <span className="text-xs text-slate-600 dark:text-slate-400">Pendientes aprobación</span>
-                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400 ml-auto">
-                      {data.solicitudes.filter(s => s.tipo === 'VACACION' && s.estado === 'PENDIENTE').length}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-teal-400 dark:bg-teal-500" />
-                    <span className="text-xs text-slate-600 dark:text-slate-400">Tomados</span>
-                    <span className="text-xs font-bold text-teal-600 dark:text-teal-400 ml-auto">{totalDiasTomados} días</span>
+        <AnimatedCard delay={200} className="md:row-span-2">
+          <Card className="shadow-sm h-full">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Plane className="h-4 w-4 text-teal-600 dark:text-teal-400" /> Saldo de Vacaciones
+                </CardTitle>
+                <Button
+                  size="sm"
+                  className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-8 gap-1.5 min-h-[44px]"
+                  onClick={() => setShowVacationDialog(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Solicitar
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Circular progress with available indicator */}
+              <div className="flex items-center gap-5">
+                <CircularProgress
+                  value={vacationRemaining}
+                  size={96}
+                  strokeWidth={10}
+                  colorClass="text-emerald-500 dark:text-emerald-400"
+                >
+                  <span className="text-xl font-bold text-slate-800 dark:text-slate-200">{totalDiasPendientes}</span>
+                  <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-medium">Disponibles</span>
+                </CircularProgress>
+                <div className="flex-1 min-w-0 space-y-3">
+                  {/* Color legend */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                      <span className="text-xs text-slate-600 dark:text-slate-400">Disponibles</span>
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-auto">{totalDiasPendientes} días</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-amber-400 dark:bg-amber-500" />
+                      <span className="text-xs text-slate-600 dark:text-slate-400">Pendientes aprobación</span>
+                      <span className="text-xs font-bold text-amber-600 dark:text-amber-400 ml-auto">
+                        {data.solicitudes.filter(s => s.tipo === 'VACACION' && s.estado === 'PENDIENTE').length}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-teal-400 dark:bg-teal-500" />
+                      <span className="text-xs text-slate-600 dark:text-slate-400">Tomados</span>
+                      <span className="text-xs font-bold text-teal-600 dark:text-teal-400 ml-auto">{totalDiasTomados} días</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Progress bar */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-slate-500 dark:text-slate-400">Utilizado del total</span>
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{vacationProgress}%</span>
-              </div>
-              <Progress value={vacationProgress} className="h-2.5" />
-            </div>
-
-            {/* Per year breakdown with calendar indicators */}
-            {data.vacaciones.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Desglose por Año</p>
-                {data.vacaciones.map((v) => {
-                  const yearProgress = v.dias_derecho > 0 ? Math.round((v.dias_tomados / v.dias_derecho) * 100) : 0;
-                  const availableSegments = Math.round((v.dias_pendientes / v.dias_derecho) * 10);
-                  const takenSegments = Math.round((v.dias_tomados / v.dias_derecho) * 10);
-                  return (
-                    <div key={v.id} className="bg-slate-50/80 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Año {v.anio}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">{v.dias_pendientes} disp.</span>
-                          <span className="text-[10px] text-slate-400">|</span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{v.dias_tomados} tomados</span>
-                        </div>
-                      </div>
-                      <Progress value={yearProgress} className="h-1.5" />
-                      {/* Calendar-like day indicators */}
-                      <div className="flex gap-0.5 mt-2">
-                        {Array.from({ length: 10 }, (_, i) => (
-                          <div
-                            key={i}
-                            className={`h-2.5 flex-1 rounded-sm transition-colors ${
-                              i < takenSegments
-                                ? 'bg-teal-400 dark:bg-teal-500'
-                                : i < takenSegments + availableSegments
-                                  ? 'bg-emerald-400 dark:bg-emerald-500'
-                                  : 'bg-slate-200 dark:bg-slate-600'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                      <div className="flex justify-between mt-1">
-                        <span className="text-[9px] text-teal-500 dark:text-teal-400">Tomado</span>
-                        <span className="text-[9px] text-emerald-500 dark:text-emerald-400">Disponible</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Pending vacation requests timeline */}
-            {data.solicitudes.filter(s => s.tipo === 'VACACION').length > 0 && (
+              {/* Progress bar */}
               <div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold mb-2">Historial de Solicitudes</p>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {data.solicitudes.filter(s => s.tipo === 'VACACION').map((sol) => (
-                    <div key={sol.id} className="flex items-start gap-3">
-                      {/* Timeline dot */}
-                      <div className="flex flex-col items-center mt-0.5">
-                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                          sol.estado === 'APROBADA' ? 'bg-emerald-500' :
-                          sol.estado === 'PENDIENTE' ? 'bg-amber-400' :
-                          sol.estado === 'CANCELADA' ? 'bg-slate-400' :
-                          'bg-red-400'
-                        }`} />
-                        <div className="w-px h-full bg-slate-200 dark:bg-slate-700 min-h-[12px]" />
-                      </div>
-                      <div className="flex-1 min-w-0 pb-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{fmtDate(sol.fecha_solicitud)}</span>
-                          <Badge className={`text-[9px] border shrink-0 ${getSolicitudBadge(sol.estado)}`}>{sol.estado}</Badge>
-                        </div>
-                        {sol.detalle && (
-                          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">{sol.detalle}</p>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Utilizado del total</span>
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{vacationProgress}%</span>
+                </div>
+                <Progress value={vacationProgress} className="h-2.5" />
+              </div>
+
+              {/* Vacation Calendar - 12 months grid */}
+              <div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold mb-2">Calendario de Vacaciones</p>
+                <div className="grid grid-cols-6 gap-1.5">
+                  {monthNames.map((name, i) => {
+                    const hasVacation = vacationCalendar[i] > 0;
+                    return (
+                      <div
+                        key={i}
+                        className={`rounded-lg p-2 text-center border transition-colors ${
+                          hasVacation
+                            ? 'bg-teal-50 dark:bg-teal-900/30 border-teal-200 dark:border-teal-800'
+                            : 'bg-slate-50 dark:bg-slate-800/30 border-slate-100 dark:border-slate-700/50'
+                        }`}
+                      >
+                        <p className={`text-[10px] font-semibold ${hasVacation ? 'text-teal-700 dark:text-teal-300' : 'text-slate-400 dark:text-slate-500'}`}>{name}</p>
+                        {hasVacation && (
+                          <p className="text-[8px] text-teal-500 dark:text-teal-400 mt-0.5">{vacationCalendar[i]} sol.</p>
                         )}
                       </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Per year breakdown with calendar indicators */}
+              {data.vacaciones.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Desglose por Año</p>
+                  {data.vacaciones.map((v) => {
+                    const yearProgress = v.dias_derecho > 0 ? Math.round((v.dias_tomados / v.dias_derecho) * 100) : 0;
+                    const availableSegments = Math.round((v.dias_pendientes / v.dias_derecho) * 10);
+                    const takenSegments = Math.round((v.dias_tomados / v.dias_derecho) * 10);
+                    return (
+                      <div key={v.id} className="bg-slate-50/80 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Año {v.anio}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">{v.dias_pendientes} disp.</span>
+                            <span className="text-[10px] text-slate-400">|</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">{v.dias_tomados} tomados</span>
+                          </div>
+                        </div>
+                        <Progress value={yearProgress} className="h-1.5" />
+                        {/* Calendar-like day indicators */}
+                        <div className="flex gap-0.5 mt-2">
+                          {Array.from({ length: 10 }, (_, i) => (
+                            <div
+                              key={i}
+                              className={`h-2.5 flex-1 rounded-sm transition-colors ${
+                                i < takenSegments
+                                  ? 'bg-teal-400 dark:bg-teal-500'
+                                  : i < takenSegments + availableSegments
+                                    ? 'bg-emerald-400 dark:bg-emerald-500'
+                                    : 'bg-slate-200 dark:bg-slate-600'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex justify-between mt-1">
+                          <span className="text-[9px] text-teal-500 dark:text-teal-400">Tomado</span>
+                          <span className="text-[9px] text-emerald-500 dark:text-emerald-400">Disponible</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </AnimatedCard>
+
+        {/* ===== BENEFITS SUMMARY CARD ===== */}
+        <AnimatedCard delay={250}>
+          <Card className="shadow-sm h-full">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Beneficios y Prestaciones
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2.5">
+                {/* ISSS Coverage */}
+                <div className="bg-emerald-50/80 dark:bg-emerald-900/20 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/50">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded bg-emerald-100 dark:bg-emerald-800/50">
+                        <CheckCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">ISSS - Seguro Social</p>
+                        <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Cobertura médica y maternidad</p>
+                      </div>
                     </div>
-                  ))}
+                    <div className="text-right">
+                      <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Desc. mensual</p>
+                      <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(monthlyISSS)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-emerald-200/50 dark:border-emerald-700/30">
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400">Aporte anual estimado</span>
+                    <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(annualISSS)}</span>
+                  </div>
+                </div>
+
+                {/* AFP Retirement Savings */}
+                <div className="bg-teal-50/80 dark:bg-teal-900/20 rounded-lg p-3 border border-teal-100 dark:border-teal-800/50">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded bg-teal-100 dark:bg-teal-800/50">
+                        <PiggyBank className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">AFP - Fondo de Pensión</p>
+                        <p className="text-[10px] text-teal-500 dark:text-teal-400">Ahorro para jubilación</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-teal-500 dark:text-teal-400">Desc. mensual</p>
+                      <p className="text-xs font-bold text-teal-700 dark:text-teal-300 font-mono">{fmt(monthlyAFP)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-teal-200/50 dark:border-teal-700/30">
+                    <span className="text-[10px] text-teal-600 dark:text-teal-400">Saldo estimado acumulado ({totalMonthsWorked} meses)</span>
+                    <span className="text-[10px] font-semibold text-teal-700 dark:text-teal-300 font-mono">{fmt(afpBalanceEstimate)}</span>
+                  </div>
+                </div>
+
+                {/* INSAFORP Training Benefit */}
+                <div className="bg-violet-50/80 dark:bg-violet-900/20 rounded-lg p-3 border border-violet-100 dark:border-violet-800/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded bg-violet-100 dark:bg-violet-800/50">
+                        <GraduationCap className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">INSAFORP - Capacitación</p>
+                        <p className="text-[10px] text-violet-500 dark:text-violet-400">Beneficio de formación profesional</p>
+                      </div>
+                    </div>
+                    <Badge className="bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800 text-[10px]">
+                      <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                      Activo
+                    </Badge>
+                  </div>
+                  <p className="text-[10px] text-violet-500 dark:text-violet-400 mt-1.5">1% del planilla patronal destinado a capacitación (Art. 56 Código Trabajo)</p>
+                </div>
+
+                {/* Seguro Complementario */}
+                <div className="bg-sky-50/80 dark:bg-sky-900/20 rounded-lg p-3 border border-sky-100 dark:border-sky-800/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded bg-sky-100 dark:bg-sky-800/50">
+                        <Heart className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-sky-700 dark:text-sky-300">Seguro Complementario</p>
+                        <p className="text-[10px] text-sky-500 dark:text-sky-400">Cobertura adicional de salud</p>
+                      </div>
+                    </div>
+                    <Badge className="bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-800 text-[10px]">
+                      <Info className="h-2.5 w-2.5 mr-1" />
+                      Opcional
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Aguinaldo */}
+                <div className="bg-amber-50/80 dark:bg-amber-900/20 rounded-lg p-3 border border-amber-100 dark:border-amber-800/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded bg-amber-100 dark:bg-amber-800/50">
+                        <TrendingUp className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Aguinaldo Estimado</p>
+                        <p className="text-[10px] text-amber-500 dark:text-amber-400">Basado en salario actual</p>
+                      </div>
+                    </div>
+                    <p className="text-xs font-bold text-amber-700 dark:text-amber-300 font-mono">{fmt(aguinaldoEstimate)}</p>
+                  </div>
+                </div>
+
+                {/* Seniority Bonus */}
+                <div className={`rounded-lg p-3 border ${
+                  seniorityBonusEligible
+                    ? 'bg-emerald-50/80 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50'
+                    : 'bg-slate-50/80 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded ${
+                        seniorityBonusEligible ? 'bg-emerald-100 dark:bg-emerald-800/50' : 'bg-slate-100 dark:bg-slate-700'
+                      }`}>
+                        <Award className={`h-3.5 w-3.5 ${seniorityBonusEligible ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`} />
+                      </div>
+                      <div>
+                        <p className={`text-xs font-semibold ${seniorityBonusEligible ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>
+                          Bono de Antigüedad
+                        </p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                          {seniorityBonusEligible ? 'Elegible' : 'Requiere 1+ año de servicio'}
+                        </p>
+                      </div>
+                    </div>
+                    {seniorityBonusEligible ? (
+                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 text-[10px]">
+                        Elegible
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700 text-[10px]">
+                        Pendiente
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </AnimatedCard>
+      </div>
+
+      {/* ===== MONTHLY DEDUCTION BREAKDOWN CHART ===== */}
+      <AnimatedCard delay={300}>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Desglose de Descuentos
+              </CardTitle>
+              {latestRecibo && (
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                  {new Date(latestRecibo.periodo_inicio).toLocaleDateString('es-SV', { month: 'long', year: 'numeric' })}
+                </span>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {latestRecibo ? (
+              <div>
+                <DeductionBreakdownBar
+                  isss={latestRecibo.isss_laboral}
+                  afp={latestRecibo.afp_laboral}
+                  isr={latestRecibo.isr_retenido}
+                  other={latestRecibo.total_descuentos - latestRecibo.isss_laboral - latestRecibo.afp_laboral - latestRecibo.isr_retenido}
+                  total={latestRecibo.total_descuentos}
+                />
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Total Descuentos</span>
+                  <span className="text-sm font-bold text-rose-600 dark:text-rose-400 font-mono">{fmt(latestRecibo.total_descuentos)}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-slate-400 dark:text-slate-500">
+                <BarChart3 className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
+                <p className="text-sm">No hay datos de descuentos disponibles</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Los descuentos aparecerán cuando haya recibos de pago</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </AnimatedCard>
+
+      {/* ===== ENHANCED PAY SLIPS SECTION ===== */}
+      <AnimatedCard delay={350}>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Recibos de Pago
+              </CardTitle>
+              {data.recibos.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+                  Últimos {data.recibos.length}
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {data.recibos.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-slate-400 dark:text-slate-500">
+                <Receipt className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
+                <p className="text-sm">No hay recibos disponibles</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Los recibos aparecerán cuando se procesen las planillas</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Salary trend mini chart */}
+                {salaryTrend.length > 1 && (
+                  <div className="bg-slate-50/80 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        Tendencia Salario Neto
+                      </p>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">Últimos {salaryTrend.length} períodos</span>
+                    </div>
+                    <SalaryBarChart data={salaryTrend} />
+                  </div>
+                )}
+
+                {/* Pay slip list with expandable rows */}
+                <div className="space-y-2">
+                  {data.recibos.map((recibo) => {
+                    const isExpanded = expandedRecibo === recibo.id;
+                    const deductionsTotal = recibo.isss_laboral + recibo.afp_laboral + recibo.isr_retenido;
+                    const otherDeductions = recibo.total_descuentos - deductionsTotal;
+
+                    return (
+                      <Collapsible key={recibo.id} open={isExpanded} onOpenChange={(open) => setExpandedRecibo(open ? recibo.id : null)}>
+                        <CollapsibleTrigger asChild>
+                          <button className="w-full flex items-center justify-between p-3.5 bg-slate-50/80 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors text-left">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                  {new Date(recibo.periodo_inicio).toLocaleDateString('es-SV', { month: 'long', year: 'numeric' })}
+                                </p>
+                                <Badge variant="secondary" className="text-[9px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+                                  {recibo.tipo}
+                                </Badge>
+                                <Badge variant="secondary" className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                                  <Banknote className="h-2.5 w-2.5" /> Transferencia
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-4 mt-1.5 text-xs">
+                                <span className="text-slate-500 dark:text-slate-400">Bruto: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{fmt(recibo.salario_bruto)}</span></span>
+                                <span className="text-slate-500 dark:text-slate-400">Neto: <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">{fmt(recibo.salario_neto)}</span></span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs gap-1.5 min-h-[44px] border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                                onClick={(e) => { e.stopPropagation(); handleDownloadBoleta(recibo.id); }}
+                                disabled={downloadingId === recibo.id}
+                              >
+                                {downloadingId === recibo.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Download className="h-3.5 w-3.5" />
+                                )}
+                                <span className="hidden sm:inline">PDF</span>
+                              </Button>
+                              {isExpanded ? (
+                                <ChevronUp className="h-4 w-4 text-slate-400" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-slate-400" />
+                              )}
+                            </div>
+                          </button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-1 p-4 bg-white dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3">
+                            {/* Earnings vs Deductions */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold mb-2">Devengado</p>
+                                <div className="flex items-center justify-between py-1">
+                                  <span className="text-xs text-slate-600 dark:text-slate-400">Salario Base</span>
+                                  <span className="text-xs font-mono font-medium text-slate-800 dark:text-slate-200">{fmt(recibo.salario_bruto)}</span>
+                                </div>
+                                <Separator className="my-1" />
+                                <div className="flex items-center justify-between py-1">
+                                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Total Devengado</span>
+                                  <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">{fmt(recibo.salario_bruto)}</span>
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold mb-2">Descuentos</p>
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between py-0.5">
+                                    <span className="text-xs text-slate-600 dark:text-slate-400">ISSS (3%)</span>
+                                    <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(recibo.isss_laboral)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between py-0.5">
+                                    <span className="text-xs text-slate-600 dark:text-slate-400">AFP (7.25%)</span>
+                                    <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(recibo.afp_laboral)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between py-0.5">
+                                    <span className="text-xs text-slate-600 dark:text-slate-400">ISR Retención</span>
+                                    <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(recibo.isr_retenido)}</span>
+                                  </div>
+                                  {otherDeductions > 0 && (
+                                    <div className="flex items-center justify-between py-0.5">
+                                      <span className="text-xs text-slate-600 dark:text-slate-400">Otros Descuentos</span>
+                                      <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(otherDeductions)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <Separator className="my-1" />
+                                <div className="flex items-center justify-between py-1">
+                                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Total Descuentos</span>
+                                  <span className="text-xs font-mono font-bold text-rose-600 dark:text-rose-400">-{fmt(recibo.total_descuentos)}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <Separator />
+
+                            {/* Net pay */}
+                            <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/50">
+                              <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Líquido a Recibir</span>
+                              <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(recibo.salario_neto)}</span>
+                            </div>
+
+                            {/* Period info */}
+                            <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
+                              <span>Período: {fmtDate(recibo.periodo_inicio)} - {fmtDate(recibo.periodo_fin)}</span>
+                              <span className="flex items-center gap-1"><Banknote className="h-2.5 w-2.5" /> Pago por transferencia bancaria</span>
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })}
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
+      </AnimatedCard>
 
-        {/* ===== PERSONAL INFORMATION CARD ===== */}
+      {/* ===== SALARY PROGRESSION MINI CHART ===== */}
+      <AnimatedCard delay={400}>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Progresión Salarial
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SalaryLineChart data={salaryProgression} />
+            {salaryProgression.length >= 2 && (
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">Salario Bruto por período</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-0.5 bg-emerald-500 dark:bg-emerald-400 rounded" />
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">Tendencia</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </AnimatedCard>
+
+      {/* ===== REQUEST MANAGEMENT + ANNOUNCEMENTS GRID ===== */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        {/* ===== NEW REQUEST BUTTONS ===== */}
+        <AnimatedCard delay={450}>
+          <Card className="shadow-sm h-full">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Plus className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Nueva Solicitud
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* Vacation request */}
+                <button
+                  className="flex items-center gap-2.5 p-3 rounded-lg border border-teal-200 dark:border-teal-800 hover:border-teal-300 dark:hover:border-teal-700 bg-teal-50/50 dark:bg-teal-900/20 hover:bg-teal-100/50 dark:hover:bg-teal-800/30 transition-all cursor-pointer text-left group min-h-[44px]"
+                  onClick={() => setShowVacationDialog(true)}
+                >
+                  <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-800/50 group-hover:scale-110 transition-transform">
+                    <Plane className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                  </div>
+                  <span className="text-xs font-medium text-teal-700 dark:text-teal-300">Vacaciones</span>
+                </button>
+                {/* Certificate request */}
+                <button
+                  className="flex items-center gap-2.5 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800 hover:border-emerald-300 dark:hover:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-800/30 transition-all cursor-pointer text-left group min-h-[44px]"
+                  onClick={() => setShowCertDialog(true)}
+                >
+                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-800/50 group-hover:scale-110 transition-transform">
+                    <FileBadge className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Constancias</span>
+                </button>
+                {/* Incidence report */}
+                <button
+                  className="flex items-center gap-2.5 p-3 rounded-lg border border-orange-200 dark:border-orange-800 hover:border-orange-300 dark:hover:border-orange-700 bg-orange-50/50 dark:bg-orange-900/20 hover:bg-orange-100/50 dark:hover:bg-orange-800/30 transition-all cursor-pointer text-left group min-h-[44px]"
+                  onClick={() => setShowIncidenceDialog(true)}
+                >
+                  <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-800/50 group-hover:scale-110 transition-transform">
+                    <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <span className="text-xs font-medium text-orange-700 dark:text-orange-300">Incidencia</span>
+                </button>
+                {/* Data change request */}
+                <button
+                  className="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all cursor-pointer text-left group min-h-[44px]"
+                  onClick={() => { setRequestType('CAMBIO_DATOS'); setShowRequestDialog(true); }}
+                >
+                  <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 group-hover:scale-110 transition-transform">
+                    <Edit3 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                  </div>
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Cambio Datos</span>
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        </AnimatedCard>
+
+        {/* ===== ANNOUNCEMENTS / NOTICES ===== */}
+        <AnimatedCard delay={500}>
+          <Card className="shadow-sm h-full">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Megaphone className="h-4 w-4 text-amber-600 dark:text-amber-400" /> Avisos y Comunicados
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2.5 max-h-64 overflow-y-auto">
+                {announcements.slice(0, 3).map((notice) => (
+                  <div key={notice.id} className="p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-tight">{notice.titulo}</p>
+                      <Badge className={`text-[9px] border shrink-0 ${getPriorityBadge(notice.prioridad)}`}>
+                        {notice.prioridad}
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">{notice.mensaje}</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-1">
+                      <Calendar className="h-2.5 w-2.5" />
+                      {fmtDate(notice.fecha)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </AnimatedCard>
+      </div>
+
+      {/* ===== MY REQUESTS - TIMELINE VIEW ===== */}
+      <AnimatedCard delay={550}>
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" /> Mis Solicitudes
+                <Badge variant="secondary" className="ml-1 text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
+                  {data.solicitudes.length}
+                </Badge>
+              </CardTitle>
+            </div>
+            {/* Filter tabs */}
+            {data.solicitudes.length > 0 && (
+              <div className="flex gap-1.5 mt-2 flex-wrap">
+                {(['TODAS', 'PENDIENTE', 'APROBADA', 'RECHAZADA'] as const).map((filter) => {
+                  const count = filter === 'TODAS'
+                    ? data.solicitudes.length
+                    : data.solicitudes.filter(s => s.estado === filter).length;
+                  return (
+                    <button
+                      key={filter}
+                      onClick={() => setSolicitudesFilter(filter)}
+                      className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors min-h-[32px] ${
+                        solicitudesFilter === filter
+                          ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-600 dark:border-emerald-500'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700'
+                      }`}
+                    >
+                      {filter === 'TODAS' ? 'Todas' : filter.charAt(0) + filter.slice(1).toLowerCase()} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </CardHeader>
+          <CardContent>
+            {data.solicitudes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-slate-400 dark:text-slate-500">
+                <Clock className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
+                <p className="text-sm">No hay solicitudes registradas</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Cree una nueva solicitud usando los botones de arriba</p>
+              </div>
+            ) : filteredSolicitudes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 text-slate-400 dark:text-slate-500">
+                <Filter className="h-6 w-6 mb-2 text-slate-300 dark:text-slate-600" />
+                <p className="text-sm">No hay solicitudes con este filtro</p>
+              </div>
+            ) : (
+              /* Visual Timeline */
+              <div className="relative max-h-96 overflow-y-auto">
+                <div className="absolute left-[15px] top-0 bottom-0 w-0.5 bg-slate-200 dark:bg-slate-700" />
+                <div className="space-y-0">
+                  {filteredSolicitudes.map((sol, idx) => {
+                    const isLast = idx === filteredSolicitudes.length - 1;
+                    // Timeline dot color based on status
+                    const dotColor = sol.estado === 'APROBADA'
+                      ? 'bg-emerald-500'
+                      : sol.estado === 'PENDIENTE'
+                        ? 'bg-amber-400'
+                        : sol.estado === 'CANCELADA'
+                          ? 'bg-slate-400'
+                          : 'bg-red-400';
+                    const DotIcon = sol.estado === 'APROBADA'
+                      ? CheckCircle
+                      : sol.estado === 'RECHAZADA'
+                        ? XCircle
+                        : sol.estado === 'CANCELADA'
+                          ? Ban
+                          : Clock;
+                    const dotIconColor = sol.estado === 'APROBADA'
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : sol.estado === 'PENDIENTE'
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : sol.estado === 'CANCELADA'
+                          ? 'text-slate-500 dark:text-slate-400'
+                          : 'text-red-600 dark:text-red-400';
+
+                    return (
+                      <div key={sol.id} className="relative flex gap-4 pb-4">
+                        {/* Timeline dot */}
+                        <div className="relative z-10 flex items-center justify-center w-[30px] shrink-0">
+                          <div className={`w-[30px] h-[30px] rounded-full ${dotColor} flex items-center justify-center shadow-sm ring-2 ring-white dark:ring-slate-900`}>
+                            <DotIcon className={`h-3.5 w-3.5 text-white`} />
+                          </div>
+                        </div>
+                        {/* Content */}
+                        <div className={`flex-1 min-w-0 ${!isLast ? 'pb-1' : ''}`}>
+                          <div className={`p-3 rounded-lg border ${getSolicitudTypeColor(sol.tipo)} transition-colors`}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-2 min-w-0">
+                                <div className="shrink-0 mt-0.5">{getSolicitudIcon(sol.tipo)}</div>
+                                <div className="min-w-0">
+                                  <p className="font-medium text-slate-800 dark:text-slate-200 text-xs">{sol.tipo.replace(/_/g, ' ')}</p>
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{fmtDate(sol.fecha_solicitud)}</p>
+                                  {sol.detalle && (
+                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 line-clamp-2">{sol.detalle}</p>
+                                  )}
+                                  {sol.fecha_resolucion && (
+                                    <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1">
+                                      <CheckCircle className="h-2.5 w-2.5" />
+                                      Resuelta: {fmtDate(sol.fecha_resolucion)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Badge className={`text-[10px] border ${getSolicitudBadge(sol.estado)}`}>
+                                  {sol.estado}
+                                </Badge>
+                                {sol.estado === 'PENDIENTE' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 min-h-[44px] min-w-[44px]"
+                                    onClick={() => handleCancelSolicitud(sol.id)}
+                                    title="Cancelar solicitud"
+                                  >
+                                    <Ban className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </AnimatedCard>
+
+      {/* ===== PERSONAL INFORMATION CARD ===== */}
+      <AnimatedCard delay={600}>
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -910,461 +1792,7 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
             </div>
           </CardContent>
         </Card>
-
-        {/* ===== BENEFITS SUMMARY WIDGET ===== */}
-        <Card className="shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Beneficios y Prestaciones
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {/* ISSS */}
-              <div className="bg-emerald-50/80 dark:bg-emerald-900/20 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/50">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded bg-emerald-100 dark:bg-emerald-800/50">
-                      <Activity className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">ISSS - Seguro Social</p>
-                      <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Cobertura médica y maternidad</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Desc. mensual</p>
-                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(monthlyISSS)}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-emerald-200/50 dark:border-emerald-700/30">
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400">Aporte anual estimado</span>
-                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(annualISSS)}</span>
-                </div>
-              </div>
-
-              {/* AFP */}
-              <div className="bg-teal-50/80 dark:bg-teal-900/20 rounded-lg p-3 border border-teal-100 dark:border-teal-800/50">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded bg-teal-100 dark:bg-teal-800/50">
-                      <PiggyBank className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">AFP - Fondo de Pensión</p>
-                      <p className="text-[10px] text-teal-500 dark:text-teal-400">Ahorro para jubilación</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] text-teal-500 dark:text-teal-400">Desc. mensual</p>
-                    <p className="text-xs font-bold text-teal-700 dark:text-teal-300 font-mono">{fmt(monthlyAFP)}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-teal-200/50 dark:border-teal-700/30">
-                  <span className="text-[10px] text-teal-600 dark:text-teal-400">Acumulado anual estimado</span>
-                  <span className="text-[10px] font-semibold text-teal-700 dark:text-teal-300 font-mono">{fmt(annualAFP)}</span>
-                </div>
-              </div>
-
-              {/* Aguinaldo */}
-              <div className="bg-amber-50/80 dark:bg-amber-900/20 rounded-lg p-3 border border-amber-100 dark:border-amber-800/50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded bg-amber-100 dark:bg-amber-800/50">
-                      <TrendingUp className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Aguinaldo Estimado</p>
-                      <p className="text-[10px] text-amber-500 dark:text-amber-400">Basado en salario actual</p>
-                    </div>
-                  </div>
-                  <p className="text-xs font-bold text-amber-700 dark:text-amber-300 font-mono">{fmt(aguinaldoEstimate)}</p>
-                </div>
-              </div>
-
-              {/* Seniority Bonus */}
-              <div className={`rounded-lg p-3 border ${
-                seniorityBonusEligible
-                  ? 'bg-emerald-50/80 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50'
-                  : 'bg-slate-50/80 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`p-1.5 rounded ${
-                      seniorityBonusEligible ? 'bg-emerald-100 dark:bg-emerald-800/50' : 'bg-slate-100 dark:bg-slate-700'
-                    }`}>
-                      <Award className={`h-3.5 w-3.5 ${seniorityBonusEligible ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`} />
-                    </div>
-                    <div>
-                      <p className={`text-xs font-semibold ${seniorityBonusEligible ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>
-                        Bono de Antigüedad
-                      </p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {seniorityBonusEligible ? 'Elegible' : 'Requiere 1+ año de servicio'}
-                      </p>
-                    </div>
-                  </div>
-                  {seniorityBonusEligible ? (
-                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 text-[10px]">
-                      Elegible
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700 text-[10px]">
-                      Pendiente
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ===== ENHANCED PAY SLIPS SECTION ===== */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Recibos de Pago
-            </CardTitle>
-            {data.recibos.length > 0 && (
-              <Badge variant="secondary" className="text-[10px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
-                Últimos {data.recibos.length}
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {data.recibos.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-slate-400 dark:text-slate-500">
-              <Receipt className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
-              <p className="text-sm">No hay recibos disponibles</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Salary trend mini chart */}
-              {salaryTrend.length > 1 && (
-                <div className="bg-slate-50/80 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-100 dark:border-slate-700">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                      <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                      Tendencia Salario Neto
-                    </p>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">Últimos {salaryTrend.length} períodos</span>
-                  </div>
-                  <SalaryBarChart data={salaryTrend} />
-                </div>
-              )}
-
-              {/* Pay slip list with expandable rows */}
-              <div className="space-y-2">
-                {data.recibos.map((recibo) => {
-                  const isExpanded = expandedRecibo === recibo.id;
-                  const deductionsTotal = recibo.isss_laboral + recibo.afp_laboral + recibo.isr_retenido;
-                  const otherDeductions = recibo.total_descuentos - deductionsTotal;
-
-                  return (
-                    <Collapsible key={recibo.id} open={isExpanded} onOpenChange={(open) => setExpandedRecibo(open ? recibo.id : null)}>
-                      <CollapsibleTrigger asChild>
-                        <button className="w-full flex items-center justify-between p-3.5 bg-slate-50/80 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors text-left">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                                {new Date(recibo.periodo_inicio).toLocaleDateString('es-SV', { month: 'long', year: 'numeric' })}
-                              </p>
-                              <Badge variant="secondary" className="text-[9px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
-                                {recibo.tipo}
-                              </Badge>
-                              <Badge variant="secondary" className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 flex items-center gap-1">
-                                <Banknote className="h-2.5 w-2.5" /> Transferencia
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-4 mt-1.5 text-xs">
-                              <span className="text-slate-500 dark:text-slate-400">Bruto: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{fmt(recibo.salario_bruto)}</span></span>
-                              <span className="text-slate-500 dark:text-slate-400">Neto: <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">{fmt(recibo.salario_neto)}</span></span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0 ml-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 text-xs gap-1.5 min-h-[44px] border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                              onClick={(e) => { e.stopPropagation(); handleDownloadBoleta(recibo.id); }}
-                              disabled={downloadingId === recibo.id}
-                            >
-                              {downloadingId === recibo.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Download className="h-3.5 w-3.5" />
-                              )}
-                              <span className="hidden sm:inline">PDF</span>
-                            </Button>
-                            {isExpanded ? (
-                              <ChevronUp className="h-4 w-4 text-slate-400" />
-                            ) : (
-                              <ChevronDown className="h-4 w-4 text-slate-400" />
-                            )}
-                          </div>
-                        </button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="mt-1 p-4 bg-white dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3">
-                          {/* Earnings vs Deductions */}
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold mb-2">Devengado</p>
-                              <div className="flex items-center justify-between py-1">
-                                <span className="text-xs text-slate-600 dark:text-slate-400">Salario Base</span>
-                                <span className="text-xs font-mono font-medium text-slate-800 dark:text-slate-200">{fmt(recibo.salario_bruto)}</span>
-                              </div>
-                              <Separator className="my-1" />
-                              <div className="flex items-center justify-between py-1">
-                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Total Devengado</span>
-                                <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">{fmt(recibo.salario_bruto)}</span>
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold mb-2">Descuentos</p>
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between py-0.5">
-                                  <span className="text-xs text-slate-600 dark:text-slate-400">ISSS (3%)</span>
-                                  <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(recibo.isss_laboral)}</span>
-                                </div>
-                                <div className="flex items-center justify-between py-0.5">
-                                  <span className="text-xs text-slate-600 dark:text-slate-400">AFP (7.25%)</span>
-                                  <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(recibo.afp_laboral)}</span>
-                                </div>
-                                <div className="flex items-center justify-between py-0.5">
-                                  <span className="text-xs text-slate-600 dark:text-slate-400">ISR Retención</span>
-                                  <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(recibo.isr_retenido)}</span>
-                                </div>
-                                {otherDeductions > 0 && (
-                                  <div className="flex items-center justify-between py-0.5">
-                                    <span className="text-xs text-slate-600 dark:text-slate-400">Otros Descuentos</span>
-                                    <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(otherDeductions)}</span>
-                                  </div>
-                                )}
-                              </div>
-                              <Separator className="my-1" />
-                              <div className="flex items-center justify-between py-1">
-                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Total Descuentos</span>
-                                <span className="text-xs font-mono font-bold text-rose-600 dark:text-rose-400">-{fmt(recibo.total_descuentos)}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <Separator />
-
-                          {/* Net pay */}
-                          <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/50">
-                            <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Líquido a Recibir</span>
-                            <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(recibo.salario_neto)}</span>
-                          </div>
-
-                          {/* Period info */}
-                          <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
-                            <span>Período: {fmtDate(recibo.periodo_inicio)} - {fmtDate(recibo.periodo_fin)}</span>
-                            <span className="flex items-center gap-1"><Banknote className="h-2.5 w-2.5" /> Pago por transferencia bancaria</span>
-                          </div>
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ===== REQUEST MANAGEMENT + ANNOUNCEMENTS GRID ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        {/* ===== NEW REQUEST BUTTONS ===== */}
-        <Card className="shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Plus className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Nueva Solicitud
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-2.5">
-              {/* Vacation request */}
-              <button
-                className="flex items-center gap-2.5 p-3 rounded-lg border border-teal-200 dark:border-teal-800 hover:border-teal-300 dark:hover:border-teal-700 bg-teal-50/50 dark:bg-teal-900/20 hover:bg-teal-100/50 dark:hover:bg-teal-800/30 transition-all cursor-pointer text-left group min-h-[44px]"
-                onClick={() => setShowVacationDialog(true)}
-              >
-                <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-800/50 group-hover:scale-110 transition-transform">
-                  <Plane className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-                </div>
-                <span className="text-xs font-medium text-teal-700 dark:text-teal-300">Vacaciones</span>
-              </button>
-              {/* Certificate request */}
-              <button
-                className="flex items-center gap-2.5 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800 hover:border-emerald-300 dark:hover:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-800/30 transition-all cursor-pointer text-left group min-h-[44px]"
-                onClick={() => setShowCertDialog(true)}
-              >
-                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-800/50 group-hover:scale-110 transition-transform">
-                  <FileBadge className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Constancias</span>
-              </button>
-              {/* Incidence report */}
-              <button
-                className="flex items-center gap-2.5 p-3 rounded-lg border border-orange-200 dark:border-orange-800 hover:border-orange-300 dark:hover:border-orange-700 bg-orange-50/50 dark:bg-orange-900/20 hover:bg-orange-100/50 dark:hover:bg-orange-800/30 transition-all cursor-pointer text-left group min-h-[44px]"
-                onClick={() => setShowIncidenceDialog(true)}
-              >
-                <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-800/50 group-hover:scale-110 transition-transform">
-                  <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                </div>
-                <span className="text-xs font-medium text-orange-700 dark:text-orange-300">Incidencia</span>
-              </button>
-              {/* Data change request */}
-              <button
-                className="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all cursor-pointer text-left group min-h-[44px]"
-                onClick={() => { setRequestType('CAMBIO_DATOS'); setShowRequestDialog(true); }}
-              >
-                <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 group-hover:scale-110 transition-transform">
-                  <Edit3 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                </div>
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Cambio Datos</span>
-              </button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ===== ANNOUNCEMENTS / NOTICES ===== */}
-        <Card className="shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Megaphone className="h-4 w-4 text-amber-600 dark:text-amber-400" /> Avisos y Comunicados
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2.5 max-h-64 overflow-y-auto">
-              {announcements.slice(0, 3).map((notice) => (
-                <div key={notice.id} className="p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-tight">{notice.titulo}</p>
-                    <Badge className={`text-[9px] border shrink-0 ${getPriorityBadge(notice.prioridad)}`}>
-                      {notice.prioridad}
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">{notice.mensaje}</p>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-1">
-                    <Calendar className="h-2.5 w-2.5" />
-                    {fmtDate(notice.fecha)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ===== MY REQUESTS - ENHANCED WITH TIMELINE & CANCEL ===== */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" /> Mis Solicitudes
-              <Badge variant="secondary" className="ml-1 text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
-                {data.solicitudes.length}
-              </Badge>
-            </CardTitle>
-          </div>
-          {/* Filter tabs */}
-          {data.solicitudes.length > 0 && (
-            <div className="flex gap-1.5 mt-2 flex-wrap">
-              {(['TODAS', 'PENDIENTE', 'APROBADA', 'RECHAZADA'] as const).map((filter) => {
-                const count = filter === 'TODAS'
-                  ? data.solicitudes.length
-                  : data.solicitudes.filter(s => s.estado === filter).length;
-                return (
-                  <button
-                    key={filter}
-                    onClick={() => setSolicitudesFilter(filter)}
-                    className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors min-h-[32px] ${
-                      solicitudesFilter === filter
-                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-600 dark:border-emerald-500'
-                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700'
-                    }`}
-                  >
-                    {filter === 'TODAS' ? 'Todas' : filter.charAt(0) + filter.slice(1).toLowerCase()} ({count})
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          {data.solicitudes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-slate-400 dark:text-slate-500">
-              <Clock className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
-              <p className="text-sm">No hay solicitudes registradas</p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Cree una nueva solicitud usando los botones de arriba</p>
-            </div>
-          ) : filteredSolicitudes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 text-slate-400 dark:text-slate-500">
-              <Filter className="h-6 w-6 mb-2 text-slate-300 dark:text-slate-600" />
-              <p className="text-sm">No hay solicitudes con este filtro</p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {filteredSolicitudes.map((sol) => (
-                <div key={sol.id} className={`flex items-start justify-between p-3 rounded-lg border text-sm gap-2 ${getSolicitudTypeColor(sol.tipo)}`}>
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <div className="shrink-0 mt-0.5">{getSolicitudIcon(sol.tipo)}</div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-800 dark:text-slate-200 text-xs">{sol.tipo.replace(/_/g, ' ')}</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{fmtDate(sol.fecha_solicitud)}</p>
-                      {sol.detalle && (
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 truncate max-w-[200px]">{sol.detalle}</p>
-                      )}
-                      {/* Mini timeline */}
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <div className="flex items-center gap-1">
-                          <CircleDot className="h-2.5 w-2.5 text-slate-400" />
-                          <span className="text-[9px] text-slate-400">Solicitada</span>
-                        </div>
-                        {sol.estado !== 'PENDIENTE' && (
-                          <>
-                            <div className="w-4 h-px bg-slate-300 dark:bg-slate-600" />
-                            <div className="flex items-center gap-1">
-                              <div className={`w-2 h-2 rounded-full ${
-                                sol.estado === 'APROBADA' ? 'bg-emerald-500' :
-                                sol.estado === 'CANCELADA' ? 'bg-slate-400' :
-                                'bg-red-400'
-                              }`} />
-                              <span className="text-[9px] text-slate-400">{sol.estado === 'APROBADA' ? 'Aprobada' : sol.estado === 'CANCELADA' ? 'Cancelada' : 'Rechazada'}</span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge className={`text-[10px] border ${getSolicitudBadge(sol.estado)}`}>
-                      {sol.estado}
-                    </Badge>
-                    {sol.estado === 'PENDIENTE' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 min-h-[44px] min-w-[44px]"
-                        onClick={() => handleCancelSolicitud(sol.id)}
-                        title="Cancelar solicitud"
-                      >
-                        <Ban className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      </AnimatedCard>
 
       {/* ========== DIALOGS ========== */}
 

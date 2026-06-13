@@ -1,0 +1,739 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→import {
+     5→  Calculator, Users, FileText, DollarSign, Shield, CheckCircle,
+     6→  AlertTriangle, Loader2, ChevronDown, ChevronUp, Download,
+     7→  ArrowLeft, ArrowRight, RefreshCw, Eye, Circle, Minus
+     8→} from 'lucide-react';
+     9→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    10→import { Badge } from '@/components/ui/badge';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Input } from '@/components/ui/input';
+    13→import { Label } from '@/components/ui/label';
+    14→import { Skeleton } from '@/components/ui/skeleton';
+    15→import { Separator } from '@/components/ui/separator';
+    16→import { useToast } from '@/hooks/use-toast';
+    17→
+    18→interface PayrollCalculationProps {
+    19→  accessToken: string;
+    20→  userRole: string;
+    21→}
+    22→
+    23→const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    24→
+    25→const STEPS = [
+    26→  { num: 1, label: 'Seleccionar Período', icon: FileText },
+    27→  { num: 2, label: 'Verificar Empleados', icon: Users },
+    28→  { num: 3, label: 'Cargar Incidencias', icon: AlertTriangle },
+    29→  { num: 4, label: 'Salarios Brutos', icon: DollarSign },
+    30→  { num: 5, label: 'Deducciones', icon: Shield },
+    31→  { num: 6, label: 'Descuentos Adicionales', icon: Calculator },
+    32→  { num: 7, label: 'Salarios Netos', icon: DollarSign },
+    33→  { num: 8, label: 'Revisar y Confirmar', icon: CheckCircle },
+    34→];
+    35→
+    36→interface CalculationResult {
+    37→  planilla: {
+    38→    id: string;
+    39→    codigo_planilla: string;
+    40→    tipo: string;
+    41→    estado: string;
+    42→    total_empleados: number;
+    43→    total_salarios_brutos: number;
+    44→    total_isss_laboral: number;
+    45→    total_afp_laboral: number;
+    46→    total_isr_retenido: number;
+    47→    total_descuentos: number;
+    48→    total_neto_a_pagar: number;
+    49→    total_cargas_patronales: number;
+    50→  };
+    51→  detalles: Array<{
+    52→    empleado_id: string;
+    53→    salario_base: number;
+    54→    total_horas_extra: number;
+    55→    total_comisiones: number;
+    56→    total_bonos: number;
+    57→    salario_bruto: number;
+    58→    isss_laboral: number;
+    59→    afp_laboral: number;
+    60→    renta_imponible: number;
+    61→    isr_retenido: number;
+    62→    cuota_alimenticia: number;
+    63→    prestamo_patronal: number;
+    64→    seguro_complementario: number;
+    65→    otros_descuentos: number;
+    66→    total_descuentos: number;
+    67→    salario_neto: number;
+    68→    observaciones: string;
+    69→  }>;
+    70→  anomalies: Array<{
+    71→    empleado_id: string;
+    72→    empleado_nombre: string;
+    73→    tipo: string;
+    74→    detalle: string;
+    75→    severidad: string;
+    76→  }>;
+    77→}
+    78→
+    79→function getInitials(name: string): string {
+    80→  if (!name) return '?';
+    81→  const parts = name.trim().split(/\s+/);
+    82→  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    83→  return name.substring(0, 2).toUpperCase();
+    84→}
+    85→
+    86→const avatarColors = [
+    87→  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+    88→  'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+    89→  'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
+    90→  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+    91→  'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+    92→  'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+    93→];
+    94→
+    95→export default function PayrollCalculation({ accessToken }: PayrollCalculationProps) {
+    96→  const { toast } = useToast();
+    97→  const [step, setStep] = useState(1);
+    98→  const [fechaInicio, setFechaInicio] = useState('');
+    99→  const [fechaFin, setFechaFin] = useState('');
+   100→  const [tipo, setTipo] = useState('MENSUAL');
+   101→  const [calculating, setCalculating] = useState(false);
+   102→  const [result, setResult] = useState<CalculationResult | null>(null);
+   103→  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+   104→  const [empleados, setEmpleados] = useState<Array<{ id: string; codigo: string; nombre: string; tieneContrato: boolean; tieneISSS: boolean; tieneAFP: boolean; salarioBase?: number }>>([]);
+   105→  const [incidencias, setIncidencias] = useState<Array<{ empleado: string; tipo: string; monto: number; horas: number | null; estado: string }>>([]);
+   106→  const [loadingData, setLoadingData] = useState(false);
+   107→  const [selectedEmpleados, setSelectedEmpleados] = useState<Set<string>>(new Set());
+   108→
+   109→  const fetchPreviewData = useCallback(async () => {
+   110→    if (!fechaInicio || !fechaFin) return;
+   111→    setLoadingData(true);
+   112→    try {
+   113→      const empRes = await fetch('/api/nomina/planillas?limit=1', {
+   114→        headers: { Authorization: `Bearer ${accessToken}` },
+   115→      });
+   116→    } catch {
+   117→      // ignore
+   118→    } finally {
+   119→      setLoadingData(false);
+   120→    }
+   121→  }, [accessToken, fechaInicio, fechaFin]);
+   122→
+   123→  const handleCalculate = async () => {
+   124→    if (!fechaInicio || !fechaFin) {
+   125→      toast({ title: 'Error', description: 'Complete las fechas del período', variant: 'destructive' });
+   126→      return;
+   127→    }
+   128→    setCalculating(true);
+   129→    try {
+   130→      const res = await fetch('/api/nomina/calcular', {
+   131→        method: 'POST',
+   132→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   133→        body: JSON.stringify({ periodoInicio: fechaInicio, periodoFin: fechaFin, tipo }),
+   134→      });
+   135→      const data = await res.json();
+   136→      if (!res.ok) throw new Error(data.error || 'Error al calcular');
+   137→      setResult(data);
+   138→      const emps = data.detalles.map((d: CalculationResult['detalles'][0]) => ({
+   139→        id: d.empleado_id,
+   140→        codigo: d.empleado_id.substring(0, 8),
+   141→        nombre: d.observaciones || 'Empleado',
+   142→        tieneContrato: true,
+   143→        tieneISSS: true,
+   144→        tieneAFP: true,
+   145→        salarioBase: d.salario_base,
+   146→      }));
+   147→      setEmpleados(emps);
+   148→      setSelectedEmpleados(new Set(emps.map((e: { id: string }) => e.id)));
+   149→      setIncidencias(
+   150→        data.detalles
+   151→          .filter((d: CalculationResult['detalles'][0]) => d.total_horas_extra > 0 || d.total_comisiones > 0 || d.total_bonos > 0)
+   152→          .map((d: CalculationResult['detalles'][0]) => ({
+   153→            empleado: d.empleado_id.substring(0, 8),
+   154→            tipo: 'Mixto',
+   155→            monto: d.total_horas_extra + d.total_comisiones + d.total_bonos,
+   156→            horas: d.total_horas_extra > 0 ? d.total_horas_extra : null,
+   157→            estado: 'APROBADA',
+   158→          }))
+   159→      );
+   160→      toast({ title: 'Cálculo Completado', description: `${data.planilla.total_empleados} empleados procesados` });
+   161→      setStep(8);
+   162→    } catch (err) {
+   163→      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al calcular nómina', variant: 'destructive' });
+   164→    } finally {
+   165→      setCalculating(false);
+   166→    }
+   167→  };
+   168→
+   169→  const exportCSV = () => {
+   170→    if (!result) return;
+   171→    const headers = ['Empleado ID', 'Salario Base', 'Horas Extra', 'Comisiones', 'Bonos', 'Salario Bruto', 'ISSS Laboral', 'AFP Laboral', 'Renta Imponible', 'ISR Retenido', 'Descuentos', 'Salario Neto'];
+   172→    const rows = result.detalles.map(d => [
+   173→      d.empleado_id, d.salario_base, d.total_horas_extra, d.total_comisiones, d.total_bonos,
+   174→      d.salario_bruto, d.isss_laboral, d.afp_laboral, d.renta_imponible, d.isr_retenido,
+   175→      d.total_descuentos, d.salario_neto,
+   176→    ]);
+   177→    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+   178→    const blob = new Blob([csv], { type: 'text/csv' });
+   179→    const url = URL.createObjectURL(blob);
+   180→    const a = document.createElement('a');
+   181→    a.href = url;
+   182→    a.download = `nomina_${result.planilla.codigo_planilla}.csv`;
+   183→    a.click();
+   184→    URL.revokeObjectURL(url);
+   185→  };
+   186→
+   187→  const nextStep = () => setStep(Math.min(step + 1, 8));
+   188→  const prevStep = () => setStep(Math.max(step - 1, 1));
+   189→
+   190→  const toggleEmpleado = (id: string) => {
+   191→    setSelectedEmpleados(prev => {
+   192→      const next = new Set(prev);
+   193→      if (next.has(id)) next.delete(id);
+   194→      else next.add(id);
+   195→      return next;
+   196→    });
+   197→  };
+   198→
+   199→  const selectAllEmpleados = () => {
+   200→    setSelectedEmpleados(new Set(empleados.map(e => e.id)));
+   201→  };
+   202→
+   203→  const deselectAllEmpleados = () => {
+   204→    setSelectedEmpleados(new Set());
+   205→  };
+   206→
+   207→  const renderStepContent = () => {
+   208→    switch (step) {
+   209→      case 1:
+   210→        return (
+   211→          <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
+   212→            <CardHeader>
+   213→              <CardTitle className="text-base dark:text-slate-100">Seleccionar Período</CardTitle>
+   214→              <CardDescription className="dark:text-slate-400">Defina el rango de fechas y tipo de nómina</CardDescription>
+   215→            </CardHeader>
+   216→            <CardContent className="space-y-4">
+   217→              <div className="space-y-2">
+   218→                <Label className="dark:text-slate-300">Tipo de Nómina</Label>
+   219→                <div className="flex gap-2">
+   220→                  {['MENSUAL', 'QUINCENAL'].map(t => (
+   221→                    <Button
+   222→                      key={t}
+   223→                      variant={tipo === t ? 'default' : 'outline'}
+   224→                      className={tipo === t ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600' : 'dark:border-slate-600 dark:text-slate-300'}
+   225→                      onClick={() => setTipo(t)}
+   226→                    >
+   227→                      {t === 'MENSUAL' ? 'Mensual' : 'Quincenal'}
+   228→                    </Button>
+   229→                  ))}
+   230→                </div>
+   231→              </div>
+   232→              <div className="grid grid-cols-2 gap-4">
+   233→                <div className="space-y-2">
+   234→                  <Label className="dark:text-slate-300">Fecha Inicio</Label>
+   235→                  <Input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} className="dark:bg-slate-800 dark:border-slate-700" />
+   236→                </div>
+   237→                <div className="space-y-2">
+   238→                  <Label className="dark:text-slate-300">Fecha Fin</Label>
+   239→                  <Input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} className="dark:bg-slate-800 dark:border-slate-700" />
+   240→                </div>
+   241→              </div>
+   242→              {fechaInicio && fechaFin && (
+   243→                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg text-sm text-emerald-800 dark:text-emerald-300">
+   244→                  <strong>Período:</strong> {new Date(fechaInicio).toLocaleDateString('es-SV')} — {new Date(fechaFin).toLocaleDateString('es-SV')} ({tipo})
+   245→                </div>
+   246→              )}
+   247→            </CardContent>
+   248→          </Card>
+   249→        );
+   250→
+   251→      case 2:
+   252→        return (
+   253→          <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
+   254→            <CardHeader>
+   255→              <div className="flex items-center justify-between">
+   256→                <div>
+   257→                  <CardTitle className="text-base dark:text-slate-100">Verificar Empleados</CardTitle>
+   258→                  <CardDescription className="dark:text-slate-400">Confirmar que los empleados activos tienen contrato vigente</CardDescription>
+   259→                </div>
+   260→                {empleados.length > 0 && (
+   261→                  <div className="flex gap-2">
+   262→                    <Button variant="outline" size="sm" onClick={selectAllEmpleados} className="text-xs dark:border-slate-600 dark:text-slate-300">
+   263→                      Seleccionar Todos
+   264→                    </Button>
+   265→                    <Button variant="outline" size="sm" onClick={deselectAllEmpleados} className="text-xs dark:border-slate-600 dark:text-slate-300">
+   266→                      Deseleccionar
+   267→                    </Button>
+   268→                  </div>
+   269→                )}
+   270→              </div>
+   271→            </CardHeader>
+   272→            <CardContent>
+   273→              <div className="p-4 bg-amber-50 dark:bg-amber-950/40 rounded-lg text-sm text-amber-800 dark:text-amber-300 mb-4">
+   274→                <AlertTriangle className="h-4 w-4 inline mr-1" />
+   275→                Los empleados sin contrato activo serán excluidos del cálculo.
+   276→                {empleados.length > 0 && (
+   277→                  <span className="ml-2 font-medium">
+   278→                    {selectedEmpleados.size} de {empleados.length} seleccionados
+   279→                  </span>
+   280→                )}
+   281→              </div>
+   282→              
+   283→              {empleados.length > 0 ? (
+   284→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-80 overflow-y-auto pr-1">
+   285→                  {empleados.map((emp, idx) => {
+   286→                    const isSelected = selectedEmpleados.has(emp.id);
+   287→                    const colorClass = avatarColors[idx % avatarColors.length];
+   288→                    return (
+   289→                      <div
+   290→                        key={emp.id}
+   291→                        onClick={() => toggleEmpleado(emp.id)}
+   292→                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+   293→                          isSelected
+   294→                            ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-700 dark:bg-emerald-950/30'
+   295→                            : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800 opacity-60'
+   296→                        }`}
+   297→                      >
+   298→                        <div className={`h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${colorClass}`}>
+   299→                          {getInitials(emp.nombre)}
+   300→                        </div>
+   301→                        <div className="flex-1 min-w-0">
+   302→                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{emp.nombre}</p>
+   303→                          <div className="flex items-center gap-2 mt-0.5">
+   304→                            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">{emp.codigo}</span>
+   305→                            {emp.tieneContrato && (
+   306→                              <span className="flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+   307→                                <CheckCircle className="h-2.5 w-2.5" /> Contrato
+   308→                              </span>
+   309→                            )}
+   310→                          </div>
+   311→                          {emp.salarioBase !== undefined && (
+   312→                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{fmt(emp.salarioBase)}</p>
+   313→                          )}
+   314→                        </div>
+   315→                        <div className={`h-5 w-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+   316→                          isSelected
+   317→                            ? 'border-emerald-500 bg-emerald-500 dark:border-emerald-400 dark:bg-emerald-400'
+   318→                            : 'border-slate-300 dark:border-slate-600'
+   319→                        }`}>
+   320→                          {isSelected && <CheckCircle className="h-3.5 w-3.5 text-white" />}
+   321→                        </div>
+   322→                      </div>
+   323→                    );
+   324→                  })}
+   325→                </div>
+   326→              ) : (
+   327→                <p className="text-sm text-slate-500 dark:text-slate-400">
+   328→                  Los datos de empleados se cargarán durante el cálculo. Continúe al siguiente paso.
+   329→                </p>
+   330→              )}
+   331→            </CardContent>
+   332→          </Card>
+   333→        );
+   334→
+   335→      case 3:
+   336→        return (
+   337→          <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
+   338→            <CardHeader>
+   339→              <CardTitle className="text-base dark:text-slate-100">Cargar Incidencias</CardTitle>
+   340→              <CardDescription className="dark:text-slate-400">Incidencias aprobadas del período serán aplicadas automáticamente</CardDescription>
+   341→            </CardHeader>
+   342→            <CardContent>
+   343→              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg text-sm text-emerald-800 dark:text-emerald-300 mb-4">
+   344→                <CheckCircle className="h-4 w-4 inline mr-1" />
+   345→                Solo se aplicarán incidencias en estado &quot;APROBADA&quot; dentro del rango de fechas.
+   346→              </div>
+   347→              <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+   348→                <p><strong className="dark:text-slate-300">Tipos de incidencia soportados:</strong></p>
+   349→                <ul className="list-disc list-inside space-y-1 ml-2">
+   350→                  <li>HORAS_EXTRA: Diurna (×2.0), Nocturna (×2.5), Descanso (×3.0), Asueto (×3.0)</li>
+   351→                  <li>COMISION: Monto directo</li>
+   352→                  <li>BONO: Monto directo</li>
+   353→                  <li>DESCUENTO_ESPECIAL: Cuota alimenticia, préstamo, seguro, otros</li>
+   354→                </ul>
+   355→              </div>
+   356→            </CardContent>
+   357→          </Card>
+   358→        );
+   359→
+   360→      case 4:
+   361→        return (
+   362→          <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
+   363→            <CardHeader>
+   364→              <CardTitle className="text-base dark:text-slate-100">Salarios Brutos</CardTitle>
+   365→              <CardDescription className="dark:text-slate-400">Salario base + incidencias remunerativas</CardDescription>
+   366→            </CardHeader>
+   367→            <CardContent className="space-y-3">
+   368→              <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg text-sm space-y-2 dark:text-slate-300">
+   369→                <p><strong>Fórmula:</strong></p>
+   370→                <p className="font-mono text-xs bg-white dark:bg-slate-900 dark:border dark:border-slate-700 p-2 rounded">Salario Bruto = Salario Base + Horas Extra + Comisiones + Bonos</p>
+   371→              </div>
+   372→            </CardContent>
+   373→          </Card>
+   374→        );
+   375→
+   376→      case 5:
+   377→        return (
+   378→          <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
+   379→            <CardHeader>
+   380→              <CardTitle className="text-base dark:text-slate-100">Deducciones Legales</CardTitle>
+   381→              <CardDescription className="dark:text-slate-400">ISSS, AFP e ISR según parámetros legales vigentes</CardDescription>
+   382→            </CardHeader>
+   383→            <CardContent className="space-y-3">
+   384→              <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg text-sm space-y-2 dark:text-slate-300">
+   385→                <p><strong>ISSS Laboral:</strong> MIN(Salario Bruto, $1,000) × 3.00% = máx $30.00/mes</p>
+   386→                <p><strong>AFP Laboral:</strong> Salario Bruto × 7.25% (sin tope)</p>
+   387→                <p><strong>Renta Imponible:</strong> Bruto − ISSS − AFP</p>
+   388→                <p><strong>ISR:</strong> Según tabla de tramos vigente</p>
+   389→              </div>
+   390→              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-lg text-xs text-amber-700 dark:text-amber-300">
+   391→                Art. 169 CT: Horas extra diurnas = 100% recargo. Los tramos ISR se leen de parámetros_legales.
+   392→              </div>
+   393→            </CardContent>
+   394→          </Card>
+   395→        );
+   396→
+   397→      case 6:
+   398→        return (
+   399→          <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
+   400→            <CardHeader>
+   401→              <CardTitle className="text-base dark:text-slate-100">Descuentos Adicionales</CardTitle>
+   402→              <CardDescription className="dark:text-slate-400">Cuota alimenticia, préstamos, seguros y otros</CardDescription>
+   403→            </CardHeader>
+   404→            <CardContent>
+   405→              <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg text-sm space-y-2 dark:text-slate-300">
+   406→                <p><strong>Prioridad de descuentos:</strong></p>
+   407→                <ol className="list-decimal list-inside space-y-1 ml-2">
+   408→                  <li>Cuota alimenticia (mayor prioridad)</li>
+   409→                  <li>Préstamo patronal</li>
+   410→                  <li>Seguro complementario</li>
+   411→                  <li>Otros descuentos</li>
+   412→                </ol>
+   413→              </div>
+   414→            </CardContent>
+   415→          </Card>
+   416→        );
+   417→
+   418→      case 7:
+   419→        return (
+   420→          <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
+   421→            <CardHeader>
+   422→              <CardTitle className="text-base dark:text-slate-100">Salarios Netos</CardTitle>
+   423→              <CardDescription className="dark:text-slate-400">Resultado final después de todas las deducciones</CardDescription>
+   424→            </CardHeader>
+   425→            <CardContent>
+   426→              <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg text-sm space-y-2 dark:text-slate-300">
+   427→                <p><strong>Fórmula:</strong></p>
+   428→                <p className="font-mono text-xs bg-white dark:bg-slate-900 dark:border dark:border-slate-700 p-2 rounded">Neto = Bruto − ISSS − AFP − ISR − Descuentos Especiales</p>
+   429→                <div className="p-3 bg-red-50 dark:bg-red-950/40 rounded-lg text-xs text-red-700 dark:text-red-300 mt-2">
+   430→                  <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
+   431→                  Si el salario neto resulta ≤ $0.00, se generará una anomalía de severidad ALTA.
+   432→                </div>
+   433→              </div>
+   434→            </CardContent>
+   435→          </Card>
+   436→        );
+   437→
+   438→      case 8:
+   439→        return (
+   440→          <div className="space-y-4">
+   441→            {result ? (
+   442→              <>
+   443→                {/* Summary Cards */}
+   444→                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   445→                  <Card className="shadow-sm border-0 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/40 dark:to-emerald-900/20 overflow-hidden relative">
+   446→                    <div className="absolute top-2 right-2 opacity-10">
+   447→                      <DollarSign className="h-12 w-12 text-emerald-600 dark:text-emerald-400" />
+   448→                    </div>
+   449→                    <CardContent className="p-4">
+   450→                      <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">Total Bruto</p>
+   451→                      <p className="text-xl font-bold text-emerald-900 dark:text-emerald-100">{fmt(result.planilla.total_salarios_brutos)}</p>
+   452→                    </CardContent>
+   453→                  </Card>
+   454→
+   455→                  <Card className="shadow-sm border-0 bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/40 dark:to-red-900/20 overflow-hidden relative">
+   456→                    <div className="absolute top-2 right-2 opacity-10">
+   457→                      <Minus className="h-12 w-12 text-red-600 dark:text-red-400" />
+   458→                    </div>
+   459→                    <CardContent className="p-4">
+   460→                      <p className="text-[11px] font-medium text-red-700 dark:text-red-300">Total Deducciones</p>
+   461→                      <p className="text-xl font-bold text-red-900 dark:text-red-100">-{fmt(result.planilla.total_descuentos)}</p>
+   462→                    </CardContent>
+   463→                  </Card>
+   464→
+   465→                  <Card className="shadow-sm border-0 bg-gradient-to-br from-teal-50 to-teal-100/50 dark:from-teal-950/40 dark:to-teal-900/20 overflow-hidden relative">
+   466→                    <div className="absolute top-2 right-2 opacity-10">
+   467→                      <CheckCircle className="h-12 w-12 text-teal-600 dark:text-teal-400" />
+   468→                    </div>
+   469→                    <CardContent className="p-4">
+   470→                      <p className="text-[11px] font-medium text-teal-700 dark:text-teal-300">Total Neto</p>
+   471→                      <p className="text-xl font-bold text-teal-900 dark:text-teal-100">{fmt(result.planilla.total_neto_a_pagar)}</p>
+   472→                    </CardContent>
+   473→                  </Card>
+   474→
+   475→                  <Card className="shadow-sm border-0 bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-800/60 dark:to-slate-700/30 overflow-hidden relative">
+   476→                    <div className="absolute top-2 right-2 opacity-10">
+   477→                      <Shield className="h-12 w-12 text-slate-500 dark:text-slate-400" />
+   478→                    </div>
+   479→                    <CardContent className="p-4">
+   480→                      <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Cargas Patronales</p>
+   481→                      <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{fmt(result.planilla.total_cargas_patronales)}</p>
+   482→                    </CardContent>
+   483→                  </Card>
+   484→                </div>
+   485→
+   486→                {/* Visual Breakdown - Horizontal Stacked Bar */}
+   487→                <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
+   488→                  <CardHeader className="pb-3">
+   489→                    <CardTitle className="text-base dark:text-slate-100">Desglose Visual de Deducciones</CardTitle>
+   490→                    <CardDescription className="dark:text-slate-400">Distribución del salario bruto en conceptos</CardDescription>
+   491→                  </CardHeader>
+   492→                  <CardContent className="space-y-4">
+   493→                    {(() => {
+   494→                      const bruto = result.planilla.total_salarios_brutos || 1;
+   495→                      const neto = result.planilla.total_neto_a_pagar;
+   496→                      const isss = result.planilla.total_isss_laboral;
+   497→                      const afp = result.planilla.total_afp_laboral;
+   498→                      const isr = result.planilla.total_isr_retenido;
+   499→                      const otros = result.planilla.total_descuentos - isss - afp - isr;
+   500→                      
+   501→                      const segments = [
+   502→                        { label: 'Neto', value: neto, color: 'bg-emerald-500 dark:bg-emerald-400', textColor: 'text-emerald-700 dark:text-emerald-300' },
+   503→                        { label: 'ISSS', value: isss, color: 'bg-amber-400 dark:bg-amber-500', textColor: 'text-amber-700 dark:text-amber-300' },
+   504→                        { label: 'AFP', value: afp, color: 'bg-orange-400 dark:bg-orange-500', textColor: 'text-orange-700 dark:text-orange-300' },
+   505→                        { label: 'ISR', value: isr, color: 'bg-red-400 dark:bg-red-500', textColor: 'text-red-700 dark:text-red-300' },
+   506→                        { label: 'Otros Desc.', value: Math.max(0, otros), color: 'bg-slate-400 dark:bg-slate-500', textColor: 'text-slate-600 dark:text-slate-300' },
+   507→                      ];
+   508→
+   509→                      return (
+   510→                        <>
+   511→                          {/* Stacked bar */}
+   512→                          <div className="flex rounded-lg overflow-hidden h-8">
+   513→                            {segments.map(s => (
+   514→                              <div
+   515→                                key={s.label}
+   516→                                className={`${s.color} transition-all duration-500 flex items-center justify-center`}
+   517→                                style={{ width: `${Math.max((s.value / bruto) * 100, 0.5)}%` }}
+   518→                                title={`${s.label}: ${fmt(s.value)}`}
+   519→                              >
+   520→                                {(s.value / bruto) * 100 > 8 && (
+   521→                                  <span className="text-[10px] font-bold text-white drop-shadow-sm">{Math.round((s.value / bruto) * 100)}%</span>
+   522→                                )}
+   523→                              </div>
+   524→                            ))}
+   525→                          </div>
+   526→
+   527→                          {/* Legend */}
+   528→                          <div className="flex flex-wrap gap-3">
+   529→                            {segments.map(s => (
+   530→                              <div key={s.label} className="flex items-center gap-1.5">
+   531→                                <div className={`h-2.5 w-2.5 rounded-sm ${s.color}`} />
+   532→                                <span className={`text-xs font-medium ${s.textColor}`}>
+   533→                                  {s.label}: {fmt(s.value)}
+   534→                                </span>
+   535→                              </div>
+   536→                            ))}
+   537→                          </div>
+   538→                        </>
+   539→                      );
+   540→                    })()}
+   541→                  </CardContent>
+   542→                </Card>
+   543→
+   544→                {/* Anomalies */}
+   545→                {result.anomalies.length > 0 && (
+   546→                  <Card className="shadow-sm border-amber-200 dark:border-amber-800 dark:bg-slate-900">
+   547→                    <CardHeader className="pb-3">
+   548→                      <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-300">
+   549→                        <AlertTriangle className="h-4 w-4" /> Anomalías Detectadas ({result.anomalies.length})
+   550→                      </CardTitle>
+   551→                    </CardHeader>
+   552→                    <CardContent>
+   553→                      <div className="space-y-2 max-h-40 overflow-y-auto">
+   554→                        {result.anomalies.map((a, i) => (
+   555→                          <div key={i} className={`flex items-start gap-2 p-2 rounded text-xs ${a.severidad === 'ALTA' ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'}`}>
+   556→                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+   557→                            <div>
+   558→                              <p className="font-medium">{a.tipo.replace(/_/g, ' ')}</p>
+   559→                              <p>{a.empleado_nombre}: {a.detalle}</p>
+   560→                            </div>
+   561→                          </div>
+   562→                        ))}
+   563→                      </div>
+   564→                    </CardContent>
+   565→                  </Card>
+   566→                )}
+   567→
+   568→                {/* Employee details table */}
+   569→                <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
+   570→                  <CardHeader className="pb-3">
+   571→                    <div className="flex items-center justify-between">
+   572→                      <CardTitle className="text-base dark:text-slate-100">Detalle por Empleado</CardTitle>
+   573→                      <Button variant="outline" size="sm" onClick={exportCSV} className="dark:border-slate-600 dark:text-slate-300">
+   574→                        <Download className="h-3.5 w-3.5 mr-1" /> Exportar CSV
+   575→                      </Button>
+   576→                    </div>
+   577→                  </CardHeader>
+   578→                  <CardContent className="p-0">
+   579→                    <div className="overflow-x-auto">
+   580→                      <table className="w-full text-sm">
+   581→                        <thead>
+   582→                          <tr className="border-t border-b bg-slate-50/80 dark:bg-slate-800/80">
+   583→                            <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3 w-8"></th>
+   584→                            <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Empleado</th>
+   585→                            <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Salario Base</th>
+   586→                            <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Bruto</th>
+   587→                            <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">ISSS</th>
+   588→                            <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">AFP</th>
+   589→                            <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">ISR</th>
+   590→                            <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Neto</th>
+   591→                          </tr>
+   592→                        </thead>
+   593→                        <tbody>
+   594→                          {result.detalles.map((d) => (
+   595→                            <React.Fragment key={d.empleado_id}>
+   596→                              <tr
+   597→                                className="border-b hover:bg-slate-50/50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+   598→                                onClick={() => setExpandedRow(expandedRow === d.empleado_id ? null : d.empleado_id)}
+   599→                              >
+   600→                                <td className="p-3 dark:text-slate-400">
+   601→                                  {expandedRow === d.empleado_id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+   602→                                </td>
+   603→                                <td className="p-3 font-mono text-xs dark:text-slate-300">{d.empleado_id.substring(0, 8)}...</td>
+   604→                                <td className="p-3 text-right dark:text-slate-300">{fmt(d.salario_base)}</td>
+   605→                                <td className="p-3 text-right font-medium dark:text-slate-200">{fmt(d.salario_bruto)}</td>
+   606→                                <td className="p-3 text-right text-red-600 dark:text-red-400">-{fmt(d.isss_laboral)}</td>
+   607→                                <td className="p-3 text-right text-red-600 dark:text-red-400">-{fmt(d.afp_laboral)}</td>
+   608→                                <td className="p-3 text-right text-red-600 dark:text-red-400">-{fmt(d.isr_retenido)}</td>
+   609→                                <td className="p-3 text-right font-bold text-emerald-700 dark:text-emerald-400">{fmt(d.salario_neto)}</td>
+   610→                              </tr>
+   611→                              {expandedRow === d.empleado_id && (
+   612→                                <tr>
+   613→                                  <td colSpan={8} className="bg-slate-50/50 dark:bg-slate-800/50 p-4">
+   614→                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+   615→                                      <div><span className="text-slate-500 dark:text-slate-400">Horas Extra:</span> <span className="font-medium dark:text-slate-200">{fmt(d.total_horas_extra)}</span></div>
+   616→                                      <div><span className="text-slate-500 dark:text-slate-400">Comisiones:</span> <span className="font-medium dark:text-slate-200">{fmt(d.total_comisiones)}</span></div>
+   617→                                      <div><span className="text-slate-500 dark:text-slate-400">Bonos:</span> <span className="font-medium dark:text-slate-200">{fmt(d.total_bonos)}</span></div>
+   618→                                      <div><span className="text-slate-500 dark:text-slate-400">Renta Imponible:</span> <span className="font-medium dark:text-slate-200">{fmt(d.renta_imponible)}</span></div>
+   619→                                      <div><span className="text-slate-500 dark:text-slate-400">Cuota Alimenticia:</span> <span className="font-medium dark:text-slate-200">{fmt(d.cuota_alimenticia)}</span></div>
+   620→                                      <div><span className="text-slate-500 dark:text-slate-400">Préstamo:</span> <span className="font-medium dark:text-slate-200">{fmt(d.prestamo_patronal)}</span></div>
+   621→                                      <div><span className="text-slate-500 dark:text-slate-400">Seguro:</span> <span className="font-medium dark:text-slate-200">{fmt(d.seguro_complementario)}</span></div>
+   622→                                      <div><span className="text-slate-500 dark:text-slate-400">Otros Desc:</span> <span className="font-medium dark:text-slate-200">{fmt(d.otros_descuentos)}</span></div>
+   623→                                    </div>
+   624→                                  </td>
+   625→                                </tr>
+   626→                              )}
+   627→                            </React.Fragment>
+   628→                          ))}
+   629→                        </tbody>
+   630→                      </table>
+   631→                    </div>
+   632→                  </CardContent>
+   633→                </Card>
+   634→              </>
+   635→            ) : (
+   636→              <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-700">
+   637→                <CardContent className="p-8 text-center">
+   638→                  <Calculator className="h-10 w-10 text-slate-400 dark:text-slate-600 mx-auto mb-3" />
+   639→                  <p className="text-slate-600 dark:text-slate-400 font-medium">Ejecute el cálculo para ver resultados</p>
+   640→                  <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">Complete los pasos anteriores y presione &quot;Ejecutar Cálculo&quot;</p>
+   641→                </CardContent>
+   642→              </Card>
+   643→            )}
+   644→          </div>
+   645→        );
+   646→    }
+   647→  };
+   648→
+   649→  return (
+   650→    <div className="space-y-4">
+   651→      {/* Enhanced Step Indicator */}
+   652→      <div className="overflow-x-auto pb-2">
+   653→        <div className="flex items-start min-w-max">
+   654→          {STEPS.map((s, i) => {
+   655→            const isCompleted = step > s.num;
+   656→            const isActive = step === s.num;
+   657→            const isPending = step < s.num;
+   658→            const Icon = s.icon;
+   659→
+   660→            return (
+   661→              <React.Fragment key={s.num}>
+   662→                <button
+   663→                  onClick={() => setStep(s.num)}
+   664→                  className="flex flex-col items-center gap-1.5 group"
+   665→                >
+   666→                  <div className={`flex items-center justify-center h-9 w-9 rounded-full transition-all duration-300 ${
+   667→                    isCompleted
+   668→                      ? 'bg-emerald-500 dark:bg-emerald-600 shadow-md shadow-emerald-200 dark:shadow-emerald-900/50'
+   669→                      : isActive
+   670→                      ? 'bg-amber-500 dark:bg-amber-600 shadow-lg shadow-amber-200 dark:shadow-amber-900/50'
+   671→                      : 'bg-slate-200 dark:bg-slate-700'
+   672→                  }`}>
+   673→                    {isCompleted ? (
+   674→                      <CheckCircle className="h-4.5 w-4.5 text-white" />
+   675→                    ) : isActive ? (
+   676→                      <>
+   677→                        <span className="absolute h-9 w-9 rounded-full bg-amber-400 animate-ping opacity-30" />
+   678→                        <span className="relative text-white text-sm font-bold">{s.num}</span>
+   679→                      </>
+   680→                    ) : (
+   681→                      <span className="text-slate-400 dark:text-slate-500 text-sm font-medium">{s.num}</span>
+   682→                    )}
+   683→                  </div>
+   684→                  <span className={`text-[10px] font-medium transition-colors max-w-[72px] text-center leading-tight ${
+   685→                    isCompleted
+   686→                      ? 'text-emerald-700 dark:text-emerald-400'
+   687→                      : isActive
+   688→                      ? 'text-amber-700 dark:text-amber-400'
+   689→                      : 'text-slate-400 dark:text-slate-500'
+   690→                  }`}>
+   691→                    {s.label}
+   692→                  </span>
+   693→                </button>
+   694→                {i < STEPS.length - 1 && (
+   695→                  <div className={`flex-1 min-w-[24px] h-0.5 mt-[18px] mx-1 rounded transition-colors ${
+   696→                    isCompleted
+   697→                      ? 'bg-emerald-400 dark:bg-emerald-600'
+   698→                      : isActive
+   699→                      ? 'bg-gradient-to-r from-emerald-400 to-amber-400 dark:from-emerald-600 dark:to-amber-600'
+   700→                      : 'bg-slate-200 dark:bg-slate-700'
+   701→                  }`} />
+   702→                )}
+   703→              </React.Fragment>
+   704→            );
+   705→          })}
+   706→        </div>
+   707→      </div>
+   708→
+   709→      {/* Step content */}
+   710→      {renderStepContent()}
+   711→
+   712→      {/* Navigation buttons */}
+   713→      <div className="flex items-center justify-between pt-2">
+   714→        <Button variant="outline" onClick={prevStep} disabled={step === 1} className="dark:border-slate-600 dark:text-slate-300">
+   715→          <ArrowLeft className="h-4 w-4 mr-1" /> Anterior
+   716→        </Button>
+   717→        {step < 8 ? (
+   718→          <Button onClick={nextStep} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600">
+   719→            Siguiente <ArrowRight className="h-4 w-4 ml-1" />
+   720→          </Button>
+   721→        ) : (
+   722→          <div className="flex gap-2">
+   723→            {!result && (
+   724→              <Button onClick={handleCalculate} disabled={calculating} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600">
+   725→                {calculating ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Calculando...</> : <><Calculator className="h-4 w-4 mr-1" /> Ejecutar Cálculo</>}
+   726→              </Button>
+   727→            )}
+   728→            {result && (
+   729→              <Button variant="outline" onClick={() => { setResult(null); setStep(1); }} className="dark:border-slate-600 dark:text-slate-300">
+   730→                <RefreshCw className="h-4 w-4 mr-1" /> Nuevo Cálculo
+   731→              </Button>
+   732→            )}
+   733→          </div>
+   734→        )}
+   735→      </div>
+   736→    </div>
+   737→  );
+   738→}
+   739→

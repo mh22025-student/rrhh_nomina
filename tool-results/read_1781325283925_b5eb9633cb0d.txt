@@ -1,0 +1,502 @@
+  1550→                    <div className="flex items-end gap-1 h-16">
+  1551→                      {empleado.contratos.map((c, idx) => {
+  1552→                        const maxSal = Math.max(...empleado.contratos.map(x => x.salario_base_contrato));
+  1553→                        const minSal = Math.min(...empleado.contratos.map(x => x.salario_base_contrato));
+  1554→                        const range = maxSal - minSal || 1;
+  1555→                        const height = 20 + ((c.salario_base_contrato - minSal) / range) * 80;
+  1556→                        return (
+  1557→                          <div key={c.id} className="flex-1 flex flex-col items-center gap-1">
+  1558→                            <div
+  1559→                              className={`w-full rounded-t ${c.activo ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'} transition-all`}
+  1560→                              style={{ height: `${height}%` }}
+  1561→                            />
+  1562→                            <span className="text-[9px] text-slate-400">{formatDate(c.fecha_inicio).slice(-4)}</span>
+  1563→                          </div>
+  1564→                        );
+  1565→                      })}
+  1566→                    </div>
+  1567→                  </div>
+  1568→                )}
+  1569→              </CardContent>
+  1570→            </Card>
+  1571→          </div>
+  1572→        </TabsContent>
+  1573→
+  1574→        {/* ═══════════════════════════════════════════
+  1575→            TAB: SALARIO — Large display + band + history
+  1576→           ═══════════════════════════════════════════ */}
+  1577→        <TabsContent value="salario">
+  1578→          <div className="space-y-4">
+  1579→            {/* Current salary large display */}
+  1580→            <Card className="shadow-sm overflow-hidden">
+  1581→              <div className="bg-gradient-to-r from-emerald-600 to-teal-500 p-6 text-white">
+  1582→                <p className="text-sm font-medium opacity-80 mb-1">Salario Base Mensual</p>
+  1583→                <p className="text-4xl font-bold tracking-tight">{formatSalary(empleado.salario_base)}</p>
+  1584→                <div className="flex items-center gap-3 mt-3 text-sm opacity-90">
+  1585→                  <span className="flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" /> {empleado.perfil_puesto?.nombre_puesto || 'Sin puesto'}</span>
+  1586→                  <span>•</span>
+  1587→                  <span>{empleado.area?.nombre || 'Sin área'}</span>
+  1588→                </div>
+  1589→              </div>
+  1590→              {/* Salary band position indicator */}
+  1591→              {empleado.perfil_puesto?.banda_salarial && (
+  1592→                <div className="p-5">
+  1593→                  <div className="flex items-center justify-between mb-2">
+  1594→                    <p className="text-xs text-slate-500 font-medium">Posición en Banda Salarial</p>
+  1595→                    <Badge variant="outline" className="text-xs">{empleado.perfil_puesto.banda_salarial.nombre}</Badge>
+  1596→                  </div>
+  1597→                  <div className="relative h-4 rounded-full bg-gradient-to-r from-emerald-200 via-amber-200 to-red-200 overflow-hidden">
+  1598→                    <div
+  1599→                      className="absolute top-0 h-full w-1.5 bg-slate-800 dark:bg-white rounded-full shadow-lg transition-all duration-500"
+  1600→                      style={{
+  1601→                        left: `${Math.min(100, Math.max(0,
+  1602→                          ((empleado.salario_base - empleado.perfil_puesto.banda_salarial.salario_minimo) /
+  1603→                          (empleado.perfil_puesto.banda_salarial.salario_maximo - empleado.perfil_puesto.banda_salarial.salario_minimo)) * 100
+  1604→                        ))}%`
+  1605→                      }}
+  1606→                    />
+  1607→                  </div>
+  1608→                  <div className="flex justify-between mt-1.5 text-xs text-slate-400">
+  1609→                    <span>Mín: {formatSalary(empleado.perfil_puesto.banda_salarial.salario_minimo)}</span>
+  1610→                    <span>Máx: {formatSalary(empleado.perfil_puesto.banda_salarial.salario_maximo)}</span>
+  1611→                  </div>
+  1612→                </div>
+  1613→              )}
+  1614→            </Card>
+  1615→
+  1616→            {/* Next review date */}
+  1617→            {empleado.cambios_salariales.length > 0 && (
+  1618→              <Card className="shadow-sm border-amber-200 bg-amber-50/30 dark:bg-amber-900/10">
+  1619→                <CardContent className="p-4 flex items-center gap-3">
+  1620→                  <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+  1621→                    <TrendingUp className="h-5 w-5 text-amber-600" />
+  1622→                  </div>
+  1623→                  <div>
+  1624→                    <p className="text-xs text-slate-500">Último cambio salarial</p>
+  1625→                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+  1626→                      {formatDate(empleado.cambios_salariales[0].fecha_cambio)} — {empleado.cambios_salariales[0].tipo_cambio}
+  1627→                    </p>
+  1628→                  </div>
+  1629→                </CardContent>
+  1630→              </Card>
+  1631→            )}
+  1632→
+  1633→            {/* Change history timeline */}
+  1634→            <Card className="shadow-sm">
+  1635→              <CardHeader className="pb-3">
+  1636→                <CardTitle className="text-base flex items-center gap-2">
+  1637→                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+  1638→                  Historial de Cambios Salariales
+  1639→                </CardTitle>
+  1640→              </CardHeader>
+  1641→              <CardContent>
+  1642→                {empleado.cambios_salariales.length === 0 ? (
+  1643→                  <p className="text-sm text-slate-500 text-center py-6">Sin cambios salariales registrados</p>
+  1644→                ) : (
+  1645→                  <div className="relative space-y-0">
+  1646→                    <div className="absolute left-5 top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700" />
+  1647→                    {empleado.cambios_salariales.map(cs => {
+  1648→                      const diff = cs.salario_nuevo - cs.salario_anterior;
+  1649→                      const isIncrease = diff > 0;
+  1650→                      return (
+  1651→                        <div key={cs.id} className="relative flex items-start gap-4 py-3">
+  1652→                          <div className={`relative z-10 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+  1653→                            isIncrease ? 'border-emerald-500 bg-emerald-500' : 'border-amber-500 bg-amber-500'
+  1654→                          }`}>
+  1655→                            <TrendingUp className={`h-2.5 w-2.5 text-white ${!isIncrease ? 'rotate-180' : ''}`} />
+  1656→                          </div>
+  1657→                          <div className="flex-1 p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+  1658→                            <div className="flex items-center justify-between">
+  1659→                              <div>
+  1660→                                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{cs.tipo_cambio}</p>
+  1661→                                <p className="text-xs text-slate-400 mt-0.5">{formatDate(cs.fecha_cambio)}</p>
+  1662→                              </div>
+  1663→                              <div className="text-right">
+  1664→                                <p className="text-sm font-mono text-slate-600 dark:text-slate-400">{formatSalary(cs.salario_anterior)} → {formatSalary(cs.salario_nuevo)}</p>
+  1665→                                <p className={`text-xs font-semibold ${isIncrease ? 'text-emerald-600' : 'text-amber-600'}`}>
+  1666→                                  {isIncrease ? '+' : ''}{formatSalary(diff)}
+  1667→                                </p>
+  1668→                              </div>
+  1669→                            </div>
+  1670→                            {cs.motivo && <p className="text-xs text-slate-400 mt-1.5 italic">{cs.motivo}</p>}
+  1671→                          </div>
+  1672→                        </div>
+  1673→                      );
+  1674→                    })}
+  1675→                  </div>
+  1676→                )}
+  1677→              </CardContent>
+  1678→            </Card>
+  1679→          </div>
+  1680→        </TabsContent>
+  1681→
+  1682→        {/* ═══════════════════════════════════════════
+  1683→            TAB: VACACIONES — Circular progress + per-year
+  1684→           ═══════════════════════════════════════════ */}
+  1685→        <TabsContent value="vacaciones">
+  1686→          <div className="space-y-4">
+  1687→            {/* Vacation balance summary */}
+  1688→            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  1689→              <Card className="shadow-sm bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200">
+  1690→                <CardContent className="p-5 flex items-center gap-4">
+  1691→                  <div className="relative">
+  1692→                    <CircularProgress value={totalVacDerecho > 0 ? totalVacPendientes : 0} max={totalVacDerecho || 1} size={80} strokeWidth={6} color="emerald" />
+  1693→                    <div className="absolute inset-0 flex items-center justify-center">
+  1694→                      <span className="text-lg font-bold text-emerald-700">{totalVacPendientes}</span>
+  1695→                    </div>
+  1696→                  </div>
+  1697→                  <div>
+  1698→                    <p className="text-xs text-slate-500 font-medium">Días Pendientes</p>
+  1699→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{totalVacPendientes}</p>
+  1700→                    <p className="text-xs text-slate-400">de {totalVacDerecho} totales</p>
+  1701→                  </div>
+  1702→                </CardContent>
+  1703→              </Card>
+  1704→              <Card className="shadow-sm">
+  1705→                <CardContent className="p-5 flex items-center gap-4">
+  1706→                  <div className="h-14 w-14 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+  1707→                    <CalendarDays className="h-6 w-6 text-amber-600" />
+  1708→                  </div>
+  1709→                  <div>
+  1710→                    <p className="text-xs text-slate-500 font-medium">Días Tomados</p>
+  1711→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{empleado.vacaciones.reduce((s, v) => s + v.dias_tomados, 0)}</p>
+  1712→                  </div>
+  1713→                </CardContent>
+  1714→              </Card>
+  1715→              <Card className="shadow-sm">
+  1716→                <CardContent className="p-5 flex items-center gap-4">
+  1717→                  <div className="h-14 w-14 rounded-xl bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+  1718→                    <DollarSign className="h-6 w-6 text-sky-600" />
+  1719→                  </div>
+  1720→                  <div>
+  1721→                    <p className="text-xs text-slate-500 font-medium">Días Vendidos</p>
+  1722→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{empleado.vacaciones.reduce((s, v) => s + v.dias_vendidos, 0)}</p>
+  1723→                  </div>
+  1724→                </CardContent>
+  1725→              </Card>
+  1726→            </div>
+  1727→
+  1728→            {/* Request vacation button for EMPLEADO */}
+  1729→            {userRole === 'EMPLEADO' && (
+  1730→              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+  1731→                <Palmtree className="h-4 w-4 mr-2" /> Solicitar Vacaciones
+  1732→              </Button>
+  1733→            )}
+  1734→
+  1735→            {/* Per-year breakdown with progress bars */}
+  1736→            <Card className="shadow-sm">
+  1737→              <CardHeader className="pb-3">
+  1738→                <CardTitle className="text-base flex items-center gap-2">
+  1739→                  <Palmtree className="h-4 w-4 text-emerald-600" />
+  1740→                  Desglose por Año
+  1741→                </CardTitle>
+  1742→              </CardHeader>
+  1743→              <CardContent>
+  1744→                {empleado.vacaciones.length === 0 ? (
+  1745→                  <div className="flex flex-col items-center py-10 text-slate-400">
+  1746→                    <Palmtree className="h-10 w-10 mb-2" />
+  1747→                    <p className="text-sm font-medium">Sin registros de vacaciones</p>
+  1748→                  </div>
+  1749→                ) : (
+  1750→                  <div className="space-y-4">
+  1751→                    {empleado.vacaciones.map(v => {
+  1752→                      const usedPct = v.dias_derecho > 0 ? (v.dias_tomados / v.dias_derecho) * 100 : 0;
+  1753→                      const pendPct = v.dias_derecho > 0 ? (v.dias_pendientes / v.dias_derecho) * 100 : 0;
+  1754→                      return (
+  1755→                        <div key={v.id} className="p-4 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+  1756→                          <div className="flex items-center justify-between mb-3">
+  1757→                            <div className="flex items-center gap-2">
+  1758→                              <span className="text-lg font-bold text-slate-800 dark:text-slate-200">{v.anio}</span>
+  1759→                              <Badge className={`text-xs ${v.estado === 'ABIERTO' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+  1760→                                {v.estado}
+  1761→                              </Badge>
+  1762→                            </div>
+  1763→                            <span className="text-sm font-semibold text-amber-600">{v.dias_pendientes} días pend.</span>
+  1764→                          </div>
+  1765→                          <div className="grid grid-cols-4 gap-3 text-center mb-3">
+  1766→                            <div>
+  1767→                              <p className="text-[10px] text-slate-400 uppercase">Derecho</p>
+  1768→                              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{v.dias_derecho}</p>
+  1769→                            </div>
+  1770→                            <div>
+  1771→                              <p className="text-[10px] text-slate-400 uppercase">Tomados</p>
+  1772→                              <p className="text-sm font-semibold text-emerald-600">{v.dias_tomados}</p>
+  1773→                            </div>
+  1774→                            <div>
+  1775→                              <p className="text-[10px] text-slate-400 uppercase">Pendientes</p>
+  1776→                              <p className="text-sm font-semibold text-amber-600">{v.dias_pendientes}</p>
+  1777→                            </div>
+  1778→                            <div>
+  1779→                              <p className="text-[10px] text-slate-400 uppercase">Vendidos</p>
+  1780→                              <p className="text-sm font-semibold text-sky-600">{v.dias_vendidos}</p>
+  1781→                            </div>
+  1782→                          </div>
+  1783→                          {/* Stacked progress bar */}
+  1784→                          <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+  1785→                            <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${usedPct}%` }} />
+  1786→                            <div className="bg-amber-400 transition-all duration-500" style={{ width: `${pendPct}%` }} />
+  1787→                          </div>
+  1788→                          <div className="flex justify-between mt-1 text-[10px] text-slate-400">
+  1789→                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Tomados</span>
+  1790→                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" /> Pendientes</span>
+  1791→                          </div>
+  1792→                        </div>
+  1793→                      );
+  1794→                    })}
+  1795→                  </div>
+  1796→                )}
+  1797→              </CardContent>
+  1798→            </Card>
+  1799→          </div>
+  1800→        </TabsContent>
+  1801→
+  1802→        {/* ═══════════════════════════════════════════
+  1803→            TAB: INCIDENCIAS
+  1804→           ═══════════════════════════════════════════ */}
+  1805→        <TabsContent value="incidencias">
+  1806→          <Card className="shadow-sm">
+  1807→            <CardHeader className="pb-3">
+  1808→              <CardTitle className="text-base flex items-center gap-2">
+  1809→                <AlertTriangle className="h-4 w-4 text-amber-500" />
+  1810→                Incidencias del Empleado
+  1811→              </CardTitle>
+  1812→              <CardDescription>Registro de incidencias, permisos y novedades</CardDescription>
+  1813→            </CardHeader>
+  1814→            <CardContent>
+  1815→              {empleado.incidencias.length === 0 ? (
+  1816→                <div className="flex flex-col items-center py-10 text-slate-400">
+  1817→                  <AlertTriangle className="h-10 w-10 mb-2" />
+  1818→                  <p className="text-sm font-medium">Sin incidencias registradas</p>
+  1819→                  <p className="text-xs">Las incidencias del empleado aparecerán aquí</p>
+  1820→                </div>
+  1821→              ) : (
+  1822→                <div className="space-y-3 max-h-96 overflow-y-auto">
+  1823→                  {empleado.incidencias.map(inc => {
+  1824→                    const tipoColors: Record<string, string> = {
+  1825→                      PERMISO: 'bg-sky-100 text-sky-700 border-sky-200',
+  1826→                      VACACION: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  1827→                      ENFERMEDAD: 'bg-amber-100 text-amber-700 border-amber-200',
+  1828→                      AUSENCIA: 'bg-red-100 text-red-700 border-red-200',
+  1829→                      HORAS_EXTRA: 'bg-purple-100 text-purple-700 border-purple-200',
+  1830→                    };
+  1831→                    const estadoColors: Record<string, string> = {
+  1832→                      PENDIENTE: 'bg-yellow-100 text-yellow-700',
+  1833→                      APROBADA: 'bg-emerald-100 text-emerald-700',
+  1834→                      RECHAZADA: 'bg-red-100 text-red-700',
+  1835→                    };
+  1836→                    return (
+  1837→                      <div key={inc.id} className="p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+  1838→                        <div className="flex items-center justify-between mb-1">
+  1839→                          <div className="flex items-center gap-2">
+  1840→                            <Badge variant="outline" className={tipoColors[inc.tipo] || 'bg-slate-100 text-slate-600'}>
+  1841→                              {inc.tipo}
+  1842→                            </Badge>
+  1843→                            <Badge className={estadoColors[inc.estado] || 'bg-slate-100 text-slate-600'}>
+  1844→                              {inc.estado}
+  1845→                            </Badge>
+  1846→                          </div>
+  1847→                          <span className="text-xs text-slate-400">{formatDate(inc.fecha_inicio)}</span>
+  1848→                        </div>
+  1849→                        {inc.descripcion && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{inc.descripcion}</p>}
+  1850→                        <div className="flex gap-4 mt-1.5 text-xs text-slate-400">
+  1851→                          {inc.cantidad_horas && <span>{inc.cantidad_horas} hrs</span>}
+  1852→                          {inc.monto && <span className="text-emerald-600 font-medium">{formatSalary(inc.monto)}</span>}
+  1853→                          {inc.fecha_fin && <span>Fin: {formatDate(inc.fecha_fin)}</span>}
+  1854→                        </div>
+  1855→                      </div>
+  1856→                    );
+  1857→                  })}
+  1858→                </div>
+  1859→              )}
+  1860→            </CardContent>
+  1861→          </Card>
+  1862→        </TabsContent>
+  1863→
+  1864→        {/* ═══════════════════════════════════════════
+  1865→            TAB: DOCUMENTOS — Enhanced Document Management
+  1866→           ═══════════════════════════════════════════ */}
+  1867→        <TabsContent value="documentos">
+  1868→          <div className="space-y-4">
+  1869→            {/* Header with Generate Button */}
+  1870→            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+  1871→              <div>
+  1872→                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+  1873→                  <FolderOpen className="h-5 w-5 text-emerald-600" />
+  1874→                  Gestión de Documentos
+  1875→                </h3>
+  1876→                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Documentos, constancias y certificaciones del empleado</p>
+  1877→              </div>
+  1878→              {(canEdit || canEditOwn) && (
+  1879→                <Button
+  1880→                  className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+  1881→                  onClick={() => { setDocGenType(''); setDocGenOpen(true); }}
+  1882→                >
+  1883→                  <Sparkles className="h-4 w-4 mr-1.5" /> Generar Documento
+  1884→                </Button>
+  1885→              )}
+  1886→            </div>
+  1887→
+  1888→            {/* Category Filter Tabs */}
+  1889→            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+  1890→              {[
+  1891→                { key: 'todos', label: 'Todos', icon: <FolderOpen className="h-3.5 w-3.5" /> },
+  1892→                { key: 'contratos', label: 'Contratos', icon: <FileText className="h-3.5 w-3.5" /> },
+  1893→                { key: 'constancias', label: 'Constancias', icon: <Stamp className="h-3.5 w-3.5" /> },
+  1894→                { key: 'boletas', label: 'Boletas de Pago', icon: <FileSpreadsheet className="h-3.5 w-3.5" /> },
+  1895→                { key: 'cartas', label: 'Cartas', icon: <LetterText className="h-3.5 w-3.5" /> },
+  1896→                { key: 'otros', label: 'Otros', icon: <FileCheck className="h-3.5 w-3.5" /> },
+  1897→              ].map(cat => (
+  1898→                <button
+  1899→                  key={cat.key}
+  1900→                  onClick={() => setDocCategory(cat.key)}
+  1901→                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+  1902→                    docCategory === cat.key
+  1903→                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 ring-1 ring-emerald-200 dark:ring-emerald-700'
+  1904→                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+  1905→                  }`}
+  1906→                >
+  1907→                  {cat.icon} {cat.label}
+  1908→                </button>
+  1909→              ))}
+  1910→            </div>
+  1911→
+  1912→            {/* Search */}
+  1913→            <div className="relative">
+  1914→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+  1915→              <Input
+  1916→                placeholder="Buscar documentos..."
+  1917→                value={docSearch}
+  1918→                onChange={e => setDocSearch(e.target.value)}
+  1919→                className="pl-9 h-9 text-sm"
+  1920→              />
+  1921→            </div>
+  1922→
+  1923→            {/* Document Grid */}
+  1924→            <DocumentGrid
+  1925→              empleado={empleado}
+  1926→              docCategory={docCategory}
+  1927→              docSearch={docSearch}
+  1928→              planillas={planillas}
+  1929→              selectedPlanilla={selectedPlanilla}
+  1930→              setSelectedPlanilla={setSelectedPlanilla}
+  1931→              aguinaldoAnio={aguinaldoAnio}
+  1932→              accessToken={accessToken}
+  1933→              formatDate={formatDate}
+  1934→              formatSalary={formatSalary}
+  1935→              addToRecentDocs={addToRecentDocs}
+  1936→              getNombreCompleto={getNombreCompleto}
+  1937→              toast={toast}
+  1938→              recentDocs={recentDocs}
+  1939→            />
+  1940→          </div>
+  1941→        </TabsContent>
+  1942→      </Tabs>
+  1943→
+  1944→      {/* ═══════════════════════════════════════════
+  1945→          NEW CONTRACT DIALOG
+  1946→         ═══════════════════════════════════════════ */}
+  1947→      <Dialog open={newContractOpen} onOpenChange={setNewContractOpen}>
+  1948→        <DialogContent>
+  1949→          <DialogHeader>
+  1950→            <DialogTitle>Nuevo Contrato</DialogTitle>
+  1951→            <DialogDescription>Crear un nuevo contrato para {getNombreCompleto()}</DialogDescription>
+  1952→          </DialogHeader>
+  1953→          <div className="space-y-4">
+  1954→            <div className="grid grid-cols-2 gap-3">
+  1955→              <div>
+  1956→                <Label>Tipo de Contrato</Label>
+  1957→                <Select value={contractData.tipo_contrato} onValueChange={v => setContractData(p => ({ ...p, tipo_contrato: v }))}>
+  1958→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1959→                  <SelectContent>
+  1960→                    <SelectItem value="INDEFINIDO">Indefinido</SelectItem>
+  1961→                    <SelectItem value="PLAZO_FIJO">Plazo Fijo</SelectItem>
+  1962→                    <SelectItem value="OBRA_LABOR">Obra/Labor</SelectItem>
+  1963→                    <SelectItem value="TEMPORAL">Temporal</SelectItem>
+  1964→                  </SelectContent>
+  1965→                </Select>
+  1966→              </div>
+  1967→              <div>
+  1968→                <Label>Tipo Jornada</Label>
+  1969→                <Select value={contractData.tipo_jornada} onValueChange={v => setContractData(p => ({ ...p, tipo_jornada: v }))}>
+  1970→                  <SelectTrigger><SelectValue /></SelectTrigger>
+  1971→                  <SelectContent>
+  1972→                    <SelectItem value="COMPLETA">Completa</SelectItem>
+  1973→                    <SelectItem value="MEDIA">Media</SelectItem>
+  1974→                    <SelectItem value="POR_HORAS">Por Horas</SelectItem>
+  1975→                  </SelectContent>
+  1976→                </Select>
+  1977→              </div>
+  1978→            </div>
+  1979→            <div>
+  1980→              <Label>Salario Base (USD)</Label>
+  1981→              <Input type="number" step="0.01" value={contractData.salario_base_contrato} onChange={e => setContractData(p => ({ ...p, salario_base_contrato: e.target.value }))} />
+  1982→            </div>
+  1983→            <div className="grid grid-cols-2 gap-3">
+  1984→              <div>
+  1985→                <Label>Fecha Inicio</Label>
+  1986→                <Input type="date" value={contractData.fecha_inicio} onChange={e => setContractData(p => ({ ...p, fecha_inicio: e.target.value }))} />
+  1987→              </div>
+  1988→              <div>
+  1989→                <Label>Fecha Fin (opcional)</Label>
+  1990→                <Input type="date" value={contractData.fecha_fin} onChange={e => setContractData(p => ({ ...p, fecha_fin: e.target.value }))} />
+  1991→              </div>
+  1992→            </div>
+  1993→            <div>
+  1994→              <Label>Observaciones</Label>
+  1995→              <Input value={contractData.observaciones} onChange={e => setContractData(p => ({ ...p, observaciones: e.target.value }))} />
+  1996→            </div>
+  1997→            <div className="flex justify-end gap-2">
+  1998→              <Button variant="outline" onClick={() => setNewContractOpen(false)}>Cancelar</Button>
+  1999→              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCreateContract} disabled={saving}>
+  2000→                {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Crear Contrato
+  2001→              </Button>
+  2002→            </div>
+  2003→          </div>
+  2004→        </DialogContent>
+  2005→      </Dialog>
+  2006→
+  2007→      {/* ═══════════════════════════════════════════
+  2008→          DOCUMENT GENERATION DIALOG
+  2009→         ═══════════════════════════════════════════ */}
+  2010→      <Dialog open={docGenOpen} onOpenChange={setDocGenOpen}>
+  2011→        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+  2012→          <DialogHeader>
+  2013→            <DialogTitle className="flex items-center gap-2">
+  2014→              <Sparkles className="h-5 w-5 text-emerald-600" />
+  2015→              Generar Documento
+  2016→            </DialogTitle>
+  2017→            <DialogDescription>Seleccione el tipo de documento a generar para {getNombreCompleto()}</DialogDescription>
+  2018→          </DialogHeader>
+  2019→
+  2020→          {!docGenType ? (
+  2021→            <div className="space-y-3">
+  2022→              <p className="text-sm text-slate-600 dark:text-slate-400">Seleccione el tipo de documento:</p>
+  2023→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  2024→                {[
+  2025→                  { value: 'constancia_empleo', label: 'Constancia de Empleo', icon: <Stamp className="h-5 w-5" />, desc: 'Certifica que la persona labora en la empresa', color: 'emerald' },
+  2026→                  { value: 'constancia_salario', label: 'Constancia de Salario', icon: <DollarSign className="h-5 w-5" />, desc: 'Certifica el salario actual del empleado', color: 'amber' },
+  2027→                  { value: 'carta_referencia', label: 'Carta de Referencia', icon: <LetterText className="h-5 w-5" />, desc: 'Carta de referencia laboral', color: 'sky' },
+  2028→                  { value: 'constancia_aguinaldo', label: 'Constancia de Aguinaldo', icon: <Palmtree className="h-5 w-5" />, desc: 'Constancia de cálculo de aguinaldo', color: 'purple' },
+  2029→                  { value: 'boleta_pago', label: 'Boleta de Pago', icon: <FileSpreadsheet className="h-5 w-5" />, desc: 'Boleta de pago de planilla', color: 'rose' },
+  2030→                ].map(docType => {
+  2031→                  const colorMap: Record<string, string> = {
+  2032→                    emerald: 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20',
+  2033→                    amber: 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20',
+  2034→                    sky: 'border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-900/10 hover:border-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20',
+  2035→                    purple: 'border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20',
+  2036→                    rose: 'border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-900/10 hover:border-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20',
+  2037→                  };
+  2038→                  const iconColorMap: Record<string, string> = {
+  2039→                    emerald: 'text-emerald-600 dark:text-emerald-400',
+  2040→                    amber: 'text-amber-600 dark:text-amber-400',
+  2041→                    sky: 'text-sky-600 dark:text-sky-400',
+  2042→                    purple: 'text-purple-600 dark:text-purple-400',
+  2043→                    rose: 'text-rose-600 dark:text-rose-400',
+  2044→                  };
+  2045→                  return (
+  2046→                    <button
+  2047→                      key={docType.value}
+  2048→                      onClick={() => setDocGenType(docType.value)}
+  2049→                      className={`p-4 rounded-xl border-2 text-left transition-all ${colorMap[docType.color] || colorMap.emerald}`}
+
+[showing lines 1550-2049 of 2085; use offset=2050 with limit to continue reading]

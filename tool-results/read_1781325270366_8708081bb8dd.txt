@@ -1,0 +1,502 @@
+  1350→                        <SelectItem value="MASCULINO">Masculino</SelectItem>
+  1351→                        <SelectItem value="FEMENINO">Femenino</SelectItem>
+  1352→                      </SelectContent>
+  1353→                    </Select>
+  1354→                  </div>
+  1355→                  <EditField label="Teléfono" field="telefono" />
+  1356→                  <EditField label="Email Personal" field="email_personal" type="email" />
+  1357→                  <div className="sm:col-span-2 lg:col-span-3">
+  1358→                    <EditField label="Dirección" field="direccion" />
+  1359→                  </div>
+  1360→                  <Separator className="sm:col-span-2 lg:col-span-3" />
+  1361→                  <EditField label="Contacto Emergencia Nombre" field="contacto_emergencia_nombre" />
+  1362→                  <EditField label="Contacto Emergencia Teléfono" field="contacto_emergencia_telefono" />
+  1363→                  <EditField label="Contacto Emergencia Relación" field="contacto_emergencia_relacion" />
+  1364→                </div>
+  1365→              </CardContent>
+  1366→            </Card>
+  1367→          ) : (
+  1368→            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1369→              {/* Datos Personales */}
+  1370→              <Card className="shadow-sm border-l-4 border-l-emerald-500">
+  1371→                <CardHeader className="pb-2">
+  1372→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+  1373→                    <User className="h-4 w-4" /> Datos Personales
+  1374→                  </CardTitle>
+  1375→                </CardHeader>
+  1376→                <CardContent className="pt-0 space-y-0.5">
+  1377→                  <InfoField label="Primer Nombre" value={empleado.primer_nombre} icon={<User className="h-3.5 w-3.5" />} />
+  1378→                  <InfoField label="Segundo Nombre" value={empleado.segundo_nombre} icon={<User className="h-3.5 w-3.5" />} />
+  1379→                  <InfoField label="Primer Apellido" value={empleado.primer_apellido} icon={<User className="h-3.5 w-3.5" />} />
+  1380→                  <InfoField label="Segundo Apellido" value={empleado.segundo_apellido} icon={<User className="h-3.5 w-3.5" />} />
+  1381→                  <InfoField label="Apellido de Casada" value={empleado.apellido_casada} icon={<User className="h-3.5 w-3.5" />} />
+  1382→                  <InfoField label="DUI" value={empleado.dui} icon={<CreditCard className="h-3.5 w-3.5" />} />
+  1383→                  <InfoField label="NIT" value={empleado.nit} icon={<Hash className="h-3.5 w-3.5" />} />
+  1384→                  <InfoField label="Fecha Nacimiento" value={formatDate(empleado.fecha_nacimiento)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+  1385→                  <InfoField label="Género" value={empleado.genero} icon={<User className="h-3.5 w-3.5" />} />
+  1386→                  <InfoField label="Estado Civil" value={empleado.estado_civil} icon={<Users className="h-3.5 w-3.5" />} />
+  1387→                  <InfoField label="Nacionalidad" value={empleado.nacionalidad} icon={<Globe className="h-3.5 w-3.5" />} />
+  1388→                </CardContent>
+  1389→              </Card>
+  1390→
+  1391→              {/* Datos Laborales */}
+  1392→              <Card className="shadow-sm border-l-4 border-l-amber-500">
+  1393→                <CardHeader className="pb-2">
+  1394→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-700 dark:text-amber-400">
+  1395→                    <Briefcase className="h-4 w-4" /> Datos Laborales
+  1396→                  </CardTitle>
+  1397→                </CardHeader>
+  1398→                <CardContent className="pt-0 space-y-0.5">
+  1399→                  <InfoField label="Código Empleado" value={empleado.codigo_empleado} icon={<Hash className="h-3.5 w-3.5" />} />
+  1400→                  <InfoField label="Puesto" value={empleado.perfil_puesto?.nombre_puesto} icon={<Briefcase className="h-3.5 w-3.5" />} />
+  1401→                  <InfoField label="Área" value={empleado.area?.nombre} icon={<Building2 className="h-3.5 w-3.5" />} />
+  1402→                  <InfoField label="Fecha Ingreso" value={formatDate(empleado.fecha_ingreso)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+  1403→                  <InfoField label="Fecha Salida" value={formatDate(empleado.fecha_salida)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+  1404→                  <InfoField label="Estado" value={empleado.estado} icon={<Shield className="h-3.5 w-3.5" />} />
+  1405→                  <InfoField label="Banda Salarial" value={empleado.perfil_puesto?.banda_salarial?.nombre} icon={<Award className="h-3.5 w-3.5" />} />
+  1406→                </CardContent>
+  1407→              </Card>
+  1408→
+  1409→              {/* Contacto */}
+  1410→              <Card className="shadow-sm border-l-4 border-l-sky-500">
+  1411→                <CardHeader className="pb-2">
+  1412→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-sky-700 dark:text-sky-400">
+  1413→                    <Phone className="h-4 w-4" /> Contacto
+  1414→                  </CardTitle>
+  1415→                </CardHeader>
+  1416→                <CardContent className="pt-0 space-y-0.5">
+  1417→                  <InfoField label="Teléfono" value={empleado.telefono} icon={<Phone className="h-3.5 w-3.5" />} />
+  1418→                  <InfoField label="Email Personal" value={empleado.email_personal} icon={<Mail className="h-3.5 w-3.5" />} />
+  1419→                  <Separator className="my-2" />
+  1420→                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">Contacto de Emergencia</p>
+  1421→                  <InfoField label="Nombre" value={empleado.contacto_emergencia_nombre} icon={<User className="h-3.5 w-3.5" />} />
+  1422→                  <InfoField label="Teléfono" value={empleado.contacto_emergencia_telefono} icon={<Phone className="h-3.5 w-3.5" />} />
+  1423→                  <InfoField label="Relación" value={empleado.contacto_emergencia_relacion} icon={<Users className="h-3.5 w-3.5" />} />
+  1424→                </CardContent>
+  1425→              </Card>
+  1426→
+  1427→              {/* Ubicación + Previsional */}
+  1428→              <Card className="shadow-sm border-l-4 border-l-purple-500">
+  1429→                <CardHeader className="pb-2">
+  1430→                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-purple-700 dark:text-purple-400">
+  1431→                    <MapPin className="h-4 w-4" /> Ubicación y Previsional
+  1432→                  </CardTitle>
+  1433→                </CardHeader>
+  1434→                <CardContent className="pt-0 space-y-0.5">
+  1435→                  <InfoField label="Dirección" value={empleado.direccion} icon={<MapPin className="h-3.5 w-3.5" />} />
+  1436→                  <Separator className="my-2" />
+  1437→                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-1">Datos Previsionales</p>
+  1438→                  <InfoField label="Número ISSS" value={empleado.numero_isss} icon={<Shield className="h-3.5 w-3.5" />} />
+  1439→                  <InfoField label="Número AFP (NUP)" value={empleado.numero_afp} icon={<Shield className="h-3.5 w-3.5" />} />
+  1440→                  <InfoField label="AFP Administradora" value={empleado.afp_administradora} icon={<Building2 className="h-3.5 w-3.5" />} />
+  1441→                  <InfoField label="Tipo de Sangre" value={empleado.tipo_sangre} icon={<Droplets className="h-3.5 w-3.5" />} />
+  1442→                </CardContent>
+  1443→              </Card>
+  1444→            </div>
+  1445→          )}
+  1446→        </TabsContent>
+  1447→
+  1448→        {/* ═══════════════════════════════════════════
+  1449→            TAB: CONTRATOS — Timeline + status badges
+  1450→           ═══════════════════════════════════════════ */}
+  1451→        <TabsContent value="contratos">
+  1452→          <div className="space-y-4">
+  1453→            {/* Active Contract Highlighted */}
+  1454→            <Card className={`shadow-sm ${activeContract ? 'border-emerald-300 border-2 bg-emerald-50/30 dark:bg-emerald-900/10' : ''}`}>
+  1455→              <CardHeader className="pb-3">
+  1456→                <div className="flex items-center justify-between">
+  1457→                  <CardTitle className="text-base flex items-center gap-2">
+  1458→                    <FileText className="h-4 w-4 text-emerald-600" />
+  1459→                    Contrato Vigente
+  1460→                    {activeContract && (
+  1461→                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs ml-2">Activo</Badge>
+  1462→                    )}
+  1463→                  </CardTitle>
+  1464→                  {canEdit && (
+  1465→                    <Button size="sm" variant="outline" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => setNewContractOpen(true)}>
+  1466→                      <Plus className="h-4 w-4 mr-1" /> Nuevo Contrato
+  1467→                    </Button>
+  1468→                  )}
+  1469→                </div>
+  1470→              </CardHeader>
+  1471→              <CardContent>
+  1472→                {activeContract ? (
+  1473→                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  1474→                    <InfoField label="Tipo de Contrato" value={activeContract.tipo_contrato} icon={<FileText className="h-3.5 w-3.5" />} />
+  1475→                    <InfoField label="Salario Base" value={formatSalary(activeContract.salario_base_contrato)} icon={<DollarSign className="h-3.5 w-3.5" />} />
+  1476→                    <InfoField label="Jornada" value={activeContract.tipo_jornada} icon={<Clock className="h-3.5 w-3.5" />} />
+  1477→                    <InfoField label="Fecha Inicio" value={formatDate(activeContract.fecha_inicio)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+  1478→                    <InfoField label="Fecha Fin" value={activeContract.fecha_fin ? formatDate(activeContract.fecha_fin) : 'Indefinido'} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+  1479→                    <InfoField label="Puesto" value={activeContract.perfil_puesto?.nombre_puesto || '—'} icon={<Briefcase className="h-3.5 w-3.5" />} />
+  1480→                    {activeContract.observaciones && (
+  1481→                      <div className="sm:col-span-2 lg:col-span-3">
+  1482→                        <InfoField label="Observaciones" value={activeContract.observaciones} icon={<FileText className="h-3.5 w-3.5" />} />
+  1483→                      </div>
+  1484→                    )}
+  1485→                  </div>
+  1486→                ) : (
+  1487→                  <div className="flex flex-col items-center py-10 text-slate-400">
+  1488→                    <FileText className="h-10 w-10 mb-2" />
+  1489→                    <p className="text-sm font-medium">No hay contrato vigente</p>
+  1490→                  </div>
+  1491→                )}
+  1492→              </CardContent>
+  1493→            </Card>
+  1494→
+  1495→            {/* Contract History Timeline */}
+  1496→            <Card className="shadow-sm">
+  1497→              <CardHeader className="pb-3">
+  1498→                <CardTitle className="text-base flex items-center gap-2">
+  1499→                  <Clock className="h-4 w-4 text-slate-500" />
+  1500→                  Historial de Contratos
+  1501→                </CardTitle>
+  1502→              </CardHeader>
+  1503→              <CardContent>
+  1504→                {empleado.contratos.length === 0 ? (
+  1505→                  <p className="text-sm text-slate-500 text-center py-6">Sin contratos registrados</p>
+  1506→                ) : (
+  1507→                  <div className="relative space-y-0">
+  1508→                    {/* Timeline line */}
+  1509→                    <div className="absolute left-5 top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700" />
+  1510→                    {empleado.contratos.map((c, idx) => (
+  1511→                      <div key={c.id} className="relative flex items-start gap-4 py-3">
+  1512→                        {/* Timeline dot */}
+  1513→                        <div className={`relative z-10 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+  1514→                          c.activo
+  1515→                            ? 'border-emerald-500 bg-emerald-500'
+  1516→                            : 'border-slate-300 bg-white dark:bg-slate-800'
+  1517→                        }`}>
+  1518→                          {c.activo && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+  1519→                        </div>
+  1520→                        {/* Content card */}
+  1521→                        <div className={`flex-1 p-3 rounded-lg border transition-colors ${
+  1522→                          c.activo
+  1523→                            ? 'border-emerald-200 bg-emerald-50/50 dark:bg-emerald-900/10'
+  1524→                            : 'border-slate-100 bg-slate-50/50 dark:bg-slate-800/30'
+  1525→                        }`}>
+  1526→                          <div className="flex items-center justify-between">
+  1527→                            <div className="flex items-center gap-2">
+  1528→                              <Badge variant={c.activo ? 'default' : 'secondary'} className={c.activo ? 'bg-emerald-100 text-emerald-700' : 'text-xs'}>
+  1529→                                {c.activo ? 'Vigente' : 'Finalizado'}
+  1530→                              </Badge>
+  1531→                              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{c.tipo_contrato}</span>
+  1532→                            </div>
+  1533→                            <span className="text-sm font-mono text-emerald-600 font-semibold">{formatSalary(c.salario_base_contrato)}</span>
+  1534→                          </div>
+  1535→                          <div className="flex items-center gap-4 mt-1.5 text-xs text-slate-500">
+  1536→                            <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{formatDate(c.fecha_inicio)} — {c.fecha_fin ? formatDate(c.fecha_fin) : 'Indefinido'}</span>
+  1537→                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{c.tipo_jornada}</span>
+  1538→                            {c.perfil_puesto && <span className="flex items-center gap-1"><Briefcase className="h-3 w-3" />{c.perfil_puesto.nombre_puesto}</span>}
+  1539→                          </div>
+  1540→                        </div>
+  1541→                      </div>
+  1542→                    ))}
+  1543→                  </div>
+  1544→                )}
+  1545→
+  1546→                {/* Salary mini chart (sparkline) */}
+  1547→                {empleado.contratos.length > 1 && (
+  1548→                  <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+  1549→                    <p className="text-xs text-slate-400 font-medium mb-2">Evolución Salarial en Contratos</p>
+  1550→                    <div className="flex items-end gap-1 h-16">
+  1551→                      {empleado.contratos.map((c, idx) => {
+  1552→                        const maxSal = Math.max(...empleado.contratos.map(x => x.salario_base_contrato));
+  1553→                        const minSal = Math.min(...empleado.contratos.map(x => x.salario_base_contrato));
+  1554→                        const range = maxSal - minSal || 1;
+  1555→                        const height = 20 + ((c.salario_base_contrato - minSal) / range) * 80;
+  1556→                        return (
+  1557→                          <div key={c.id} className="flex-1 flex flex-col items-center gap-1">
+  1558→                            <div
+  1559→                              className={`w-full rounded-t ${c.activo ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'} transition-all`}
+  1560→                              style={{ height: `${height}%` }}
+  1561→                            />
+  1562→                            <span className="text-[9px] text-slate-400">{formatDate(c.fecha_inicio).slice(-4)}</span>
+  1563→                          </div>
+  1564→                        );
+  1565→                      })}
+  1566→                    </div>
+  1567→                  </div>
+  1568→                )}
+  1569→              </CardContent>
+  1570→            </Card>
+  1571→          </div>
+  1572→        </TabsContent>
+  1573→
+  1574→        {/* ═══════════════════════════════════════════
+  1575→            TAB: SALARIO — Large display + band + history
+  1576→           ═══════════════════════════════════════════ */}
+  1577→        <TabsContent value="salario">
+  1578→          <div className="space-y-4">
+  1579→            {/* Current salary large display */}
+  1580→            <Card className="shadow-sm overflow-hidden">
+  1581→              <div className="bg-gradient-to-r from-emerald-600 to-teal-500 p-6 text-white">
+  1582→                <p className="text-sm font-medium opacity-80 mb-1">Salario Base Mensual</p>
+  1583→                <p className="text-4xl font-bold tracking-tight">{formatSalary(empleado.salario_base)}</p>
+  1584→                <div className="flex items-center gap-3 mt-3 text-sm opacity-90">
+  1585→                  <span className="flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" /> {empleado.perfil_puesto?.nombre_puesto || 'Sin puesto'}</span>
+  1586→                  <span>•</span>
+  1587→                  <span>{empleado.area?.nombre || 'Sin área'}</span>
+  1588→                </div>
+  1589→              </div>
+  1590→              {/* Salary band position indicator */}
+  1591→              {empleado.perfil_puesto?.banda_salarial && (
+  1592→                <div className="p-5">
+  1593→                  <div className="flex items-center justify-between mb-2">
+  1594→                    <p className="text-xs text-slate-500 font-medium">Posición en Banda Salarial</p>
+  1595→                    <Badge variant="outline" className="text-xs">{empleado.perfil_puesto.banda_salarial.nombre}</Badge>
+  1596→                  </div>
+  1597→                  <div className="relative h-4 rounded-full bg-gradient-to-r from-emerald-200 via-amber-200 to-red-200 overflow-hidden">
+  1598→                    <div
+  1599→                      className="absolute top-0 h-full w-1.5 bg-slate-800 dark:bg-white rounded-full shadow-lg transition-all duration-500"
+  1600→                      style={{
+  1601→                        left: `${Math.min(100, Math.max(0,
+  1602→                          ((empleado.salario_base - empleado.perfil_puesto.banda_salarial.salario_minimo) /
+  1603→                          (empleado.perfil_puesto.banda_salarial.salario_maximo - empleado.perfil_puesto.banda_salarial.salario_minimo)) * 100
+  1604→                        ))}%`
+  1605→                      }}
+  1606→                    />
+  1607→                  </div>
+  1608→                  <div className="flex justify-between mt-1.5 text-xs text-slate-400">
+  1609→                    <span>Mín: {formatSalary(empleado.perfil_puesto.banda_salarial.salario_minimo)}</span>
+  1610→                    <span>Máx: {formatSalary(empleado.perfil_puesto.banda_salarial.salario_maximo)}</span>
+  1611→                  </div>
+  1612→                </div>
+  1613→              )}
+  1614→            </Card>
+  1615→
+  1616→            {/* Next review date */}
+  1617→            {empleado.cambios_salariales.length > 0 && (
+  1618→              <Card className="shadow-sm border-amber-200 bg-amber-50/30 dark:bg-amber-900/10">
+  1619→                <CardContent className="p-4 flex items-center gap-3">
+  1620→                  <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+  1621→                    <TrendingUp className="h-5 w-5 text-amber-600" />
+  1622→                  </div>
+  1623→                  <div>
+  1624→                    <p className="text-xs text-slate-500">Último cambio salarial</p>
+  1625→                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+  1626→                      {formatDate(empleado.cambios_salariales[0].fecha_cambio)} — {empleado.cambios_salariales[0].tipo_cambio}
+  1627→                    </p>
+  1628→                  </div>
+  1629→                </CardContent>
+  1630→              </Card>
+  1631→            )}
+  1632→
+  1633→            {/* Change history timeline */}
+  1634→            <Card className="shadow-sm">
+  1635→              <CardHeader className="pb-3">
+  1636→                <CardTitle className="text-base flex items-center gap-2">
+  1637→                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+  1638→                  Historial de Cambios Salariales
+  1639→                </CardTitle>
+  1640→              </CardHeader>
+  1641→              <CardContent>
+  1642→                {empleado.cambios_salariales.length === 0 ? (
+  1643→                  <p className="text-sm text-slate-500 text-center py-6">Sin cambios salariales registrados</p>
+  1644→                ) : (
+  1645→                  <div className="relative space-y-0">
+  1646→                    <div className="absolute left-5 top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700" />
+  1647→                    {empleado.cambios_salariales.map(cs => {
+  1648→                      const diff = cs.salario_nuevo - cs.salario_anterior;
+  1649→                      const isIncrease = diff > 0;
+  1650→                      return (
+  1651→                        <div key={cs.id} className="relative flex items-start gap-4 py-3">
+  1652→                          <div className={`relative z-10 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+  1653→                            isIncrease ? 'border-emerald-500 bg-emerald-500' : 'border-amber-500 bg-amber-500'
+  1654→                          }`}>
+  1655→                            <TrendingUp className={`h-2.5 w-2.5 text-white ${!isIncrease ? 'rotate-180' : ''}`} />
+  1656→                          </div>
+  1657→                          <div className="flex-1 p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+  1658→                            <div className="flex items-center justify-between">
+  1659→                              <div>
+  1660→                                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{cs.tipo_cambio}</p>
+  1661→                                <p className="text-xs text-slate-400 mt-0.5">{formatDate(cs.fecha_cambio)}</p>
+  1662→                              </div>
+  1663→                              <div className="text-right">
+  1664→                                <p className="text-sm font-mono text-slate-600 dark:text-slate-400">{formatSalary(cs.salario_anterior)} → {formatSalary(cs.salario_nuevo)}</p>
+  1665→                                <p className={`text-xs font-semibold ${isIncrease ? 'text-emerald-600' : 'text-amber-600'}`}>
+  1666→                                  {isIncrease ? '+' : ''}{formatSalary(diff)}
+  1667→                                </p>
+  1668→                              </div>
+  1669→                            </div>
+  1670→                            {cs.motivo && <p className="text-xs text-slate-400 mt-1.5 italic">{cs.motivo}</p>}
+  1671→                          </div>
+  1672→                        </div>
+  1673→                      );
+  1674→                    })}
+  1675→                  </div>
+  1676→                )}
+  1677→              </CardContent>
+  1678→            </Card>
+  1679→          </div>
+  1680→        </TabsContent>
+  1681→
+  1682→        {/* ═══════════════════════════════════════════
+  1683→            TAB: VACACIONES — Circular progress + per-year
+  1684→           ═══════════════════════════════════════════ */}
+  1685→        <TabsContent value="vacaciones">
+  1686→          <div className="space-y-4">
+  1687→            {/* Vacation balance summary */}
+  1688→            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  1689→              <Card className="shadow-sm bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-emerald-200">
+  1690→                <CardContent className="p-5 flex items-center gap-4">
+  1691→                  <div className="relative">
+  1692→                    <CircularProgress value={totalVacDerecho > 0 ? totalVacPendientes : 0} max={totalVacDerecho || 1} size={80} strokeWidth={6} color="emerald" />
+  1693→                    <div className="absolute inset-0 flex items-center justify-center">
+  1694→                      <span className="text-lg font-bold text-emerald-700">{totalVacPendientes}</span>
+  1695→                    </div>
+  1696→                  </div>
+  1697→                  <div>
+  1698→                    <p className="text-xs text-slate-500 font-medium">Días Pendientes</p>
+  1699→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{totalVacPendientes}</p>
+  1700→                    <p className="text-xs text-slate-400">de {totalVacDerecho} totales</p>
+  1701→                  </div>
+  1702→                </CardContent>
+  1703→              </Card>
+  1704→              <Card className="shadow-sm">
+  1705→                <CardContent className="p-5 flex items-center gap-4">
+  1706→                  <div className="h-14 w-14 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+  1707→                    <CalendarDays className="h-6 w-6 text-amber-600" />
+  1708→                  </div>
+  1709→                  <div>
+  1710→                    <p className="text-xs text-slate-500 font-medium">Días Tomados</p>
+  1711→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{empleado.vacaciones.reduce((s, v) => s + v.dias_tomados, 0)}</p>
+  1712→                  </div>
+  1713→                </CardContent>
+  1714→              </Card>
+  1715→              <Card className="shadow-sm">
+  1716→                <CardContent className="p-5 flex items-center gap-4">
+  1717→                  <div className="h-14 w-14 rounded-xl bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+  1718→                    <DollarSign className="h-6 w-6 text-sky-600" />
+  1719→                  </div>
+  1720→                  <div>
+  1721→                    <p className="text-xs text-slate-500 font-medium">Días Vendidos</p>
+  1722→                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-200">{empleado.vacaciones.reduce((s, v) => s + v.dias_vendidos, 0)}</p>
+  1723→                  </div>
+  1724→                </CardContent>
+  1725→              </Card>
+  1726→            </div>
+  1727→
+  1728→            {/* Request vacation button for EMPLEADO */}
+  1729→            {userRole === 'EMPLEADO' && (
+  1730→              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+  1731→                <Palmtree className="h-4 w-4 mr-2" /> Solicitar Vacaciones
+  1732→              </Button>
+  1733→            )}
+  1734→
+  1735→            {/* Per-year breakdown with progress bars */}
+  1736→            <Card className="shadow-sm">
+  1737→              <CardHeader className="pb-3">
+  1738→                <CardTitle className="text-base flex items-center gap-2">
+  1739→                  <Palmtree className="h-4 w-4 text-emerald-600" />
+  1740→                  Desglose por Año
+  1741→                </CardTitle>
+  1742→              </CardHeader>
+  1743→              <CardContent>
+  1744→                {empleado.vacaciones.length === 0 ? (
+  1745→                  <div className="flex flex-col items-center py-10 text-slate-400">
+  1746→                    <Palmtree className="h-10 w-10 mb-2" />
+  1747→                    <p className="text-sm font-medium">Sin registros de vacaciones</p>
+  1748→                  </div>
+  1749→                ) : (
+  1750→                  <div className="space-y-4">
+  1751→                    {empleado.vacaciones.map(v => {
+  1752→                      const usedPct = v.dias_derecho > 0 ? (v.dias_tomados / v.dias_derecho) * 100 : 0;
+  1753→                      const pendPct = v.dias_derecho > 0 ? (v.dias_pendientes / v.dias_derecho) * 100 : 0;
+  1754→                      return (
+  1755→                        <div key={v.id} className="p-4 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+  1756→                          <div className="flex items-center justify-between mb-3">
+  1757→                            <div className="flex items-center gap-2">
+  1758→                              <span className="text-lg font-bold text-slate-800 dark:text-slate-200">{v.anio}</span>
+  1759→                              <Badge className={`text-xs ${v.estado === 'ABIERTO' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+  1760→                                {v.estado}
+  1761→                              </Badge>
+  1762→                            </div>
+  1763→                            <span className="text-sm font-semibold text-amber-600">{v.dias_pendientes} días pend.</span>
+  1764→                          </div>
+  1765→                          <div className="grid grid-cols-4 gap-3 text-center mb-3">
+  1766→                            <div>
+  1767→                              <p className="text-[10px] text-slate-400 uppercase">Derecho</p>
+  1768→                              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{v.dias_derecho}</p>
+  1769→                            </div>
+  1770→                            <div>
+  1771→                              <p className="text-[10px] text-slate-400 uppercase">Tomados</p>
+  1772→                              <p className="text-sm font-semibold text-emerald-600">{v.dias_tomados}</p>
+  1773→                            </div>
+  1774→                            <div>
+  1775→                              <p className="text-[10px] text-slate-400 uppercase">Pendientes</p>
+  1776→                              <p className="text-sm font-semibold text-amber-600">{v.dias_pendientes}</p>
+  1777→                            </div>
+  1778→                            <div>
+  1779→                              <p className="text-[10px] text-slate-400 uppercase">Vendidos</p>
+  1780→                              <p className="text-sm font-semibold text-sky-600">{v.dias_vendidos}</p>
+  1781→                            </div>
+  1782→                          </div>
+  1783→                          {/* Stacked progress bar */}
+  1784→                          <div className="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+  1785→                            <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${usedPct}%` }} />
+  1786→                            <div className="bg-amber-400 transition-all duration-500" style={{ width: `${pendPct}%` }} />
+  1787→                          </div>
+  1788→                          <div className="flex justify-between mt-1 text-[10px] text-slate-400">
+  1789→                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Tomados</span>
+  1790→                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" /> Pendientes</span>
+  1791→                          </div>
+  1792→                        </div>
+  1793→                      );
+  1794→                    })}
+  1795→                  </div>
+  1796→                )}
+  1797→              </CardContent>
+  1798→            </Card>
+  1799→          </div>
+  1800→        </TabsContent>
+  1801→
+  1802→        {/* ═══════════════════════════════════════════
+  1803→            TAB: INCIDENCIAS
+  1804→           ═══════════════════════════════════════════ */}
+  1805→        <TabsContent value="incidencias">
+  1806→          <Card className="shadow-sm">
+  1807→            <CardHeader className="pb-3">
+  1808→              <CardTitle className="text-base flex items-center gap-2">
+  1809→                <AlertTriangle className="h-4 w-4 text-amber-500" />
+  1810→                Incidencias del Empleado
+  1811→              </CardTitle>
+  1812→              <CardDescription>Registro de incidencias, permisos y novedades</CardDescription>
+  1813→            </CardHeader>
+  1814→            <CardContent>
+  1815→              {empleado.incidencias.length === 0 ? (
+  1816→                <div className="flex flex-col items-center py-10 text-slate-400">
+  1817→                  <AlertTriangle className="h-10 w-10 mb-2" />
+  1818→                  <p className="text-sm font-medium">Sin incidencias registradas</p>
+  1819→                  <p className="text-xs">Las incidencias del empleado aparecerán aquí</p>
+  1820→                </div>
+  1821→              ) : (
+  1822→                <div className="space-y-3 max-h-96 overflow-y-auto">
+  1823→                  {empleado.incidencias.map(inc => {
+  1824→                    const tipoColors: Record<string, string> = {
+  1825→                      PERMISO: 'bg-sky-100 text-sky-700 border-sky-200',
+  1826→                      VACACION: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  1827→                      ENFERMEDAD: 'bg-amber-100 text-amber-700 border-amber-200',
+  1828→                      AUSENCIA: 'bg-red-100 text-red-700 border-red-200',
+  1829→                      HORAS_EXTRA: 'bg-purple-100 text-purple-700 border-purple-200',
+  1830→                    };
+  1831→                    const estadoColors: Record<string, string> = {
+  1832→                      PENDIENTE: 'bg-yellow-100 text-yellow-700',
+  1833→                      APROBADA: 'bg-emerald-100 text-emerald-700',
+  1834→                      RECHAZADA: 'bg-red-100 text-red-700',
+  1835→                    };
+  1836→                    return (
+  1837→                      <div key={inc.id} className="p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+  1838→                        <div className="flex items-center justify-between mb-1">
+  1839→                          <div className="flex items-center gap-2">
+  1840→                            <Badge variant="outline" className={tipoColors[inc.tipo] || 'bg-slate-100 text-slate-600'}>
+  1841→                              {inc.tipo}
+  1842→                            </Badge>
+  1843→                            <Badge className={estadoColors[inc.estado] || 'bg-slate-100 text-slate-600'}>
+  1844→                              {inc.estado}
+  1845→                            </Badge>
+  1846→                          </div>
+  1847→                          <span className="text-xs text-slate-400">{formatDate(inc.fecha_inicio)}</span>
+  1848→                        </div>
+  1849→                        {inc.descripcion && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{inc.descripcion}</p>}
+
+[showing lines 1350-1849 of 2085; use offset=1850 with limit to continue reading]

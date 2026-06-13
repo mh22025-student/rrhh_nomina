@@ -346,13 +346,13 @@ function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: 
   const maxAttempts = 5;
   const remainingAttempts = maxAttempts - failedAttempts;
 
-  const roleConfig: Record<string, { label: string; color: string; bg: string; border: string; hoverBg: string }> = {
-    ADMIN: { label: 'ADMIN', color: 'text-red-700 dark:text-red-300', bg: 'bg-red-100 dark:bg-red-950/50', border: 'border-red-200 dark:border-red-800/60', hoverBg: 'hover:bg-red-50 dark:hover:bg-red-950/30' },
-    ANALISTA: { label: 'ANALISTA', color: 'text-teal-700 dark:text-teal-300', bg: 'bg-teal-100 dark:bg-teal-950/50', border: 'border-teal-200 dark:border-teal-800/60', hoverBg: 'hover:bg-teal-50 dark:hover:bg-teal-950/30' },
-    APROBADOR: { label: 'APROBADOR', color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-100 dark:bg-emerald-950/50', border: 'border-emerald-200 dark:border-emerald-800/60', hoverBg: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/30' },
-    GERENCIA: { label: 'GERENCIA', color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-100 dark:bg-amber-950/50', border: 'border-amber-200 dark:border-amber-800/60', hoverBg: 'hover:bg-amber-50 dark:hover:bg-amber-950/30' },
-    AUDITOR: { label: 'AUDITOR', color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-100 dark:bg-violet-950/50', border: 'border-violet-200 dark:border-violet-800/60', hoverBg: 'hover:bg-violet-50 dark:hover:bg-violet-950/30' },
-    EMPLEADO: { label: 'EMPLEADO', color: 'text-cyan-700 dark:text-cyan-300', bg: 'bg-cyan-100 dark:bg-cyan-950/50', border: 'border-cyan-200 dark:border-cyan-800/60', hoverBg: 'hover:bg-cyan-50 dark:hover:bg-cyan-950/30' },
+  const roleConfig: Record<string, { label: string; desc: string; color: string; bg: string; border: string; hoverBg: string; leftBorder: string }> = {
+    ADMIN: { label: 'ADMIN', desc: 'Acceso total al sistema', color: 'text-red-700 dark:text-red-300', bg: 'bg-red-100 dark:bg-red-950/50', border: 'border-red-200 dark:border-red-800/60', hoverBg: 'hover:bg-red-50 dark:hover:bg-red-950/30', leftBorder: 'border-l-red-500' },
+    ANALISTA: { label: 'ANALISTA', desc: 'Cálculo y procesamiento', color: 'text-blue-700 dark:text-blue-300', bg: 'bg-blue-100 dark:bg-blue-950/50', border: 'border-blue-200 dark:border-blue-800/60', hoverBg: 'hover:bg-blue-50 dark:hover:bg-blue-950/30', leftBorder: 'border-l-blue-500' },
+    APROBADOR: { label: 'APROBADOR', desc: 'Validación de nóminas', color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-100 dark:bg-emerald-950/50', border: 'border-emerald-200 dark:border-emerald-800/60', hoverBg: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/30', leftBorder: 'border-l-emerald-500' },
+    GERENCIA: { label: 'GERENCIA', desc: 'Autorización ejecutiva', color: 'text-purple-700 dark:text-purple-300', bg: 'bg-purple-100 dark:bg-purple-950/50', border: 'border-purple-200 dark:border-purple-800/60', hoverBg: 'hover:bg-purple-50 dark:hover:bg-purple-950/30', leftBorder: 'border-l-purple-500' },
+    AUDITOR: { label: 'AUDITOR', desc: 'Revisión y auditoría', color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-100 dark:bg-amber-950/50', border: 'border-amber-200 dark:border-amber-800/60', hoverBg: 'hover:bg-amber-50 dark:hover:bg-amber-950/30', leftBorder: 'border-l-amber-500' },
+    EMPLEADO: { label: 'EMPLEADO', desc: 'Consulta personal', color: 'text-teal-700 dark:text-teal-300', bg: 'bg-teal-100 dark:bg-teal-950/50', border: 'border-teal-200 dark:border-teal-800/60', hoverBg: 'hover:bg-teal-50 dark:hover:bg-teal-950/30', leftBorder: 'border-l-teal-500' },
   };
 
   const quickLoginCreds = [
@@ -365,141 +365,68 @@ function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: 
   ];
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Left Decorative Panel - hidden on mobile, visible on lg */}
-      <div className="hidden lg:flex lg:w-[45%] xl:w-[50%] relative overflow-hidden bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 flex-col justify-between p-10 xl:p-16">
-        {/* Decorative SVG patterns */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {/* Large hexagon pattern */}
-          <svg className="absolute top-0 right-0 w-[500px] h-[500px] opacity-[0.07]" viewBox="0 0 200 200" fill="none">
-            <path d="M100 10L180 50V130L100 170L20 130V50L100 10Z" stroke="white" strokeWidth="1"/>
-            <path d="M100 30L160 60V120L100 150L40 120V60L100 30Z" stroke="white" strokeWidth="0.5"/>
-            <path d="M100 50L140 70V110L100 130L60 110V70L100 50Z" stroke="white" strokeWidth="0.5"/>
-          </svg>
-          {/* Floating circles */}
-          <div className="absolute top-[15%] left-[10%] w-64 h-64 bg-white/5 rounded-full blur-xl" />
-          <div className="absolute bottom-[20%] right-[15%] w-80 h-80 bg-teal-400/10 rounded-full blur-2xl" />
-          <div className="absolute top-[60%] left-[5%] w-40 h-40 bg-emerald-300/8 rounded-full blur-lg" />
-          {/* Dot grid */}
-          <div className="absolute inset-0 opacity-[0.04]" style={{
-            backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
-            backgroundSize: '32px 32px'
-          }} />
-          {/* Decorative lines */}
-          <svg className="absolute bottom-0 left-0 w-full h-48 opacity-[0.06]" viewBox="0 0 400 100" fill="none" preserveAspectRatio="none">
-            <path d="M0 80 Q100 20 200 60 T400 40" stroke="white" strokeWidth="1.5" fill="none"/>
-            <path d="M0 90 Q100 40 200 70 T400 55" stroke="white" strokeWidth="1" fill="none"/>
-            <path d="M0 100 Q100 55 200 80 T400 70" stroke="white" strokeWidth="0.5" fill="none"/>
-          </svg>
-        </div>
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+      {/* Animated Gradient Background - full screen */}
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-600 via-teal-700 to-emerald-800 animate-gradient-bg" />
 
-        {/* Logo & Brand */}
-        <div className="relative z-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 mb-6">
-            <svg viewBox="0 0 40 40" className="w-9 h-9 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
-              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
-              <path d="M4 12V28L20 36V20L4 12Z" stroke="currentColor" strokeWidth="2"/>
-              <path d="M36 12V28L20 36V20L36 12Z" stroke="currentColor" strokeWidth="2"/>
-            </svg>
-          </div>
-          <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight">
-            Sistema de Nómina<br />y Perfiles de Puestos
-          </h1>
-          <p className="text-emerald-100/80 mt-3 text-base leading-relaxed max-w-md">
-            Plataforma integral de gestión salarial conforme a la legislación laboral de la República de El Salvador
-          </p>
-        </div>
+      {/* Floating Geometric Shapes */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* Circle 1 - top left */}
+        <div className="absolute top-[8%] left-[5%] w-32 h-32 rounded-full bg-white/[0.07] animate-float-shape" />
+        {/* Square 2 - top right, with rotation */}
+        <div className="absolute top-[12%] right-[8%] w-20 h-20 rounded-lg bg-white/[0.05] animate-float-shape-slow animate-spin-slow" />
+        {/* Circle 3 - center left */}
+        <div className="absolute top-[45%] left-[3%] w-48 h-48 rounded-full bg-emerald-400/[0.08] animate-float-alt" />
+        {/* Square 4 - bottom right */}
+        <div className="absolute bottom-[15%] right-[6%] w-24 h-24 rounded-lg bg-teal-300/[0.06] animate-float-shape-fast" style={{ animationDelay: '1s' }} />
+        {/* Circle 5 - bottom left */}
+        <div className="absolute bottom-[25%] left-[15%] w-16 h-16 rounded-full bg-white/[0.04] animate-float-shape-slow" style={{ animationDelay: '2s' }} />
+        {/* Hexagon 6 - center right */}
+        <div className="absolute top-[60%] right-[12%] w-28 h-28 rounded-xl bg-emerald-200/[0.05] animate-float-alt" style={{ animationDelay: '0.5s' }} />
 
-        {/* Feature highlights */}
-        <div className="relative z-10 space-y-4">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
-              <Shield className="w-4 h-4 text-emerald-200" />
-            </div>
-            <div>
-              <p className="text-white/90 font-medium text-sm">Cumplimiento Legal</p>
-              <p className="text-emerald-200/60 text-xs">Cálculos de ISSS, AFP, ISR según normativa vigente</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
-              <Lock className="w-4 h-4 text-emerald-200" />
-            </div>
-            <div>
-              <p className="text-white/90 font-medium text-sm">Seguridad y Auditoría</p>
-              <p className="text-emerald-200/60 text-xs">Control de acceso basado en roles con trazabilidad completa</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
-              <CheckCircle className="w-4 h-4 text-emerald-200" />
-            </div>
-            <div>
-              <p className="text-white/90 font-medium text-sm">Aprobación y Dispersión</p>
-              <p className="text-emerald-200/60 text-xs">Flujo de trabajo completo desde el cálculo hasta el pago</p>
-            </div>
-          </div>
-        </div>
+        {/* Dot grid overlay */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{
+          backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
+          backgroundSize: '40px 40px'
+        }} />
 
-        {/* Footer */}
-        <div className="relative z-10">
-          <div className="h-[1px] bg-white/10 mb-4" />
-          <p className="text-emerald-200/40 text-xs">© 2026 Ministerio de Hacienda — República de El Salvador</p>
-        </div>
+        {/* Large soft blur circles */}
+        <div className="absolute top-[20%] right-[20%] w-96 h-96 bg-teal-400/[0.06] rounded-full blur-3xl" />
+        <div className="absolute bottom-[10%] left-[10%] w-80 h-80 bg-emerald-300/[0.05] rounded-full blur-3xl" />
       </div>
 
-      {/* Mobile Header - visible only on mobile/tablet */}
-      <div className="lg:hidden bg-gradient-to-br from-emerald-600 to-teal-700 p-6 pt-10 pb-8 relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute -top-20 -right-20 w-48 h-48 bg-white/5 rounded-full blur-xl" />
-          <div className="absolute bottom-0 left-0 w-32 h-32 bg-teal-400/10 rounded-full blur-lg" />
-          <div className="absolute inset-0 opacity-[0.04]" style={{
-            backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
-            backgroundSize: '24px 24px'
-          }} />
-        </div>
-        <div className="relative z-10 text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 mb-3">
-            <svg viewBox="0 0 40 40" className="w-8 h-8 text-white" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M20 4L4 12V28L20 36L36 28V12L20 4Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
-              <path d="M20 4L4 12L20 20L36 12L20 4Z" stroke="currentColor" strokeWidth="2"/>
-              <path d="M4 12V28L20 36V20L4 12Z" stroke="currentColor" strokeWidth="2"/>
-              <path d="M36 12V28L20 36V20L36 12Z" stroke="currentColor" strokeWidth="2"/>
-            </svg>
+      {/* Main Content - centered */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div className="w-full max-w-md animate-login-slide-up">
+          {/* Brand / Logo Section */}
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 mb-4 shadow-lg shadow-black/10">
+              <Shield className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
+              Sistema de Nómina<br />y Perfiles de Puestos
+            </h1>
+            <p className="text-emerald-100/90 mt-2 text-sm font-medium">
+              🇸🇻 República de El Salvador
+            </p>
+            <p className="text-emerald-200/60 mt-1 text-xs">
+              Ministerio de Trabajo y Previsión Social
+            </p>
           </div>
-          <h1 className="text-xl font-bold text-white">Sistema de Nómina</h1>
-          <p className="text-emerald-100/70 text-sm mt-1">República de El Salvador</p>
-        </div>
-      </div>
 
-      {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-10 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950/20 relative overflow-y-auto">
-        {/* Background decorative elements (right side only) */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-20 -right-20 w-64 h-64 bg-emerald-100/30 dark:bg-emerald-900/15 rounded-full blur-3xl" />
-          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-teal-100/20 dark:bg-teal-900/10 rounded-full blur-3xl" />
-        </div>
-
-        <div className="w-full max-w-md relative z-10 animate-fade-in">
-          {/* Login Card */}
-          <Card className="shadow-xl shadow-slate-200/50 dark:shadow-slate-900/40 border border-slate-200/80 dark:border-slate-800 dark:bg-slate-900/95 animate-scale-in">
+          {/* Glassmorphism Login Card */}
+          <Card className="bg-white/[0.12] backdrop-blur-xl border border-white/20 shadow-2xl shadow-black/20 dark:bg-slate-900/[0.35] dark:border-white/10">
             <CardHeader className="pb-2 pt-6 px-6">
-              <div className="flex items-center justify-center mb-3">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-emerald-800/30">
-                  <Shield className="w-6 h-6 text-white" />
-                </div>
-              </div>
-              <CardTitle className="text-xl text-center dark:text-slate-100">Iniciar Sesión</CardTitle>
-              <CardDescription className="text-center dark:text-slate-400">Ingrese sus credenciales para acceder al sistema</CardDescription>
+              <CardTitle className="text-xl text-center text-white dark:text-slate-100">Iniciar Sesión</CardTitle>
+              <CardDescription className="text-center text-emerald-100/70 dark:text-slate-400">Ingrese sus credenciales para acceder al sistema</CardDescription>
             </CardHeader>
             <CardContent className="px-6 pb-6">
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Email field with Mail icon prefix */}
+                {/* Email field */}
                 <div className="space-y-2">
-                  <Label htmlFor="login-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">Correo Electrónico</Label>
+                  <Label htmlFor="login-email" className="text-sm font-medium text-emerald-50 dark:text-slate-300">Correo Electrónico</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-300/60 dark:text-slate-500 pointer-events-none" />
                     <Input
                       id="login-email"
                       type="email"
@@ -508,16 +435,16 @@ function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: 
                       onChange={(e) => setEmail(e.target.value)}
                       required
                       disabled={isLoading || isLocked}
-                      className="h-11 pl-10 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 dark:bg-slate-800 dark:border-slate-700"
+                      className="h-11 pl-10 bg-white/[0.08] border-white/20 text-white placeholder:text-emerald-200/40 focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400/50 dark:bg-slate-800/50 dark:border-slate-600/50 dark:text-slate-100 dark:placeholder:text-slate-500"
                     />
                   </div>
                 </div>
 
-                {/* Password field with Lock icon prefix and show/hide toggle */}
+                {/* Password field with show/hide toggle */}
                 <div className="space-y-2">
-                  <Label htmlFor="login-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">Contraseña</Label>
+                  <Label htmlFor="login-password" className="text-sm font-medium text-emerald-50 dark:text-slate-300">Contraseña</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-300/60 dark:text-slate-500 pointer-events-none" />
                     <Input
                       id="login-password"
                       type={showPassword ? 'text' : 'password'}
@@ -526,13 +453,14 @@ function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: 
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       disabled={isLoading || isLocked}
-                      className="h-11 pl-10 pr-10 transition-all focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 dark:bg-slate-800 dark:border-slate-700"
+                      className="h-11 pl-10 pr-10 bg-white/[0.08] border-white/20 text-white placeholder:text-emerald-200/40 focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400/50 dark:bg-slate-800/50 dark:border-slate-600/50 dark:text-slate-100 dark:placeholder:text-slate-500"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-200/50 hover:text-white dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
                       tabIndex={-1}
+                      aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -547,14 +475,14 @@ function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: 
                       id="remember"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 focus:ring-2"
+                      className="h-4 w-4 rounded border-white/30 dark:border-slate-600 text-emerald-500 focus:ring-emerald-400 focus:ring-2 bg-white/10"
                     />
-                    <Label htmlFor="remember" className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer select-none">Recordarme</Label>
+                    <Label htmlFor="remember" className="text-sm text-emerald-100/80 dark:text-slate-400 cursor-pointer select-none">Recordarme</Label>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowRecovery(true)}
-                    className="text-sm text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 hover:underline transition-colors"
+                    className="text-sm text-emerald-200/80 dark:text-emerald-400 hover:text-white dark:hover:text-emerald-300 hover:underline transition-colors"
                   >
                     ¿Olvidó su contraseña?
                   </button>
@@ -562,28 +490,28 @@ function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: 
 
                 {/* Security warnings */}
                 {isLocked && lockoutCountdown && (
-                  <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/40 p-3 rounded-lg border border-red-200 dark:border-red-800/60 animate-fade-in">
+                  <div className="flex items-center gap-2 text-sm text-red-200 bg-red-900/40 backdrop-blur-sm p-3 rounded-lg border border-red-500/30 animate-fade-in">
                     <Lock className="h-4 w-4 shrink-0" />
                     <span>Cuenta bloqueada. Intente en <strong>{lockoutCountdown}</strong></span>
                   </div>
                 )}
 
                 {!isLocked && failedAttempts >= 3 && remainingAttempts > 0 && (
-                  <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-lg border border-amber-200 dark:border-amber-800/60 animate-fade-in">
+                  <div className="flex items-center gap-2 text-sm text-amber-200 bg-amber-900/40 backdrop-blur-sm p-3 rounded-lg border border-amber-500/30 animate-fade-in">
                     <AlertTriangle className="h-4 w-4 shrink-0" />
                     <span>Quedan <strong>{remainingAttempts}</strong> intento{remainingAttempts !== 1 ? 's' : ''} antes del bloqueo</span>
                   </div>
                 )}
 
                 {loginError && !isLocked && (
-                  <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 p-3 rounded-lg border border-red-200 dark:border-red-800/60 animate-fade-in">
+                  <div className="flex items-center gap-2 text-sm text-red-200 bg-red-900/40 backdrop-blur-sm p-3 rounded-lg border border-red-500/30 animate-fade-in">
                     <AlertCircle className="h-4 w-4 shrink-0" />
                     <span>{loginError}</span>
                   </div>
                 )}
 
                 {failedAttempts >= 2 && !isLocked && (
-                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 animate-fade-in">
+                  <div className="flex items-center gap-2 text-xs text-emerald-200/60 animate-fade-in">
                     <Info className="h-3.5 w-3.5 shrink-0" />
                     <span>Múltiples intentos fallidos pueden bloquear su cuenta temporalmente</span>
                   </div>
@@ -592,7 +520,7 @@ function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: 
                 {/* Login button */}
                 <Button
                   type="submit"
-                  className="w-full h-11 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20 hover:shadow-lg hover:shadow-emerald-600/30 transition-all duration-200 active:scale-[0.98] disabled:opacity-60"
+                  className="w-full h-11 bg-white/[0.15] hover:bg-white/[0.25] text-white border border-white/20 hover:border-white/30 shadow-lg shadow-black/10 hover:shadow-xl hover:shadow-black/15 transition-all duration-200 active:scale-[0.98] disabled:opacity-40 backdrop-blur-sm"
                   disabled={isLoading || isLocked}
                 >
                   {isLoading ? (
@@ -602,8 +530,8 @@ function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: 
                     </>
                   ) : (
                     <span className="flex items-center gap-2">
+                      <Shield className="h-4 w-4" />
                       Iniciar Sesión
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                     </span>
                   )}
                 </Button>
@@ -612,14 +540,14 @@ function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: 
           </Card>
 
           {/* Quick Login Section */}
-          <div className="mt-5 animate-fade-in" style={{ animationDelay: '150ms' }}>
+          <div className="mt-5 animate-fade-in" style={{ animationDelay: '200ms' }}>
             <div className="flex items-center gap-3 mb-3">
-              <div className="h-[1px] flex-1 bg-slate-200 dark:bg-slate-700" />
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <div className="h-[1px] flex-1 bg-white/20" />
+              <span className="text-xs font-medium text-emerald-100/70 flex items-center gap-1.5">
                 <KeyRound className="h-3.5 w-3.5" />
                 Acceso Rápido (Demo)
               </span>
-              <div className="h-[1px] flex-1 bg-slate-200 dark:bg-slate-700" />
+              <div className="h-[1px] flex-1 bg-white/20" />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {quickLoginCreds.map((cred) => {
@@ -630,19 +558,27 @@ function LoginPage({ onLogin, isLoading }: { onLogin: (email: string, password: 
                     type="button"
                     onClick={() => { setEmail(cred.email); setPassword(cred.pass); }}
                     disabled={isLoading || isLocked}
-                    className={`flex flex-col items-start p-2.5 rounded-lg border ${config.border} ${config.hoverBg} transition-all duration-200 text-left group active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none bg-white dark:bg-slate-900/80`}
+                    className={`flex flex-col items-start p-3 rounded-lg border-l-[3px] ${config.leftBorder} border border-white/15 bg-white/[0.08] backdrop-blur-sm hover:bg-white/[0.15] transition-all duration-200 text-left group active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none`}
                   >
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${config.bg} ${config.color} mb-1.5`}>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${config.bg} ${config.color} mb-1`}>
                       {config.label}
                     </span>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate w-full leading-tight">
+                    <span className="text-[11px] text-emerald-100/70 dark:text-slate-400 truncate w-full leading-tight">
                       {cred.email}
+                    </span>
+                    <span className="text-[10px] text-emerald-200/40 dark:text-slate-500 mt-0.5 truncate w-full leading-tight">
+                      {config.desc}
                     </span>
                   </button>
                 );
               })}
             </div>
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="relative z-10 mt-8 pb-4 text-center">
+          <p className="text-emerald-200/40 text-xs">© 2026 Sistema de Nómina — Gobierno de El Salvador</p>
         </div>
       </div>
 

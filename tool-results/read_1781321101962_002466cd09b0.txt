@@ -1,0 +1,1705 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import {
+     5→  User, Calendar, FileText, Download, Plus, Clock, CheckCircle,
+     6→  Loader2, Briefcase, MapPin, DollarSign, Plane, FileBadge, Receipt,
+     7→  ChevronRight, AlertCircle, Sun, Moon, XCircle, Filter, AlertTriangle,
+     8→  ChevronDown, ChevronUp, Shield, Heart, Banknote, Megaphone, TrendingUp,
+     9→  Edit3, Phone, Mail, Building, CalendarDays, Ban, Info, Award, PiggyBank,
+    10→  CircleDot, Activity
+    11→} from 'lucide-react';
+    12→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    13→import { Button } from '@/components/ui/button';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+    16→import { Label } from '@/components/ui/label';
+    17→import { Input } from '@/components/ui/input';
+    18→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    19→import { Textarea } from '@/components/ui/textarea';
+    20→import { Skeleton } from '@/components/ui/skeleton';
+    21→import { Progress } from '@/components/ui/progress';
+    22→import { Separator } from '@/components/ui/separator';
+    23→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+    24→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    25→import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+    26→import { useToast } from '@/hooks/use-toast';
+    27→
+    28→interface SelfServicePortalProps {
+    29→  accessToken: string;
+    30→  userRole: string;
+    31→}
+    32→
+    33→interface SelfServiceData {
+    34→  empleado: {
+    35→    id: string; codigo_empleado: string; primer_nombre: string; segundo_nombre: string | null;
+    36→    primer_apellido: string; segundo_apellido: string | null; dui: string;
+    37→    email_personal: string | null; telefono: string | null; fecha_ingreso: string;
+    38→    salario_base: number; genero: string | null; estado: string;
+    39→  };
+    40→  area: { id: string; nombre: string; codigo: string } | null;
+    41→  perfil_puesto: { id: string; nombre_puesto: string; banda_salarial: { nombre: string; grado: number } | null } | null;
+    42→  vacaciones: { id: string; anio: number; dias_derecho: number; dias_tomados: number; dias_pendientes: number; estado: string }[];
+    43→  recibos: { id: string; periodo_inicio: string; periodo_fin: string; tipo: string; salario_bruto: number; total_descuentos: number; salario_neto: number; isss_laboral: number; afp_laboral: number; isr_retenido: number }[];
+    44→  documentos: { id: string; tipo_documento: string; nombre_archivo: string; descripcion: string | null; fecha_creacion: string }[];
+    45→  solicitudes: { id: string; tipo: string; estado: string; detalle: string | null; fecha_solicitud: string; fecha_resolucion: string | null }[];
+    46→  notificaciones?: { id: string; titulo: string; mensaje: string; prioridad: string; fecha: string; leida: boolean }[];
+    47→}
+    48→
+    49→const solicitudTipos = [
+    50→  { value: 'VACACION', label: 'Vacaciones', icon: Plane, color: 'text-teal-600', bg: 'bg-teal-50 dark:bg-teal-900/30' },
+    51→  { value: 'CONSTANCIA_EMPLEO', label: 'Constancia Empleo', icon: FileBadge, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/30' },
+    52→  { value: 'CONSTANCIA_SALARIAL', label: 'Constancia Salarial', icon: Receipt, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/30' },
+    53→  { value: 'CONSTANCIA_ISR', label: 'Constancia ISR', icon: FileText, color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-900/30' },
+    54→  { value: 'CAMBIO_DATOS', label: 'Cambio de Datos', icon: Edit3, color: 'text-teal-600', bg: 'bg-teal-50 dark:bg-teal-900/30' },
+    55→];
+    56→
+    57→const incidenciaTipos = [
+    58→  { value: 'HORAS_EXTRA', label: 'Horas Extra', icon: Clock, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/30' },
+    59→  { value: 'BONO', label: 'Bono', icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/30' },
+    60→  { value: 'COMISION', label: 'Comisión', icon: DollarSign, color: 'text-teal-600', bg: 'bg-teal-50 dark:bg-teal-900/30' },
+    61→  { value: 'INCAPACIDAD_ISSS', label: 'Incapacidad ISSS', icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-900/30' },
+    62→  { value: 'PERMISO', label: 'Permiso', icon: Calendar, color: 'text-teal-600', bg: 'bg-teal-50 dark:bg-teal-900/30' },
+    63→  { value: 'OTRO', label: 'Otro', icon: AlertCircle, color: 'text-slate-600', bg: 'bg-slate-50 dark:bg-slate-800/50' },
+    64→];
+    65→
+    66→// Mock announcements for demo purposes (in production these come from API)
+    67→const defaultAnnouncements = [
+    68→  { id: '1', titulo: 'Cierre de Nómina - Febrero 2026', mensaje: 'Se recuerda que el cierre de nómina del mes de febrero será el día 25. Favor verificar incidencias.', prioridad: 'ALTA', fecha: '2026-02-20' },
+    69→  { id: '2', titulo: 'Actualización de Política de Vacaciones', mensaje: 'Se ha actualizado la política de vacaciones conforme al Código de Trabajo. Revisar portal de RRHH.', prioridad: 'MEDIA', fecha: '2026-02-15' },
+    70→  { id: '3', titulo: 'Capacitación Obligatoria - Seguridad', mensaje: 'Todos los colaboradores deben completar la capacitación de seguridad laboral antes del 28 de febrero.', prioridad: 'ALTA', fecha: '2026-02-10' },
+    71→];
+    72→
+    73→const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    74→const fmtDate = (d: string) => {
+    75→  try {
+    76→    return new Date(d).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    77→  } catch {
+    78→    return d;
+    79→  }
+    80→};
+    81→const fmtDateLong = (d: string) => {
+    82→  try {
+    83→    return new Date(d).toLocaleDateString('es-SV', { day: 'numeric', month: 'long', year: 'numeric' });
+    84→  } catch {
+    85→    return d;
+    86→  }
+    87→};
+    88→
+    89→function calcDaysBetween(start: string, end: string): number {
+    90→  if (!start || !end) return 0;
+    91→  const s = new Date(start);
+    92→  const e = new Date(end);
+    93→  const diff = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    94→  return diff > 0 ? diff : 0;
+    95→}
+    96→
+    97→function calcTenure(fechaIngreso: string): { years: number; months: number } {
+    98→  const start = new Date(fechaIngreso);
+    99→  const now = new Date();
+   100→  let years = now.getFullYear() - start.getFullYear();
+   101→  let months = now.getMonth() - start.getMonth();
+   102→  if (months < 0) {
+   103→    years--;
+   104→    months += 12;
+   105→  }
+   106→  if (now.getDate() < start.getDate()) {
+   107→    months--;
+   108→    if (months < 0) {
+   109→      years--;
+   110→      months += 12;
+   111→    }
+   112→  }
+   113→  return { years: Math.max(0, years), months: Math.max(0, months) };
+   114→}
+   115→
+   116→// Circular Progress Component
+   117→function CircularProgress({ value, size = 80, strokeWidth = 8, colorClass = 'text-emerald-500', trackClass = 'text-slate-100 dark:text-slate-700', children }: {
+   118→  value: number; size?: number; strokeWidth?: number;
+   119→  colorClass?: string; trackClass?: string;
+   120→  children?: React.ReactNode;
+   121→}) {
+   122→  const radius = (size - strokeWidth) / 2;
+   123→  const circumference = 2 * Math.PI * radius;
+   124→  const offset = circumference * (1 - value / 100);
+   125→  return (
+   126→    <div className="relative shrink-0" style={{ width: size, height: size }}>
+   127→      <svg className="-rotate-90" style={{ width: size, height: size }} viewBox={`0 0 ${size} ${size}`}>
+   128→        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className={trackClass} />
+   129→        <circle
+   130→          cx={size / 2} cy={size / 2} r={radius} fill="none"
+   131→          stroke="currentColor" strokeWidth={strokeWidth}
+   132→          strokeDasharray={circumference}
+   133→          strokeDashoffset={offset}
+   134→          strokeLinecap="round"
+   135→          className={`${colorClass} transition-all duration-700`}
+   136→        />
+   137→      </svg>
+   138→      {children && (
+   139→        <div className="absolute inset-0 flex flex-col items-center justify-center">
+   140→          {children}
+   141→        </div>
+   142→      )}
+   143→    </div>
+   144→  );
+   145→}
+   146→
+   147→// Mini bar chart for salary trend
+   148→function SalaryBarChart({ data: chartData }: { data: { label: string; value: number }[] }) {
+   149→  if (chartData.length === 0) return null;
+   150→  const maxVal = Math.max(...chartData.map(d => d.value));
+   151→  return (
+   152→    <div className="flex items-end gap-1.5 h-16">
+   153→      {chartData.map((d, i) => {
+   154→        const height = maxVal > 0 ? (d.value / maxVal) * 100 : 0;
+   155→        return (
+   156→          <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+   157→            <div
+   158→              className="w-full rounded-t-sm bg-gradient-to-t from-emerald-500 to-teal-400 dark:from-emerald-600 dark:to-teal-500 transition-all duration-500 min-h-[4px]"
+   159→              style={{ height: `${Math.max(height, 8)}%` }}
+   160→              title={`${d.label}: ${fmt(d.value)}`}
+   161→            />
+   162→            <span className="text-[8px] text-slate-400 dark:text-slate-500 truncate w-full text-center">{d.label}</span>
+   163→          </div>
+   164→        );
+   165→      })}
+   166→    </div>
+   167→  );
+   168→}
+   169→
+   170→export default function SelfServicePortal({ accessToken }: SelfServicePortalProps) {
+   171→  const { toast } = useToast();
+   172→  const [data, setData] = useState<SelfServiceData | null>(null);
+   173→  const [loading, setLoading] = useState(true);
+   174→  const [showRequestDialog, setShowRequestDialog] = useState(false);
+   175→  const [showVacationDialog, setShowVacationDialog] = useState(false);
+   176→  const [showIncidenceDialog, setShowIncidenceDialog] = useState(false);
+   177→  const [showCertDialog, setShowCertDialog] = useState(false);
+   178→  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+   179→  const [requestType, setRequestType] = useState('');
+   180→  const [requestDetail, setRequestDetail] = useState('');
+   181→  const [submitting, setSubmitting] = useState(false);
+   182→
+   183→  // Vacation dialog state
+   184→  const [vacStartDate, setVacStartDate] = useState('');
+   185→  const [vacEndDate, setVacEndDate] = useState('');
+   186→  const [vacMotivo, setVacMotivo] = useState('');
+   187→  const [vacSubmitting, setVacSubmitting] = useState(false);
+   188→
+   189→  // Incidence dialog state
+   190→  const [incTipo, setIncTipo] = useState('');
+   191→  const [incFechaInicio, setIncFechaInicio] = useState('');
+   192→  const [incFechaFin, setIncFechaFin] = useState('');
+   193→  const [incHoras, setIncHoras] = useState('');
+   194→  const [incMonto, setIncMonto] = useState('');
+   195→  const [incDescripcion, setIncDescripcion] = useState('');
+   196→  const [incSubmitting, setIncSubmitting] = useState(false);
+   197→
+   198→  // Certificate dialog state
+   199→  const [certTipo, setCertTipo] = useState('');
+   200→  const [certMotivo, setCertMotivo] = useState('');
+   201→  const [certSubmitting, setCertSubmitting] = useState(false);
+   202→
+   203→  // Request history filter
+   204→  const [solicitudesFilter, setSolicitudesFilter] = useState<'TODAS' | 'PENDIENTE' | 'APROBADA' | 'RECHAZADA'>('TODAS');
+   205→
+   206→  // Expandable pay slip
+   207→  const [expandedRecibo, setExpandedRecibo] = useState<string | null>(null);
+   208→
+   209→  const fetchData = useCallback(async () => {
+   210→    setLoading(true);
+   211→    try {
+   212→      const res = await fetch('/api/selfservice', {
+   213→        headers: { Authorization: `Bearer ${accessToken}` },
+   214→      });
+   215→      if (res.ok) {
+   216→        setData(await res.json());
+   217→      }
+   218→    } catch (err) {
+   219→      console.error(err);
+   220→    } finally {
+   221→      setLoading(false);
+   222→    }
+   223→  }, [accessToken]);
+   224→
+   225→  useEffect(() => { fetchData(); }, [fetchData]);
+   226→
+   227→  // Vacation calculations
+   228→  const vacDaysRequested = useMemo(() => calcDaysBetween(vacStartDate, vacEndDate), [vacStartDate, vacEndDate]);
+   229→
+   230→  const currentYearVacation = useMemo(() => {
+   231→    if (!data) return null;
+   232→    const currentYear = new Date().getFullYear();
+   233→    return data.vacaciones.find(v => v.anio === currentYear) || data.vacaciones[0] || null;
+   234→  }, [data]);
+   235→
+   236→  const availableVacationDays = currentYearVacation?.dias_pendientes ?? 0;
+   237→
+   238→  // Filtered solicitudes
+   239→  const filteredSolicitudes = useMemo(() => {
+   240→    if (!data) return [];
+   241→    if (solicitudesFilter === 'TODAS') return data.solicitudes;
+   242→    return data.solicitudes.filter(s => s.estado === solicitudesFilter);
+   243→  }, [data, solicitudesFilter]);
+   244→
+   245→  // Salary trend data (last 6 months)
+   246→  const salaryTrend = useMemo(() => {
+   247→    if (!data) return [];
+   248→    return [...data.recibos]
+   249→      .reverse()
+   250→      .slice(0, 6)
+   251→      .map(r => ({
+   252→        label: new Date(r.periodo_inicio).toLocaleDateString('es-SV', { month: 'short' }),
+   253→        value: r.salario_neto,
+   254→      }));
+   255→  }, [data]);
+   256→
+   257→  const handleSubmitRequest = async () => {
+   258→    if (!requestType) {
+   259→      toast({ title: 'Error', description: 'Seleccione un tipo de solicitud', variant: 'destructive' });
+   260→      return;
+   261→    }
+   262→    setSubmitting(true);
+   263→    try {
+   264→      const res = await fetch('/api/selfservice', {
+   265→        method: 'POST',
+   266→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   267→        body: JSON.stringify({ tipo: requestType, detalle: requestDetail }),
+   268→      });
+   269→      if (res.ok) {
+   270→        toast({ title: 'Solicitud enviada', description: 'Su solicitud ha sido registrada exitosamente' });
+   271→        setShowRequestDialog(false);
+   272→        setRequestType('');
+   273→        setRequestDetail('');
+   274→        fetchData();
+   275→      } else {
+   276→        const errData = await res.json();
+   277→        toast({ title: 'Error', description: errData.error, variant: 'destructive' });
+   278→      }
+   279→    } catch {
+   280→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   281→    } finally {
+   282→      setSubmitting(false);
+   283→    }
+   284→  };
+   285→
+   286→  const handleSubmitVacation = async () => {
+   287→    if (!vacStartDate || !vacEndDate) {
+   288→      toast({ title: 'Error', description: 'Seleccione las fechas de inicio y fin', variant: 'destructive' });
+   289→      return;
+   290→    }
+   291→    const start = new Date(vacStartDate);
+   292→    const end = new Date(vacEndDate);
+   293→    const today = new Date();
+   294→    today.setHours(0, 0, 0, 0);
+   295→    if (start < today) {
+   296→      toast({ title: 'Error', description: 'No puede solicitar vacaciones para fechas pasadas', variant: 'destructive' });
+   297→      return;
+   298→    }
+   299→    if (end < start) {
+   300→      toast({ title: 'Error', description: 'La fecha fin no puede ser anterior a la fecha inicio', variant: 'destructive' });
+   301→      return;
+   302→    }
+   303→    if (vacDaysRequested > availableVacationDays) {
+   304→      toast({ title: 'Error', description: `Solo tiene ${availableVacationDays} días disponibles. Solicitó ${vacDaysRequested}.`, variant: 'destructive' });
+   305→      return;
+   306→    }
+   307→    if (vacDaysRequested === 0) {
+   308→      toast({ title: 'Error', description: 'El rango de fechas no es válido', variant: 'destructive' });
+   309→      return;
+   310→    }
+   311→    setVacSubmitting(true);
+   312→    try {
+   313→      const detalle = JSON.stringify({
+   314→        fecha_inicio: vacStartDate,
+   315→        fecha_fin: vacEndDate,
+   316→        dias: vacDaysRequested,
+   317→        motivo: vacMotivo || 'Solicitud de vacaciones',
+   318→      });
+   319→      const res = await fetch('/api/selfservice', {
+   320→        method: 'POST',
+   321→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   322→        body: JSON.stringify({ tipo: 'VACACION', detalle }),
+   323→      });
+   324→      if (res.ok) {
+   325→        toast({ title: 'Solicitud de vacaciones enviada', description: `Se solicitaron ${vacDaysRequested} días de vacaciones` });
+   326→        setShowVacationDialog(false);
+   327→        setVacStartDate('');
+   328→        setVacEndDate('');
+   329→        setVacMotivo('');
+   330→        fetchData();
+   331→      } else {
+   332→        const errData = await res.json();
+   333→        toast({ title: 'Error', description: errData.error, variant: 'destructive' });
+   334→      }
+   335→    } catch {
+   336→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   337→    } finally {
+   338→      setVacSubmitting(false);
+   339→    }
+   340→  };
+   341→
+   342→  const handleSubmitIncidence = async () => {
+   343→    if (!incTipo) {
+   344→      toast({ title: 'Error', description: 'Seleccione el tipo de incidencia', variant: 'destructive' });
+   345→      return;
+   346→    }
+   347→    if (!incFechaInicio) {
+   348→      toast({ title: 'Error', description: 'Seleccione la fecha de inicio', variant: 'destructive' });
+   349→      return;
+   350→    }
+   351→    if (incTipo === 'HORAS_EXTRA') {
+   352→      if (!incHoras || parseFloat(incHoras) <= 0) {
+   353→        toast({ title: 'Error', description: 'Ingrese la cantidad de horas', variant: 'destructive' });
+   354→        return;
+   355→      }
+   356→    }
+   357→    if (incTipo === 'BONO' || incTipo === 'COMISION') {
+   358→      if (!incMonto || parseFloat(incMonto) <= 0) {
+   359→        toast({ title: 'Error', description: 'Ingrese el monto', variant: 'destructive' });
+   360→        return;
+   361→      }
+   362→    }
+   363→    if (incTipo === 'INCAPACIDAD_ISSS') {
+   364→      if (!incFechaFin) {
+   365→        toast({ title: 'Error', description: 'Seleccione la fecha fin de la incapacidad', variant: 'destructive' });
+   366→        return;
+   367→      }
+   368→      if (new Date(incFechaFin) < new Date(incFechaInicio)) {
+   369→        toast({ title: 'Error', description: 'La fecha fin no puede ser anterior a la fecha inicio', variant: 'destructive' });
+   370→        return;
+   371→      }
+   372→    }
+   373→    if (incTipo === 'PERMISO' && !incDescripcion) {
+   374→      toast({ title: 'Error', description: 'Ingrese el motivo del permiso', variant: 'destructive' });
+   375→      return;
+   376→    }
+   377→    setIncSubmitting(true);
+   378→    try {
+   379→      const body: Record<string, unknown> = {
+   380→        tipo: incTipo,
+   381→        fecha_inicio: incFechaInicio,
+   382→        descripcion: incDescripcion || null,
+   383→      };
+   384→      if (incTipo === 'HORAS_EXTRA') {
+   385→        body.cantidad_horas = parseFloat(incHoras);
+   386→        body.tipo_horas_extra = 'DIURNA';
+   387→      }
+   388→      if (incTipo === 'BONO' || incTipo === 'COMISION') {
+   389→        body.monto = parseFloat(incMonto);
+   390→      }
+   391→      if (incTipo === 'INCAPACIDAD_ISSS') {
+   392→        body.fecha_fin = incFechaFin;
+   393→        body.numero_incapacidad = `INC-${Date.now()}`;
+   394→      }
+   395→      if (incTipo === 'PERMISO') {
+   396→        body.descripcion = incDescripcion;
+   397→      }
+   398→      const res = await fetch('/api/incidencias', {
+   399→        method: 'POST',
+   400→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   401→        body: JSON.stringify(body),
+   402→      });
+   403→      if (res.ok) {
+   404→        toast({ title: 'Incidencia reportada', description: 'Su reporte de incidencia ha sido registrado exitosamente' });
+   405→        setShowIncidenceDialog(false);
+   406→        setIncTipo('');
+   407→        setIncFechaInicio('');
+   408→        setIncFechaFin('');
+   409→        setIncHoras('');
+   410→        setIncMonto('');
+   411→        setIncDescripcion('');
+   412→        fetchData();
+   413→      } else {
+   414→        const errData = await res.json();
+   415→        toast({ title: 'Error', description: errData.error, variant: 'destructive' });
+   416→      }
+   417→    } catch {
+   418→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   419→    } finally {
+   420→      setIncSubmitting(false);
+   421→    }
+   422→  };
+   423→
+   424→  const handleSubmitCert = async () => {
+   425→    if (!certTipo) {
+   426→      toast({ title: 'Error', description: 'Seleccione el tipo de constancia', variant: 'destructive' });
+   427→      return;
+   428→    }
+   429→    setCertSubmitting(true);
+   430→    try {
+   431→      const res = await fetch('/api/selfservice', {
+   432→        method: 'POST',
+   433→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   434→        body: JSON.stringify({ tipo: certTipo, detalle: certMotivo || `Solicitud de ${certTipo.replace(/_/g, ' ').toLowerCase()}` }),
+   435→      });
+   436→      if (res.ok) {
+   437→        toast({ title: 'Solicitud enviada', description: `Su solicitud de ${certTipo.replace(/_/g, ' ').toLowerCase()} ha sido registrada` });
+   438→        setShowCertDialog(false);
+   439→        setCertTipo('');
+   440→        setCertMotivo('');
+   441→        fetchData();
+   442→      } else {
+   443→        const errData = await res.json();
+   444→        toast({ title: 'Error', description: errData.error, variant: 'destructive' });
+   445→      }
+   446→    } catch {
+   447→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   448→    } finally {
+   449→      setCertSubmitting(false);
+   450→    }
+   451→  };
+   452→
+   453→  const handleCancelSolicitud = async (solicitudId: string) => {
+   454→    try {
+   455→      const res = await fetch('/api/selfservice', {
+   456→        method: 'PATCH',
+   457→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   458→        body: JSON.stringify({ solicitud_id: solicitudId, estado: 'CANCELADA' }),
+   459→      });
+   460→      if (res.ok) {
+   461→        toast({ title: 'Solicitud cancelada', description: 'La solicitud ha sido cancelada exitosamente' });
+   462→        fetchData();
+   463→      } else {
+   464→        const errData = await res.json();
+   465→        toast({ title: 'Error', description: errData.error || 'No se pudo cancelar', variant: 'destructive' });
+   466→      }
+   467→    } catch {
+   468→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   469→    }
+   470→  };
+   471→
+   472→  const handleDownloadBoleta = async (planillaId: string) => {
+   473→    try {
+   474→      setDownloadingId(planillaId);
+   475→      const res = await fetch(`/api/nomina/planillas/${planillaId}/boleta?empleado_id=${data!.empleado.id}`, {
+   476→        headers: { Authorization: `Bearer ${accessToken}` },
+   477→      });
+   478→      if (!res.ok) throw new Error('Error al generar boleta');
+   479→      const blob = await res.blob();
+   480→      const url = URL.createObjectURL(blob);
+   481→      const a = document.createElement('a');
+   482→      a.href = url;
+   483→      a.download = `Boleta_${data!.empleado.codigo_empleado}_${planillaId}.pdf`;
+   484→      a.click();
+   485→      URL.revokeObjectURL(url);
+   486→      toast({ title: 'Boleta descargada', description: 'El PDF de su recibo ha sido descargado' });
+   487→    } catch {
+   488→      toast({ title: 'Error', description: 'No se pudo generar la boleta', variant: 'destructive' });
+   489→    } finally {
+   490→      setDownloadingId(null);
+   491→    }
+   492→  };
+   493→
+   494→  if (loading) {
+   495→    return (
+   496→      <div className="space-y-4 max-w-4xl mx-auto p-1">
+   497→        <Skeleton className="h-44 w-full rounded-xl" />
+   498→        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   499→          <Skeleton className="h-72 w-full rounded-xl" />
+   500→          <Skeleton className="h-72 w-full rounded-xl" />
+   501→        </div>
+   502→        <Skeleton className="h-64 w-full rounded-xl" />
+   503→      </div>
+   504→    );
+   505→  }
+   506→
+   507→  if (!data) {
+   508→    return (
+   509→      <Card className="shadow-sm max-w-2xl mx-auto">
+   510→        <CardContent className="p-8 text-center">
+   511→          <User className="h-12 w-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+   512→          <p className="text-slate-500 dark:text-slate-400">No se pudieron cargar sus datos</p>
+   513→          <Button onClick={fetchData} variant="outline" className="mt-4">Reintentar</Button>
+   514→        </CardContent>
+   515→      </Card>
+   516→    );
+   517→  }
+   518→
+   519→  const emp = data.empleado;
+   520→  const tenure = calcTenure(emp.fecha_ingreso);
+   521→  const totalDiasPendientes = data.vacaciones.reduce((s, v) => s + v.dias_pendientes, 0);
+   522→  const totalDiasTomados = data.vacaciones.reduce((s, v) => s + v.dias_tomados, 0);
+   523→  const totalDiasDerecho = data.vacaciones.reduce((s, v) => s + v.dias_derecho, 0);
+   524→  const vacationProgress = totalDiasDerecho > 0 ? Math.round((totalDiasTomados / totalDiasDerecho) * 100) : 0;
+   525→  const vacationRemaining = totalDiasDerecho > 0 ? Math.round((totalDiasPendientes / totalDiasDerecho) * 100) : 100;
+   526→
+   527→  // Benefits calculations
+   528→  const isssEmployeeRate = 0.03;
+   529→  const afpEmployeeRate = 0.0725;
+   530→  const monthlyISSS = emp.salario_base * isssEmployeeRate;
+   531→  const monthlyAFP = emp.salario_base * afpEmployeeRate;
+   532→  const annualISSS = monthlyISSS * 12;
+   533→  const annualAFP = monthlyAFP * 12;
+   534→  const aguinaldoEstimate = emp.salario_base * (tenure.years >= 1 ? 1 : tenure.months / 12);
+   535→  const seniorityBonusEligible = tenure.years >= 1;
+   536→
+   537→  // Announcements
+   538→  const announcements = data.notificaciones?.length ? data.notificaciones : defaultAnnouncements;
+   539→
+   540→  const getSolicitudBadge = (estado: string) => {
+   541→    if (estado === 'PENDIENTE') return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800';
+   542→    if (estado === 'APROBADA') return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800';
+   543→    if (estado === 'CANCELADA') return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700';
+   544→    return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800';
+   545→  };
+   546→
+   547→  const getSolicitudIcon = (tipo: string) => {
+   548→    switch (tipo) {
+   549→      case 'VACACION': return <Plane className="h-4 w-4 text-teal-600 dark:text-teal-400" />;
+   550→      case 'CONSTANCIA_EMPLEO': return <FileBadge className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
+   551→      case 'CONSTANCIA_SALARIAL': return <Receipt className="h-4 w-4 text-amber-600 dark:text-amber-400" />;
+   552→      case 'CONSTANCIA_ISR': return <FileText className="h-4 w-4 text-rose-600 dark:text-rose-400" />;
+   553→      case 'CAMBIO_DATOS': return <Edit3 className="h-4 w-4 text-teal-600 dark:text-teal-400" />;
+   554→      default: return <AlertCircle className="h-4 w-4 text-slate-500" />;
+   555→    }
+   556→  };
+   557→
+   558→  const getSolicitudTypeColor = (tipo: string) => {
+   559→    switch (tipo) {
+   560→      case 'VACACION': return 'bg-teal-50 dark:bg-teal-900/20 border-teal-100 dark:border-teal-800';
+   561→      case 'CONSTANCIA_EMPLEO': return 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800';
+   562→      case 'CONSTANCIA_SALARIAL': return 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800';
+   563→      case 'CONSTANCIA_ISR': return 'bg-rose-50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800';
+   564→      case 'CAMBIO_DATOS': return 'bg-teal-50 dark:bg-teal-900/20 border-teal-100 dark:border-teal-800';
+   565→      default: return 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700';
+   566→    }
+   567→  };
+   568→
+   569→  const getPriorityBadge = (prioridad: string) => {
+   570→    if (prioridad === 'ALTA') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+   571→    if (prioridad === 'MEDIA') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
+   572→    return 'bg-slate-100 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400';
+   573→  };
+   574→
+   575→  return (
+   576→    <div className="space-y-4 max-w-4xl mx-auto p-1">
+   577→      {/* ========== ENHANCED HEADER CARD ========== */}
+   578→      <div className="bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
+   579→        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.1),transparent_50%)]" />
+   580→        <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+   581→        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+   582→        <div className="absolute top-1/3 right-1/4 w-16 h-16 bg-white/[0.03] rounded-lg rotate-12" />
+   583→        <div className="absolute bottom-1/4 right-2/3 w-10 h-10 bg-white/[0.04] rounded-full" />
+   584→
+   585→        <div className="flex items-start gap-5 relative z-10">
+   586→          {/* Avatar with initials */}
+   587→          <Avatar className="h-20 w-20 ring-3 ring-white/30 shadow-lg">
+   588→            <AvatarFallback className="bg-white/20 backdrop-blur-sm text-2xl font-bold text-white">
+   589→              {emp.primer_nombre[0]}{emp.primer_apellido[0]}
+   590→            </AvatarFallback>
+   591→          </Avatar>
+   592→
+   593→          <div className="flex-1 min-w-0">
+   594→            <h2 className="text-2xl font-bold truncate leading-tight">
+   595→              {emp.primer_nombre} {emp.segundo_nombre || ''} {emp.primer_apellido} {emp.segundo_apellido || ''}
+   596→            </h2>
+   597→            <p className="text-emerald-100 text-sm flex items-center gap-1.5 mt-1">
+   598→              <Briefcase className="h-3.5 w-3.5 shrink-0" />
+   599→              <span className="truncate">{data.perfil_puesto?.nombre_puesto || 'Sin puesto'}</span>
+   600→            </p>
+   601→            <div className="flex flex-wrap items-center gap-2 mt-2.5">
+   602→              <Badge variant="secondary" className="bg-white/20 text-white border-0 text-[11px] hover:bg-white/30">
+   603→                <Building className="h-3 w-3 mr-1" />
+   604→                {data.area?.nombre || 'Sin área'}
+   605→              </Badge>
+   606→              <Badge variant="secondary" className="bg-white/20 text-white border-0 text-[11px] hover:bg-white/30">
+   607→                <MapPin className="h-3 w-3 mr-1" />
+   608→                {emp.codigo_empleado}
+   609→              </Badge>
+   610→              <Badge variant="secondary" className="bg-emerald-300/40 text-white border-emerald-400/30 text-[11px]">
+   611→                <CheckCircle className="h-3 w-3 mr-1" />
+   612→                ACTIVO
+   613→              </Badge>
+   614→            </div>
+   615→            {/* Tenure info */}
+   616→            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/15">
+   617→              <div className="flex items-center gap-1.5 text-emerald-100 text-xs">
+   618→                <CalendarDays className="h-3.5 w-3.5" />
+   619→                <span>Desde {fmtDateLong(emp.fecha_ingreso)}</span>
+   620→              </div>
+   621→              <div className="flex items-center gap-1.5 text-white text-xs font-semibold">
+   622→                <Award className="h-3.5 w-3.5" />
+   623→                <span>{tenure.years} año{tenure.years !== 1 ? 's' : ''} {tenure.months} mes{tenure.months !== 1 ? 'es' : ''} de servicio</span>
+   624→              </div>
+   625→            </div>
+   626→          </div>
+   627→        </div>
+   628→      </div>
+   629→
+   630→      {/* ========== QUICK STATS ROW ========== */}
+   631→      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   632→        <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3.5 border border-emerald-100 dark:border-emerald-800/50">
+   633→          <div className="flex items-center gap-2 mb-1">
+   634→            <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-800/50">
+   635→              <DollarSign className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+   636→            </div>
+   637→            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">Salario</span>
+   638→          </div>
+   639→          <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(emp.salario_base)}</p>
+   640→        </div>
+   641→        <div className="bg-teal-50 dark:bg-teal-900/20 rounded-xl p-3.5 border border-teal-100 dark:border-teal-800/50">
+   642→          <div className="flex items-center gap-2 mb-1">
+   643→            <div className="p-1.5 rounded-lg bg-teal-100 dark:bg-teal-800/50">
+   644→              <Sun className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+   645→            </div>
+   646→            <span className="text-[10px] text-teal-600 dark:text-teal-400 font-semibold uppercase tracking-wider">Vacaciones</span>
+   647→          </div>
+   648→          <p className="text-lg font-bold text-teal-700 dark:text-teal-300">{totalDiasPendientes} <span className="text-xs font-normal text-teal-500">días</span></p>
+   649→        </div>
+   650→        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3.5 border border-amber-100 dark:border-amber-800/50">
+   651→          <div className="flex items-center gap-2 mb-1">
+   652→            <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-800/50">
+   653→              <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+   654→            </div>
+   655→            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wider">Pendientes</span>
+   656→          </div>
+   657→          <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{data.solicitudes.filter(s => s.estado === 'PENDIENTE').length} <span className="text-xs font-normal text-amber-500">solicitudes</span></p>
+   658→        </div>
+   659→        <div className="bg-rose-50 dark:bg-rose-900/20 rounded-xl p-3.5 border border-rose-100 dark:border-rose-800/50">
+   660→          <div className="flex items-center gap-2 mb-1">
+   661→            <div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-800/50">
+   662→              <Receipt className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+   663→            </div>
+   664→            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold uppercase tracking-wider">Recibos</span>
+   665→          </div>
+   666→          <p className="text-lg font-bold text-rose-700 dark:text-rose-300">{data.recibos.length} <span className="text-xs font-normal text-rose-500">disponibles</span></p>
+   667→        </div>
+   668→      </div>
+   669→
+   670→      {/* ========== MAIN CONTENT GRID ========== */}
+   671→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   672→
+   673→        {/* ===== ENHANCED VACATION SECTION ===== */}
+   674→        <Card className="shadow-sm md:row-span-2">
+   675→          <CardHeader className="pb-3">
+   676→            <div className="flex items-center justify-between">
+   677→              <CardTitle className="text-base flex items-center gap-2">
+   678→                <Plane className="h-4 w-4 text-teal-600 dark:text-teal-400" /> Saldo de Vacaciones
+   679→              </CardTitle>
+   680→              <Button
+   681→                size="sm"
+   682→                className="bg-teal-600 hover:bg-teal-700 text-white text-xs h-8 gap-1.5 min-h-[44px]"
+   683→                onClick={() => setShowVacationDialog(true)}
+   684→              >
+   685→                <Plus className="h-3.5 w-3.5" />
+   686→                Solicitar
+   687→              </Button>
+   688→            </div>
+   689→          </CardHeader>
+   690→          <CardContent className="space-y-4">
+   691→            {/* Circular progress with available indicator */}
+   692→            <div className="flex items-center gap-5">
+   693→              <CircularProgress
+   694→                value={vacationRemaining}
+   695→                size={96}
+   696→                strokeWidth={10}
+   697→                colorClass="text-emerald-500 dark:text-emerald-400"
+   698→              >
+   699→                <span className="text-xl font-bold text-slate-800 dark:text-slate-200">{totalDiasPendientes}</span>
+   700→                <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-medium">Disponibles</span>
+   701→              </CircularProgress>
+   702→              <div className="flex-1 min-w-0 space-y-3">
+   703→                {/* Color legend */}
+   704→                <div className="space-y-2">
+   705→                  <div className="flex items-center gap-2">
+   706→                    <div className="w-3 h-3 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+   707→                    <span className="text-xs text-slate-600 dark:text-slate-400">Disponibles</span>
+   708→                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-auto">{totalDiasPendientes} días</span>
+   709→                  </div>
+   710→                  <div className="flex items-center gap-2">
+   711→                    <div className="w-3 h-3 rounded-full bg-amber-400 dark:bg-amber-500" />
+   712→                    <span className="text-xs text-slate-600 dark:text-slate-400">Pendientes aprobación</span>
+   713→                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400 ml-auto">
+   714→                      {data.solicitudes.filter(s => s.tipo === 'VACACION' && s.estado === 'PENDIENTE').length}
+   715→                    </span>
+   716→                  </div>
+   717→                  <div className="flex items-center gap-2">
+   718→                    <div className="w-3 h-3 rounded-full bg-teal-400 dark:bg-teal-500" />
+   719→                    <span className="text-xs text-slate-600 dark:text-slate-400">Tomados</span>
+   720→                    <span className="text-xs font-bold text-teal-600 dark:text-teal-400 ml-auto">{totalDiasTomados} días</span>
+   721→                  </div>
+   722→                </div>
+   723→              </div>
+   724→            </div>
+   725→
+   726→            {/* Progress bar */}
+   727→            <div>
+   728→              <div className="flex items-center justify-between mb-1.5">
+   729→                <span className="text-xs text-slate-500 dark:text-slate-400">Utilizado del total</span>
+   730→                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{vacationProgress}%</span>
+   731→              </div>
+   732→              <Progress value={vacationProgress} className="h-2.5" />
+   733→            </div>
+   734→
+   735→            {/* Per year breakdown with calendar indicators */}
+   736→            {data.vacaciones.length > 0 && (
+   737→              <div className="space-y-2">
+   738→                <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Desglose por Año</p>
+   739→                {data.vacaciones.map((v) => {
+   740→                  const yearProgress = v.dias_derecho > 0 ? Math.round((v.dias_tomados / v.dias_derecho) * 100) : 0;
+   741→                  const availableSegments = Math.round((v.dias_pendientes / v.dias_derecho) * 10);
+   742→                  const takenSegments = Math.round((v.dias_tomados / v.dias_derecho) * 10);
+   743→                  return (
+   744→                    <div key={v.id} className="bg-slate-50/80 dark:bg-slate-800/50 rounded-lg p-3 border border-slate-100 dark:border-slate-700">
+   745→                      <div className="flex items-center justify-between mb-1.5">
+   746→                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Año {v.anio}</span>
+   747→                        <div className="flex items-center gap-2">
+   748→                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">{v.dias_pendientes} disp.</span>
+   749→                          <span className="text-[10px] text-slate-400">|</span>
+   750→                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{v.dias_tomados} tomados</span>
+   751→                        </div>
+   752→                      </div>
+   753→                      <Progress value={yearProgress} className="h-1.5" />
+   754→                      {/* Calendar-like day indicators */}
+   755→                      <div className="flex gap-0.5 mt-2">
+   756→                        {Array.from({ length: 10 }, (_, i) => (
+   757→                          <div
+   758→                            key={i}
+   759→                            className={`h-2.5 flex-1 rounded-sm transition-colors ${
+   760→                              i < takenSegments
+   761→                                ? 'bg-teal-400 dark:bg-teal-500'
+   762→                                : i < takenSegments + availableSegments
+   763→                                  ? 'bg-emerald-400 dark:bg-emerald-500'
+   764→                                  : 'bg-slate-200 dark:bg-slate-600'
+   765→                            }`}
+   766→                          />
+   767→                        ))}
+   768→                      </div>
+   769→                      <div className="flex justify-between mt-1">
+   770→                        <span className="text-[9px] text-teal-500 dark:text-teal-400">Tomado</span>
+   771→                        <span className="text-[9px] text-emerald-500 dark:text-emerald-400">Disponible</span>
+   772→                      </div>
+   773→                    </div>
+   774→                  );
+   775→                })}
+   776→              </div>
+   777→            )}
+   778→
+   779→            {/* Pending vacation requests timeline */}
+   780→            {data.solicitudes.filter(s => s.tipo === 'VACACION').length > 0 && (
+   781→              <div>
+   782→                <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold mb-2">Historial de Solicitudes</p>
+   783→                <div className="space-y-2 max-h-40 overflow-y-auto">
+   784→                  {data.solicitudes.filter(s => s.tipo === 'VACACION').map((sol) => (
+   785→                    <div key={sol.id} className="flex items-start gap-3">
+   786→                      {/* Timeline dot */}
+   787→                      <div className="flex flex-col items-center mt-0.5">
+   788→                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+   789→                          sol.estado === 'APROBADA' ? 'bg-emerald-500' :
+   790→                          sol.estado === 'PENDIENTE' ? 'bg-amber-400' :
+   791→                          sol.estado === 'CANCELADA' ? 'bg-slate-400' :
+   792→                          'bg-red-400'
+   793→                        }`} />
+   794→                        <div className="w-px h-full bg-slate-200 dark:bg-slate-700 min-h-[12px]" />
+   795→                      </div>
+   796→                      <div className="flex-1 min-w-0 pb-2">
+   797→                        <div className="flex items-center justify-between">
+   798→                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{fmtDate(sol.fecha_solicitud)}</span>
+   799→                          <Badge className={`text-[9px] border shrink-0 ${getSolicitudBadge(sol.estado)}`}>{sol.estado}</Badge>
+   800→                        </div>
+   801→                        {sol.detalle && (
+   802→                          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">{sol.detalle}</p>
+   803→                        )}
+   804→                      </div>
+   805→                    </div>
+   806→                  ))}
+   807→                </div>
+   808→              </div>
+   809→            )}
+   810→          </CardContent>
+   811→        </Card>
+   812→
+   813→        {/* ===== PERSONAL INFORMATION CARD ===== */}
+   814→        <Card className="shadow-sm">
+   815→          <CardHeader className="pb-3">
+   816→            <div className="flex items-center justify-between">
+   817→              <CardTitle className="text-base flex items-center gap-2">
+   818→                <User className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Información Personal
+   819→              </CardTitle>
+   820→              <Button
+   821→                variant="outline"
+   822→                size="sm"
+   823→                className="text-xs h-8 gap-1.5 min-h-[44px] border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20"
+   824→                onClick={() => { setRequestType('CAMBIO_DATOS'); setShowRequestDialog(true); }}
+   825→              >
+   826→                <Edit3 className="h-3.5 w-3.5" />
+   827→                Solicitar Cambio
+   828→              </Button>
+   829→            </div>
+   830→          </CardHeader>
+   831→          <CardContent>
+   832→            <div className="space-y-3">
+   833→              {/* Basic info grid */}
+   834→              <div className="grid grid-cols-2 gap-3">
+   835→                <div>
+   836→                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold flex items-center gap-1">
+   837→                    <Briefcase className="h-2.5 w-2.5" /> Código
+   838→                  </p>
+   839→                  <p className="font-medium text-slate-800 dark:text-slate-200 font-mono text-xs mt-0.5">{emp.codigo_empleado}</p>
+   840→                </div>
+   841→                <div>
+   842→                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold flex items-center gap-1">
+   843→                    <Building className="h-2.5 w-2.5" /> Área
+   844→                  </p>
+   845→                  <p className="font-medium text-slate-800 dark:text-slate-200 text-xs mt-0.5">{data.area?.nombre || 'Sin área'}</p>
+   846→                </div>
+   847→                <div>
+   848→                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Puesto</p>
+   849→                  <p className="font-medium text-slate-800 dark:text-slate-200 text-xs mt-0.5">{data.perfil_puesto?.nombre_puesto || 'Sin puesto'}</p>
+   850→                </div>
+   851→                <div>
+   852→                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold flex items-center gap-1">
+   853→                    <CalendarDays className="h-2.5 w-2.5" /> Ingreso
+   854→                  </p>
+   855→                  <p className="font-medium text-slate-800 dark:text-slate-200 text-xs mt-0.5">{fmtDate(emp.fecha_ingreso)}</p>
+   856→                </div>
+   857→                <div>
+   858→                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">DUI</p>
+   859→                  <p className="font-medium text-slate-800 dark:text-slate-200 text-xs mt-0.5">{emp.dui}</p>
+   860→                </div>
+   861→                <div>
+   862→                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold flex items-center gap-1">
+   863→                    <Phone className="h-2.5 w-2.5" /> Teléfono
+   864→                  </p>
+   865→                  <p className="font-medium text-slate-800 dark:text-slate-200 text-xs mt-0.5">{emp.telefono || '—'}</p>
+   866→                </div>
+   867→              </div>
+   868→
+   869→              <Separator />
+   870→
+   871→              {/* Contact info */}
+   872→              <div>
+   873→                <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold flex items-center gap-1 mb-2">
+   874→                  <Mail className="h-2.5 w-2.5" /> Contacto
+   875→                </p>
+   876→                <p className="text-xs text-slate-700 dark:text-slate-300">{emp.email_personal || 'No registrado'}</p>
+   877→              </div>
+   878→
+   879→              <Separator />
+   880→
+   881→              {/* Emergency & Bank info */}
+   882→              <div className="grid grid-cols-2 gap-3">
+   883→                <div>
+   884→                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold flex items-center gap-1">
+   885→                    <Heart className="h-2.5 w-2.5" /> Emergencia
+   886→                  </p>
+   887→                  <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5">No registrado</p>
+   888→                  <p className="text-[10px] text-slate-400">—</p>
+   889→                </div>
+   890→                <div>
+   891→                  <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold flex items-center gap-1">
+   892→                    <Banknote className="h-2.5 w-2.5" /> Cuenta Bancaria
+   893→                  </p>
+   894→                  <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5">Transferencia</p>
+   895→                  <p className="text-[10px] text-slate-400 font-mono">****-****-****</p>
+   896→                </div>
+   897→              </div>
+   898→
+   899→              {data.perfil_puesto?.banda_salarial && (
+   900→                <>
+   901→                  <Separator />
+   902→                  <div>
+   903→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Banda Salarial</p>
+   904→                    <p className="font-medium text-slate-800 dark:text-slate-200 text-xs mt-0.5">
+   905→                      {data.perfil_puesto.banda_salarial.nombre} (Grado {data.perfil_puesto.banda_salarial.grado})
+   906→                    </p>
+   907→                  </div>
+   908→                </>
+   909→              )}
+   910→            </div>
+   911→          </CardContent>
+   912→        </Card>
+   913→
+   914→        {/* ===== BENEFITS SUMMARY WIDGET ===== */}
+   915→        <Card className="shadow-sm">
+   916→          <CardHeader className="pb-3">
+   917→            <CardTitle className="text-base flex items-center gap-2">
+   918→              <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Beneficios y Prestaciones
+   919→            </CardTitle>
+   920→          </CardHeader>
+   921→          <CardContent>
+   922→            <div className="space-y-3">
+   923→              {/* ISSS */}
+   924→              <div className="bg-emerald-50/80 dark:bg-emerald-900/20 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/50">
+   925→                <div className="flex items-center justify-between mb-1">
+   926→                  <div className="flex items-center gap-2">
+   927→                    <div className="p-1.5 rounded bg-emerald-100 dark:bg-emerald-800/50">
+   928→                      <Activity className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+   929→                    </div>
+   930→                    <div>
+   931→                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">ISSS - Seguro Social</p>
+   932→                      <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Cobertura médica y maternidad</p>
+   933→                    </div>
+   934→                  </div>
+   935→                  <div className="text-right">
+   936→                    <p className="text-[10px] text-emerald-500 dark:text-emerald-400">Desc. mensual</p>
+   937→                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(monthlyISSS)}</p>
+   938→                  </div>
+   939→                </div>
+   940→                <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-emerald-200/50 dark:border-emerald-700/30">
+   941→                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400">Aporte anual estimado</span>
+   942→                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(annualISSS)}</span>
+   943→                </div>
+   944→              </div>
+   945→
+   946→              {/* AFP */}
+   947→              <div className="bg-teal-50/80 dark:bg-teal-900/20 rounded-lg p-3 border border-teal-100 dark:border-teal-800/50">
+   948→                <div className="flex items-center justify-between mb-1">
+   949→                  <div className="flex items-center gap-2">
+   950→                    <div className="p-1.5 rounded bg-teal-100 dark:bg-teal-800/50">
+   951→                      <PiggyBank className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+   952→                    </div>
+   953→                    <div>
+   954→                      <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">AFP - Fondo de Pensión</p>
+   955→                      <p className="text-[10px] text-teal-500 dark:text-teal-400">Ahorro para jubilación</p>
+   956→                    </div>
+   957→                  </div>
+   958→                  <div className="text-right">
+   959→                    <p className="text-[10px] text-teal-500 dark:text-teal-400">Desc. mensual</p>
+   960→                    <p className="text-xs font-bold text-teal-700 dark:text-teal-300 font-mono">{fmt(monthlyAFP)}</p>
+   961→                  </div>
+   962→                </div>
+   963→                <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-teal-200/50 dark:border-teal-700/30">
+   964→                  <span className="text-[10px] text-teal-600 dark:text-teal-400">Acumulado anual estimado</span>
+   965→                  <span className="text-[10px] font-semibold text-teal-700 dark:text-teal-300 font-mono">{fmt(annualAFP)}</span>
+   966→                </div>
+   967→              </div>
+   968→
+   969→              {/* Aguinaldo */}
+   970→              <div className="bg-amber-50/80 dark:bg-amber-900/20 rounded-lg p-3 border border-amber-100 dark:border-amber-800/50">
+   971→                <div className="flex items-center justify-between">
+   972→                  <div className="flex items-center gap-2">
+   973→                    <div className="p-1.5 rounded bg-amber-100 dark:bg-amber-800/50">
+   974→                      <TrendingUp className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+   975→                    </div>
+   976→                    <div>
+   977→                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Aguinaldo Estimado</p>
+   978→                      <p className="text-[10px] text-amber-500 dark:text-amber-400">Basado en salario actual</p>
+   979→                    </div>
+   980→                  </div>
+   981→                  <p className="text-xs font-bold text-amber-700 dark:text-amber-300 font-mono">{fmt(aguinaldoEstimate)}</p>
+   982→                </div>
+   983→              </div>
+   984→
+   985→              {/* Seniority Bonus */}
+   986→              <div className={`rounded-lg p-3 border ${
+   987→                seniorityBonusEligible
+   988→                  ? 'bg-emerald-50/80 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50'
+   989→                  : 'bg-slate-50/80 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700'
+   990→              }`}>
+   991→                <div className="flex items-center justify-between">
+   992→                  <div className="flex items-center gap-2">
+   993→                    <div className={`p-1.5 rounded ${
+   994→                      seniorityBonusEligible ? 'bg-emerald-100 dark:bg-emerald-800/50' : 'bg-slate-100 dark:bg-slate-700'
+   995→                    }`}>
+   996→                      <Award className={`h-3.5 w-3.5 ${seniorityBonusEligible ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`} />
+   997→                    </div>
+   998→                    <div>
+   999→                      <p className={`text-xs font-semibold ${seniorityBonusEligible ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>
+  1000→                        Bono de Antigüedad
+  1001→                      </p>
+  1002→                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+  1003→                        {seniorityBonusEligible ? 'Elegible' : 'Requiere 1+ año de servicio'}
+  1004→                      </p>
+  1005→                    </div>
+  1006→                  </div>
+  1007→                  {seniorityBonusEligible ? (
+  1008→                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 text-[10px]">
+  1009→                      Elegible
+  1010→                    </Badge>
+  1011→                  ) : (
+  1012→                    <Badge className="bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700 text-[10px]">
+  1013→                      Pendiente
+  1014→                    </Badge>
+  1015→                  )}
+  1016→                </div>
+  1017→              </div>
+  1018→            </div>
+  1019→          </CardContent>
+  1020→        </Card>
+  1021→      </div>
+  1022→
+  1023→      {/* ===== ENHANCED PAY SLIPS SECTION ===== */}
+  1024→      <Card className="shadow-sm">
+  1025→        <CardHeader className="pb-3">
+  1026→          <div className="flex items-center justify-between">
+  1027→            <CardTitle className="text-base flex items-center gap-2">
+  1028→              <Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Recibos de Pago
+  1029→            </CardTitle>
+  1030→            {data.recibos.length > 0 && (
+  1031→              <Badge variant="secondary" className="text-[10px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+  1032→                Últimos {data.recibos.length}
+  1033→              </Badge>
+  1034→            )}
+  1035→          </div>
+  1036→        </CardHeader>
+  1037→        <CardContent>
+  1038→          {data.recibos.length === 0 ? (
+  1039→            <div className="flex flex-col items-center justify-center py-8 text-slate-400 dark:text-slate-500">
+  1040→              <Receipt className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
+  1041→              <p className="text-sm">No hay recibos disponibles</p>
+  1042→            </div>
+  1043→          ) : (
+  1044→            <div className="space-y-4">
+  1045→              {/* Salary trend mini chart */}
+  1046→              {salaryTrend.length > 1 && (
+  1047→                <div className="bg-slate-50/80 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-100 dark:border-slate-700">
+  1048→                  <div className="flex items-center justify-between mb-3">
+  1049→                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+  1050→                      <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+  1051→                      Tendencia Salario Neto
+  1052→                    </p>
+  1053→                    <span className="text-[10px] text-slate-500 dark:text-slate-400">Últimos {salaryTrend.length} períodos</span>
+  1054→                  </div>
+  1055→                  <SalaryBarChart data={salaryTrend} />
+  1056→                </div>
+  1057→              )}
+  1058→
+  1059→              {/* Pay slip list with expandable rows */}
+  1060→              <div className="space-y-2">
+  1061→                {data.recibos.map((recibo) => {
+  1062→                  const isExpanded = expandedRecibo === recibo.id;
+  1063→                  const deductionsTotal = recibo.isss_laboral + recibo.afp_laboral + recibo.isr_retenido;
+  1064→                  const otherDeductions = recibo.total_descuentos - deductionsTotal;
+  1065→
+  1066→                  return (
+  1067→                    <Collapsible key={recibo.id} open={isExpanded} onOpenChange={(open) => setExpandedRecibo(open ? recibo.id : null)}>
+  1068→                      <CollapsibleTrigger asChild>
+  1069→                        <button className="w-full flex items-center justify-between p-3.5 bg-slate-50/80 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors text-left">
+  1070→                          <div className="min-w-0 flex-1">
+  1071→                            <div className="flex items-center gap-2">
+  1072→                              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+  1073→                                {new Date(recibo.periodo_inicio).toLocaleDateString('es-SV', { month: 'long', year: 'numeric' })}
+  1074→                              </p>
+  1075→                              <Badge variant="secondary" className="text-[9px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+  1076→                                {recibo.tipo}
+  1077→                              </Badge>
+  1078→                              <Badge variant="secondary" className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 flex items-center gap-1">
+  1079→                                <Banknote className="h-2.5 w-2.5" /> Transferencia
+  1080→                              </Badge>
+  1081→                            </div>
+  1082→                            <div className="flex items-center gap-4 mt-1.5 text-xs">
+  1083→                              <span className="text-slate-500 dark:text-slate-400">Bruto: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{fmt(recibo.salario_bruto)}</span></span>
+  1084→                              <span className="text-slate-500 dark:text-slate-400">Neto: <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">{fmt(recibo.salario_neto)}</span></span>
+  1085→                            </div>
+  1086→                          </div>
+  1087→                          <div className="flex items-center gap-2 shrink-0 ml-2">
+  1088→                            <Button
+  1089→                              variant="outline"
+  1090→                              size="sm"
+  1091→                              className="h-8 text-xs gap-1.5 min-h-[44px] border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+  1092→                              onClick={(e) => { e.stopPropagation(); handleDownloadBoleta(recibo.id); }}
+  1093→                              disabled={downloadingId === recibo.id}
+  1094→                            >
+  1095→                              {downloadingId === recibo.id ? (
+  1096→                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+  1097→                              ) : (
+  1098→                                <Download className="h-3.5 w-3.5" />
+  1099→                              )}
+  1100→                              <span className="hidden sm:inline">PDF</span>
+  1101→                            </Button>
+  1102→                            {isExpanded ? (
+  1103→                              <ChevronUp className="h-4 w-4 text-slate-400" />
+  1104→                            ) : (
+  1105→                              <ChevronDown className="h-4 w-4 text-slate-400" />
+  1106→                            )}
+  1107→                          </div>
+  1108→                        </button>
+  1109→                      </CollapsibleTrigger>
+  1110→                      <CollapsibleContent>
+  1111→                        <div className="mt-1 p-4 bg-white dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3">
+  1112→                          {/* Earnings vs Deductions */}
+  1113→                          <div className="grid grid-cols-2 gap-4">
+  1114→                            <div>
+  1115→                              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold mb-2">Devengado</p>
+  1116→                              <div className="flex items-center justify-between py-1">
+  1117→                                <span className="text-xs text-slate-600 dark:text-slate-400">Salario Base</span>
+  1118→                                <span className="text-xs font-mono font-medium text-slate-800 dark:text-slate-200">{fmt(recibo.salario_bruto)}</span>
+  1119→                              </div>
+  1120→                              <Separator className="my-1" />
+  1121→                              <div className="flex items-center justify-between py-1">
+  1122→                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Total Devengado</span>
+  1123→                                <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200">{fmt(recibo.salario_bruto)}</span>
+  1124→                              </div>
+  1125→                            </div>
+  1126→                            <div>
+  1127→                              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold mb-2">Descuentos</p>
+  1128→                              <div className="space-y-1">
+  1129→                                <div className="flex items-center justify-between py-0.5">
+  1130→                                  <span className="text-xs text-slate-600 dark:text-slate-400">ISSS (3%)</span>
+  1131→                                  <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(recibo.isss_laboral)}</span>
+  1132→                                </div>
+  1133→                                <div className="flex items-center justify-between py-0.5">
+  1134→                                  <span className="text-xs text-slate-600 dark:text-slate-400">AFP (7.25%)</span>
+  1135→                                  <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(recibo.afp_laboral)}</span>
+  1136→                                </div>
+  1137→                                <div className="flex items-center justify-between py-0.5">
+  1138→                                  <span className="text-xs text-slate-600 dark:text-slate-400">ISR Retención</span>
+  1139→                                  <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(recibo.isr_retenido)}</span>
+  1140→                                </div>
+  1141→                                {otherDeductions > 0 && (
+  1142→                                  <div className="flex items-center justify-between py-0.5">
+  1143→                                    <span className="text-xs text-slate-600 dark:text-slate-400">Otros Descuentos</span>
+  1144→                                    <span className="text-xs font-mono text-rose-600 dark:text-rose-400">-{fmt(otherDeductions)}</span>
+  1145→                                  </div>
+  1146→                                )}
+  1147→                              </div>
+  1148→                              <Separator className="my-1" />
+  1149→                              <div className="flex items-center justify-between py-1">
+  1150→                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Total Descuentos</span>
+  1151→                                <span className="text-xs font-mono font-bold text-rose-600 dark:text-rose-400">-{fmt(recibo.total_descuentos)}</span>
+  1152→                              </div>
+  1153→                            </div>
+  1154→                          </div>
+  1155→
+  1156→                          <Separator />
+  1157→
+  1158→                          {/* Net pay */}
+  1159→                          <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/50">
+  1160→                            <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Líquido a Recibir</span>
+  1161→                            <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(recibo.salario_neto)}</span>
+  1162→                          </div>
+  1163→
+  1164→                          {/* Period info */}
+  1165→                          <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
+  1166→                            <span>Período: {fmtDate(recibo.periodo_inicio)} - {fmtDate(recibo.periodo_fin)}</span>
+  1167→                            <span className="flex items-center gap-1"><Banknote className="h-2.5 w-2.5" /> Pago por transferencia bancaria</span>
+  1168→                          </div>
+  1169→                        </div>
+  1170→                      </CollapsibleContent>
+  1171→                    </Collapsible>
+  1172→                  );
+  1173→                })}
+  1174→              </div>
+  1175→            </div>
+  1176→          )}
+  1177→        </CardContent>
+  1178→      </Card>
+  1179→
+  1180→      {/* ===== REQUEST MANAGEMENT + ANNOUNCEMENTS GRID ===== */}
+  1181→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1182→
+  1183→        {/* ===== NEW REQUEST BUTTONS ===== */}
+  1184→        <Card className="shadow-sm">
+  1185→          <CardHeader className="pb-3">
+  1186→            <CardTitle className="text-base flex items-center gap-2">
+  1187→              <Plus className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Nueva Solicitud
+  1188→            </CardTitle>
+  1189→          </CardHeader>
+  1190→          <CardContent>
+  1191→            <div className="grid grid-cols-2 gap-2.5">
+  1192→              {/* Vacation request */}
+  1193→              <button
+  1194→                className="flex items-center gap-2.5 p-3 rounded-lg border border-teal-200 dark:border-teal-800 hover:border-teal-300 dark:hover:border-teal-700 bg-teal-50/50 dark:bg-teal-900/20 hover:bg-teal-100/50 dark:hover:bg-teal-800/30 transition-all cursor-pointer text-left group min-h-[44px]"
+  1195→                onClick={() => setShowVacationDialog(true)}
+  1196→              >
+  1197→                <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-800/50 group-hover:scale-110 transition-transform">
+  1198→                  <Plane className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+  1199→                </div>
+  1200→                <span className="text-xs font-medium text-teal-700 dark:text-teal-300">Vacaciones</span>
+  1201→              </button>
+  1202→              {/* Certificate request */}
+  1203→              <button
+  1204→                className="flex items-center gap-2.5 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800 hover:border-emerald-300 dark:hover:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-800/30 transition-all cursor-pointer text-left group min-h-[44px]"
+  1205→                onClick={() => setShowCertDialog(true)}
+  1206→              >
+  1207→                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-800/50 group-hover:scale-110 transition-transform">
+  1208→                  <FileBadge className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+  1209→                </div>
+  1210→                <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Constancias</span>
+  1211→              </button>
+  1212→              {/* Incidence report */}
+  1213→              <button
+  1214→                className="flex items-center gap-2.5 p-3 rounded-lg border border-orange-200 dark:border-orange-800 hover:border-orange-300 dark:hover:border-orange-700 bg-orange-50/50 dark:bg-orange-900/20 hover:bg-orange-100/50 dark:hover:bg-orange-800/30 transition-all cursor-pointer text-left group min-h-[44px]"
+  1215→                onClick={() => setShowIncidenceDialog(true)}
+  1216→              >
+  1217→                <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-800/50 group-hover:scale-110 transition-transform">
+  1218→                  <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+  1219→                </div>
+  1220→                <span className="text-xs font-medium text-orange-700 dark:text-orange-300">Incidencia</span>
+  1221→              </button>
+  1222→              {/* Data change request */}
+  1223→              <button
+  1224→                className="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all cursor-pointer text-left group min-h-[44px]"
+  1225→                onClick={() => { setRequestType('CAMBIO_DATOS'); setShowRequestDialog(true); }}
+  1226→              >
+  1227→                <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 group-hover:scale-110 transition-transform">
+  1228→                  <Edit3 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+  1229→                </div>
+  1230→                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Cambio Datos</span>
+  1231→              </button>
+  1232→            </div>
+  1233→          </CardContent>
+  1234→        </Card>
+  1235→
+  1236→        {/* ===== ANNOUNCEMENTS / NOTICES ===== */}
+  1237→        <Card className="shadow-sm">
+  1238→          <CardHeader className="pb-3">
+  1239→            <CardTitle className="text-base flex items-center gap-2">
+  1240→              <Megaphone className="h-4 w-4 text-amber-600 dark:text-amber-400" /> Avisos y Comunicados
+  1241→            </CardTitle>
+  1242→          </CardHeader>
+  1243→          <CardContent>
+  1244→            <div className="space-y-2.5 max-h-64 overflow-y-auto">
+  1245→              {announcements.slice(0, 3).map((notice) => (
+  1246→                <div key={notice.id} className="p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+  1247→                  <div className="flex items-start justify-between gap-2 mb-1">
+  1248→                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 leading-tight">{notice.titulo}</p>
+  1249→                    <Badge className={`text-[9px] border shrink-0 ${getPriorityBadge(notice.prioridad)}`}>
+  1250→                      {notice.prioridad}
+  1251→                    </Badge>
+  1252→                  </div>
+  1253→                  <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">{notice.mensaje}</p>
+  1254→                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-1">
+  1255→                    <Calendar className="h-2.5 w-2.5" />
+  1256→                    {fmtDate(notice.fecha)}
+  1257→                  </p>
+  1258→                </div>
+  1259→              ))}
+  1260→            </div>
+  1261→          </CardContent>
+  1262→        </Card>
+  1263→      </div>
+  1264→
+  1265→      {/* ===== MY REQUESTS - ENHANCED WITH TIMELINE & CANCEL ===== */}
+  1266→      <Card className="shadow-sm">
+  1267→        <CardHeader className="pb-3">
+  1268→          <div className="flex items-center justify-between">
+  1269→            <CardTitle className="text-base flex items-center gap-2">
+  1270→              <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" /> Mis Solicitudes
+  1271→              <Badge variant="secondary" className="ml-1 text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
+  1272→                {data.solicitudes.length}
+  1273→              </Badge>
+  1274→            </CardTitle>
+  1275→          </div>
+  1276→          {/* Filter tabs */}
+  1277→          {data.solicitudes.length > 0 && (
+  1278→            <div className="flex gap-1.5 mt-2 flex-wrap">
+  1279→              {(['TODAS', 'PENDIENTE', 'APROBADA', 'RECHAZADA'] as const).map((filter) => {
+  1280→                const count = filter === 'TODAS'
+  1281→                  ? data.solicitudes.length
+  1282→                  : data.solicitudes.filter(s => s.estado === filter).length;
+  1283→                return (
+  1284→                  <button
+  1285→                    key={filter}
+  1286→                    onClick={() => setSolicitudesFilter(filter)}
+  1287→                    className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors min-h-[32px] ${
+  1288→                      solicitudesFilter === filter
+  1289→                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-600 dark:border-emerald-500'
+  1290→                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700'
+  1291→                    }`}
+  1292→                  >
+  1293→                    {filter === 'TODAS' ? 'Todas' : filter.charAt(0) + filter.slice(1).toLowerCase()} ({count})
+  1294→                  </button>
+  1295→                );
+  1296→              })}
+  1297→            </div>
+  1298→          )}
+  1299→        </CardHeader>
+  1300→        <CardContent>
+  1301→          {data.solicitudes.length === 0 ? (
+  1302→            <div className="flex flex-col items-center justify-center py-8 text-slate-400 dark:text-slate-500">
+  1303→              <Clock className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
+  1304→              <p className="text-sm">No hay solicitudes registradas</p>
+  1305→              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Cree una nueva solicitud usando los botones de arriba</p>
+  1306→            </div>
+  1307→          ) : filteredSolicitudes.length === 0 ? (
+  1308→            <div className="flex flex-col items-center justify-center py-6 text-slate-400 dark:text-slate-500">
+  1309→              <Filter className="h-6 w-6 mb-2 text-slate-300 dark:text-slate-600" />
+  1310→              <p className="text-sm">No hay solicitudes con este filtro</p>
+  1311→            </div>
+  1312→          ) : (
+  1313→            <div className="space-y-2 max-h-96 overflow-y-auto">
+  1314→              {filteredSolicitudes.map((sol) => (
+  1315→                <div key={sol.id} className={`flex items-start justify-between p-3 rounded-lg border text-sm gap-2 ${getSolicitudTypeColor(sol.tipo)}`}>
+  1316→                  <div className="flex items-start gap-2.5 min-w-0">
+  1317→                    <div className="shrink-0 mt-0.5">{getSolicitudIcon(sol.tipo)}</div>
+  1318→                    <div className="min-w-0">
+  1319→                      <p className="font-medium text-slate-800 dark:text-slate-200 text-xs">{sol.tipo.replace(/_/g, ' ')}</p>
+  1320→                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{fmtDate(sol.fecha_solicitud)}</p>
+  1321→                      {sol.detalle && (
+  1322→                        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 truncate max-w-[200px]">{sol.detalle}</p>
+  1323→                      )}
+  1324→                      {/* Mini timeline */}
+  1325→                      <div className="flex items-center gap-2 mt-1.5">
+  1326→                        <div className="flex items-center gap-1">
+  1327→                          <CircleDot className="h-2.5 w-2.5 text-slate-400" />
+  1328→                          <span className="text-[9px] text-slate-400">Solicitada</span>
+  1329→                        </div>
+  1330→                        {sol.estado !== 'PENDIENTE' && (
+  1331→                          <>
+  1332→                            <div className="w-4 h-px bg-slate-300 dark:bg-slate-600" />
+  1333→                            <div className="flex items-center gap-1">
+  1334→                              <div className={`w-2 h-2 rounded-full ${
+  1335→                                sol.estado === 'APROBADA' ? 'bg-emerald-500' :
+  1336→                                sol.estado === 'CANCELADA' ? 'bg-slate-400' :
+  1337→                                'bg-red-400'
+  1338→                              }`} />
+  1339→                              <span className="text-[9px] text-slate-400">{sol.estado === 'APROBADA' ? 'Aprobada' : sol.estado === 'CANCELADA' ? 'Cancelada' : 'Rechazada'}</span>
+  1340→                            </div>
+  1341→                          </>
+  1342→                        )}
+  1343→                      </div>
+  1344→                    </div>
+  1345→                  </div>
+  1346→                  <div className="flex items-center gap-2 shrink-0">
+  1347→                    <Badge className={`text-[10px] border ${getSolicitudBadge(sol.estado)}`}>
+  1348→                      {sol.estado}
+  1349→                    </Badge>
+  1350→                    {sol.estado === 'PENDIENTE' && (
+  1351→                      <Button
+  1352→                        variant="ghost"
+  1353→                        size="sm"
+  1354→                        className="h-7 w-7 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 min-h-[44px] min-w-[44px]"
+  1355→                        onClick={() => handleCancelSolicitud(sol.id)}
+  1356→                        title="Cancelar solicitud"
+  1357→                      >
+  1358→                        <Ban className="h-3.5 w-3.5" />
+  1359→                      </Button>
+  1360→                    )}
+  1361→                  </div>
+  1362→                </div>
+  1363→              ))}
+  1364→            </div>
+  1365→          )}
+  1366→        </CardContent>
+  1367→      </Card>
+  1368→
+  1369→      {/* ========== DIALOGS ========== */}
+  1370→
+  1371→      {/* Generic Request Dialog */}
+  1372→      <Dialog open={showRequestDialog} onOpenChange={setShowRequestDialog}>
+  1373→        <DialogContent className="sm:max-w-md">
+  1374→          <DialogHeader>
+  1375→            <DialogTitle className="flex items-center gap-2">
+  1376→              <FileText className="h-5 w-5 text-emerald-600" /> Nueva Solicitud
+  1377→            </DialogTitle>
+  1378→            <DialogDescription>Complete la información para su solicitud</DialogDescription>
+  1379→          </DialogHeader>
+  1380→          <div className="space-y-4 py-4">
+  1381→            <div className="space-y-2">
+  1382→              <Label>Tipo de Solicitud</Label>
+  1383→              <Select value={requestType} onValueChange={setRequestType}>
+  1384→                <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
+  1385→                <SelectContent>
+  1386→                  {solicitudTipos.filter(t => t.value !== 'VACACION').map((t) => (
+  1387→                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+  1388→                  ))}
+  1389→                </SelectContent>
+  1390→              </Select>
+  1391→            </div>
+  1392→            <div className="space-y-2">
+  1393→              <Label>Detalle / Comentario</Label>
+  1394→              <Textarea value={requestDetail} onChange={(e) => setRequestDetail(e.target.value)} placeholder="Información adicional..." rows={3} />
+  1395→            </div>
+  1396→            <div className="flex justify-end gap-3">
+  1397→              <Button variant="outline" onClick={() => setShowRequestDialog(false)} className="min-h-[44px]">Cancelar</Button>
+  1398→              <Button onClick={handleSubmitRequest} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 min-h-[44px]">
+  1399→                {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+  1400→                Enviar Solicitud
+  1401→              </Button>
+  1402→            </div>
+  1403→          </div>
+  1404→        </DialogContent>
+  1405→      </Dialog>
+  1406→
+  1407→      {/* Vacation Request Dialog */}
+  1408→      <Dialog open={showVacationDialog} onOpenChange={setShowVacationDialog}>
+  1409→        <DialogContent className="sm:max-w-md">
+  1410→          <DialogHeader>
+  1411→            <DialogTitle className="flex items-center gap-2">
+  1412→              <Plane className="h-5 w-5 text-teal-600" /> Solicitar Vacaciones
+  1413→            </DialogTitle>
+  1414→            <DialogDescription>Complete la información para su solicitud de vacaciones</DialogDescription>
+  1415→          </DialogHeader>
+  1416→          <div className="space-y-4 py-4">
+  1417→            {/* Available days indicator */}
+  1418→            <div className="bg-teal-50 dark:bg-teal-900/20 rounded-lg p-3 border border-teal-100 dark:border-teal-800">
+  1419→              <div className="flex items-center justify-between">
+  1420→                <span className="text-xs text-teal-700 dark:text-teal-300 font-medium">Días disponibles</span>
+  1421→                <span className="text-lg font-bold text-teal-700 dark:text-teal-300">{availableVacationDays}</span>
+  1422→              </div>
+  1423→              {currentYearVacation && (
+  1424→                <p className="text-[10px] text-teal-500 dark:text-teal-400 mt-1">
+  1425→                  Año {currentYearVacation.anio}: {currentYearVacation.dias_tomados} tomados de {currentYearVacation.dias_derecho}
+  1426→                </p>
+  1427→              )}
+  1428→            </div>
+  1429→
+  1430→            {/* Date pickers */}
+  1431→            <div className="grid grid-cols-2 gap-3">
+  1432→              <div className="space-y-2">
+  1433→                <Label htmlFor="vac-start">Fecha inicio</Label>
+  1434→                <Input
+  1435→                  id="vac-start"
+  1436→                  type="date"
+  1437→                  value={vacStartDate}
+  1438→                  onChange={(e) => setVacStartDate(e.target.value)}
+  1439→                  min={new Date().toISOString().split('T')[0]}
+  1440→                  className="min-h-[44px]"
+  1441→                />
+  1442→              </div>
+  1443→              <div className="space-y-2">
+  1444→                <Label htmlFor="vac-end">Fecha fin</Label>
+  1445→                <Input
+  1446→                  id="vac-end"
+  1447→                  type="date"
+  1448→                  value={vacEndDate}
+  1449→                  onChange={(e) => setVacEndDate(e.target.value)}
+  1450→                  min={vacStartDate || new Date().toISOString().split('T')[0]}
+  1451→                  className="min-h-[44px]"
+  1452→                />
+  1453→              </div>
+  1454→            </div>
+  1455→
+  1456→            {/* Auto-calculated days */}
+  1457→            {vacStartDate && vacEndDate && (
+  1458→              <div className={`rounded-lg p-3 border ${
+  1459→                vacDaysRequested > availableVacationDays
+  1460→                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+  1461→                  : vacDaysRequested > 0
+  1462→                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+  1463→                    : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'
+  1464→              }`}>
+  1465→                <div className="flex items-center justify-between">
+  1466→                  <span className={`text-xs font-medium ${
+  1467→                    vacDaysRequested > availableVacationDays
+  1468→                      ? 'text-red-700 dark:text-red-300'
+  1469→                      : 'text-emerald-700 dark:text-emerald-300'
+  1470→                  }`}>
+  1471→                    {vacDaysRequested > availableVacationDays ? (
+  1472→                      <span className="flex items-center gap-1">
+  1473→                        <AlertCircle className="h-3.5 w-3.5" />
+  1474→                        Excede días disponibles
+  1475→                      </span>
+  1476→                    ) : (
+  1477→                      'Días a solicitar'
+  1478→                    )}
+  1479→                  </span>
+  1480→                  <span className={`text-lg font-bold ${
+  1481→                    vacDaysRequested > availableVacationDays
+  1482→                      ? 'text-red-700 dark:text-red-300'
+  1483→                      : 'text-emerald-700 dark:text-emerald-300'
+  1484→                  }`}>
+  1485→                    {vacDaysRequested}
+  1486→                  </span>
+  1487→                </div>
+  1488→              </div>
+  1489→            )}
+  1490→
+  1491→            {/* Motivo */}
+  1492→            <div className="space-y-2">
+  1493→              <Label htmlFor="vac-motivo">Motivo (opcional)</Label>
+  1494→              <Textarea
+  1495→                id="vac-motivo"
+  1496→                value={vacMotivo}
+  1497→                onChange={(e) => setVacMotivo(e.target.value)}
+  1498→                placeholder="Razón de la solicitud de vacaciones..."
+  1499→                rows={2}
+  1500→              />
+  1501→            </div>
+  1502→
+  1503→            <div className="flex justify-end gap-3">
+  1504→              <Button variant="outline" onClick={() => setShowVacationDialog(false)} className="min-h-[44px]">Cancelar</Button>
+  1505→              <Button
+  1506→                onClick={handleSubmitVacation}
+  1507→                disabled={vacSubmitting || vacDaysRequested > availableVacationDays || vacDaysRequested === 0}
+  1508→                className="bg-teal-600 hover:bg-teal-700 text-white min-h-[44px]"
+  1509→              >
+  1510→                {vacSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+  1511→                Solicitar {vacDaysRequested > 0 ? `${vacDaysRequested} Días` : 'Vacaciones'}
+  1512→              </Button>
+  1513→            </div>
+  1514→          </div>
+  1515→        </DialogContent>
+  1516→      </Dialog>
+  1517→
+  1518→      {/* Certificate Request Dialog */}
+  1519→      <Dialog open={showCertDialog} onOpenChange={setShowCertDialog}>
+  1520→        <DialogContent className="sm:max-w-md">
+  1521→          <DialogHeader>
+  1522→            <DialogTitle className="flex items-center gap-2">
+  1523→              <FileBadge className="h-5 w-5 text-emerald-600" /> Solicitar Constancia
+  1524→            </DialogTitle>
+  1525→            <DialogDescription>Seleccione el tipo de constancia que necesita</DialogDescription>
+  1526→          </DialogHeader>
+  1527→          <div className="space-y-4 py-4">
+  1528→            <div className="space-y-2">
+  1529→              <Label>Tipo de Constancia</Label>
+  1530→              <Select value={certTipo} onValueChange={setCertTipo}>
+  1531→                <SelectTrigger className="min-h-[44px]"><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
+  1532→                <SelectContent>
+  1533→                  <SelectItem value="CONSTANCIA_EMPLEO">Constancia de Empleo</SelectItem>
+  1534→                  <SelectItem value="CONSTANCIA_SALARIAL">Constancia Salarial</SelectItem>
+  1535→                  <SelectItem value="CONSTANCIA_ISR">Constancia ISR</SelectItem>
+  1536→                </SelectContent>
+  1537→              </Select>
+  1538→            </div>
+  1539→            <div className="space-y-2">
+  1540→              <Label htmlFor="cert-motivo">Motivo / Uso (opcional)</Label>
+  1541→              <Textarea
+  1542→                id="cert-motivo"
+  1543→                value={certMotivo}
+  1544→                onChange={(e) => setCertMotivo(e.target.value)}
+  1545→                placeholder="Ej: Trámite bancario, visa, etc."
+  1546→                rows={2}
+  1547→              />
+  1548→            </div>
+  1549→
+  1550→            {certTipo && (
+  1551→              <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800">
+  1552→                <div className="flex items-center gap-2">
+  1553→                  <Info className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+  1554→                  <p className="text-xs text-emerald-700 dark:text-emerald-300">
+  1555→                    {certTipo === 'CONSTANCIA_EMPLEO' && 'La constancia de empleo incluye: datos personales, cargo, fecha de ingreso y salario actual.'}
+  1556→                    {certTipo === 'CONSTANCIA_SALARIAL' && 'La constancia salarial detalla su remuneración actual y deducciones aplicables.'}
+  1557→                    {certTipo === 'CONSTANCIA_ISR' && 'La constancia ISR muestra las retenciones de impuesto sobre la renta del período fiscal.'}
+  1558→                  </p>
+  1559→                </div>
+  1560→              </div>
+  1561→            )}
+  1562→
+  1563→            <div className="flex justify-end gap-3">
+  1564→              <Button variant="outline" onClick={() => setShowCertDialog(false)} className="min-h-[44px]">Cancelar</Button>
+  1565→              <Button
+  1566→                onClick={handleSubmitCert}
+  1567→                disabled={certSubmitting || !certTipo}
+  1568→                className="bg-emerald-600 hover:bg-emerald-700 min-h-[44px]"
+  1569→              >
+  1570→                {certSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+  1571→                Solicitar Constancia
+  1572→              </Button>
+  1573→            </div>
+  1574→          </div>
+  1575→        </DialogContent>
+  1576→      </Dialog>
+  1577→
+  1578→      {/* Incidence Request Dialog */}
+  1579→      <Dialog open={showIncidenceDialog} onOpenChange={setShowIncidenceDialog}>
+  1580→        <DialogContent className="sm:max-w-md">
+  1581→          <DialogHeader>
+  1582→            <DialogTitle className="flex items-center gap-2">
+  1583→              <AlertCircle className="h-5 w-5 text-orange-600" /> Reportar Incidencia
+  1584→            </DialogTitle>
+  1585→            <DialogDescription>Complete la información para reportar una incidencia</DialogDescription>
+  1586→          </DialogHeader>
+  1587→          <div className="space-y-4 py-4">
+  1588→            <div className="space-y-2">
+  1589→              <Label>Tipo de Incidencia</Label>
+  1590→              <Select value={incTipo} onValueChange={(val) => {
+  1591→                setIncTipo(val);
+  1592→                setIncHoras('');
+  1593→                setIncMonto('');
+  1594→                setIncFechaFin('');
+  1595→                setIncDescripcion('');
+  1596→              }}>
+  1597→                <SelectTrigger className="min-h-[44px]"><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
+  1598→                <SelectContent>
+  1599→                  {incidenciaTipos.map((t) => (
+  1600→                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+  1601→                  ))}
+  1602→                </SelectContent>
+  1603→              </Select>
+  1604→            </div>
+  1605→
+  1606→            {incTipo === 'HORAS_EXTRA' && (
+  1607→              <div className="space-y-3">
+  1608→                <div className="space-y-2">
+  1609→                  <Label htmlFor="inc-hours">Cantidad de horas</Label>
+  1610→                  <Input id="inc-hours" type="number" min="0.5" max="10" step="0.5" value={incHoras} onChange={(e) => setIncHoras(e.target.value)} placeholder="Ej: 4" className="min-h-[44px]" />
+  1611→                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Máximo 10 horas semanales según Art. 169 CT</p>
+  1612→                </div>
+  1613→                <div className="space-y-2">
+  1614→                  <Label htmlFor="inc-date-he">Fecha</Label>
+  1615→                  <Input id="inc-date-he" type="date" value={incFechaInicio} onChange={(e) => setIncFechaInicio(e.target.value)} className="min-h-[44px]" />
+  1616→                </div>
+  1617→              </div>
+  1618→            )}
+  1619→
+  1620→            {(incTipo === 'BONO' || incTipo === 'COMISION') && (
+  1621→              <div className="space-y-3">
+  1622→                <div className="space-y-2">
+  1623→                  <Label htmlFor="inc-amount">Monto ($)</Label>
+  1624→                  <Input id="inc-amount" type="number" min="0.01" step="0.01" value={incMonto} onChange={(e) => setIncMonto(e.target.value)} placeholder="0.00" className="min-h-[44px]" />
+  1625→                </div>
+  1626→                <div className="space-y-2">
+  1627→                  <Label htmlFor="inc-date-bc">Fecha</Label>
+  1628→                  <Input id="inc-date-bc" type="date" value={incFechaInicio} onChange={(e) => setIncFechaInicio(e.target.value)} className="min-h-[44px]" />
+  1629→                </div>
+  1630→                <div className="space-y-2">
+  1631→                  <Label htmlFor="inc-desc-bc">Descripción</Label>
+  1632→                  <Textarea id="inc-desc-bc" value={incDescripcion} onChange={(e) => setIncDescripcion(e.target.value)} placeholder={`Detalle del ${incTipo === 'BONO' ? 'bono' : 'comisión'}...`} rows={2} />
+  1633→                </div>
+  1634→              </div>
+  1635→            )}
+  1636→
+  1637→            {incTipo === 'INCAPACIDAD_ISSS' && (
+  1638→              <div className="space-y-3">
+  1639→                <div className="grid grid-cols-2 gap-3">
+  1640→                  <div className="space-y-2">
+  1641→                    <Label htmlFor="inc-start-inc">Fecha inicio</Label>
+  1642→                    <Input id="inc-start-inc" type="date" value={incFechaInicio} onChange={(e) => setIncFechaInicio(e.target.value)} className="min-h-[44px]" />
+  1643→                  </div>
+  1644→                  <div className="space-y-2">
+  1645→                    <Label htmlFor="inc-end-inc">Fecha fin</Label>
+  1646→                    <Input id="inc-end-inc" type="date" value={incFechaFin} onChange={(e) => setIncFechaFin(e.target.value)} min={incFechaInicio} className="min-h-[44px]" />
+  1647→                  </div>
+  1648→                </div>
+  1649→                {incFechaInicio && incFechaFin && (
+  1650→                  <p className="text-xs text-slate-500 dark:text-slate-400">Duración: {calcDaysBetween(incFechaInicio, incFechaFin)} día(s)</p>
+  1651→                )}
+  1652→                <div className="space-y-2">
+  1653→                  <Label htmlFor="inc-desc-inc">Descripción</Label>
+  1654→                  <Textarea id="inc-desc-inc" value={incDescripcion} onChange={(e) => setIncDescripcion(e.target.value)} placeholder="Detalle de la incapacidad..." rows={2} />
+  1655→                </div>
+  1656→              </div>
+  1657→            )}
+  1658→
+  1659→            {incTipo === 'PERMISO' && (
+  1660→              <div className="space-y-3">
+  1661→                <div className="space-y-2">
+  1662→                  <Label htmlFor="inc-date-perm">Fecha</Label>
+  1663→                  <Input id="inc-date-perm" type="date" value={incFechaInicio} onChange={(e) => setIncFechaInicio(e.target.value)} className="min-h-[44px]" />
+  1664→                </div>
+  1665→                <div className="space-y-2">
+  1666→                  <Label htmlFor="inc-reason-perm">Motivo del permiso</Label>
+  1667→                  <Textarea id="inc-reason-perm" value={incDescripcion} onChange={(e) => setIncDescripcion(e.target.value)} placeholder="Describa el motivo de su permiso..." rows={2} />
+  1668→                </div>
+  1669→              </div>
+  1670→            )}
+  1671→
+  1672→            {incTipo === 'OTRO' && (
+  1673→              <div className="space-y-3">
+  1674→                <div className="space-y-2">
+  1675→                  <Label htmlFor="inc-date-otro">Fecha</Label>
+  1676→                  <Input id="inc-date-otro" type="date" value={incFechaInicio} onChange={(e) => setIncFechaInicio(e.target.value)} className="min-h-[44px]" />
+  1677→                </div>
+  1678→                <div className="space-y-2">
+  1679→                  <Label htmlFor="inc-desc-otro">Descripción</Label>
+  1680→                  <Textarea id="inc-desc-otro" value={incDescripcion} onChange={(e) => setIncDescripcion(e.target.value)} placeholder="Describa la incidencia..." rows={3} />
+  1681→                </div>
+  1682→              </div>
+  1683→            )}
+  1684→
+  1685→            {!incTipo && (
+  1686→              <div className="flex flex-col items-center justify-center py-6 text-slate-400 dark:text-slate-500">
+  1687→                <AlertCircle className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
+  1688→                <p className="text-sm">Seleccione un tipo de incidencia para continuar</p>
+  1689→              </div>
+  1690→            )}
+  1691→
+  1692→            <div className="flex justify-end gap-3">
+  1693→              <Button variant="outline" onClick={() => setShowIncidenceDialog(false)} className="min-h-[44px]">Cancelar</Button>
+  1694→              <Button onClick={handleSubmitIncidence} disabled={incSubmitting || !incTipo} className="bg-orange-600 hover:bg-orange-700 text-white min-h-[44px]">
+  1695→                {incSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+  1696→                Reportar Incidencia
+  1697→              </Button>
+  1698→            </div>
+  1699→          </div>
+  1700→        </DialogContent>
+  1701→      </Dialog>
+  1702→    </div>
+  1703→  );
+  1704→}
+  1705→

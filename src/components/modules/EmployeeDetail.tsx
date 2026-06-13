@@ -6,7 +6,7 @@ import {
   Palmtree, FolderOpen, Loader2, AlertCircle, Plus, Clock,
   User, CalendarDays, AlertTriangle, Printer, MapPin, Phone, Mail,
   Shield, Building2, Hash, CreditCard, TrendingUp, ChevronDown,
-  ChevronUp, Globe, Droplets, Users, Award, Download, Search,
+  ChevronUp, ChevronRight, Globe, Droplets, Users, Award, Download, Search,
   FileCheck, Stamp, LetterText, FileSpreadsheet,
   Sparkles
 } from 'lucide-react';
@@ -1196,8 +1196,45 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
     </div>
   );
 
+  // Seniority calculation
+  const getSeniority = () => {
+    if (!empleado.fecha_ingreso) return { years: 0, months: 0, days: 0, text: 'N/A' };
+    const start = new Date(empleado.fecha_ingreso);
+    const now = new Date();
+    let years = now.getFullYear() - start.getFullYear();
+    let months = now.getMonth() - start.getMonth();
+    let days = now.getDate() - start.getDate();
+    if (days < 0) { months--; days += 30; }
+    if (months < 0) { years--; months += 12; }
+    const text = years > 0 ? `${years} año${years > 1 ? 's' : ''} ${months} mes${months !== 1 ? 'es' : ''}` : `${months} mes${months !== 1 ? 'es' : ''} ${days} día${days !== 1 ? 's' : ''}`;
+    return { years, months, days, text };
+  };
+  const seniority = getSeniority();
+
+  // Age calculation
+  const getAge = () => {
+    if (!empleado.fecha_nacimiento) return null;
+    const birth = new Date(empleado.fecha_nacimiento);
+    const now = new Date();
+    let age = now.getFullYear() - birth.getFullYear();
+    if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--;
+    return age;
+  };
+  const age = getAge();
+
   return (
     <div className="space-y-5">
+      {/* ═══════════════════════════════════════════
+          BREADCRUMB NAVIGATION
+         ═══════════════════════════════════════════ */}
+      <div className="flex items-center gap-2 text-sm">
+        <button onClick={onBack} className="text-slate-500 hover:text-emerald-600 transition-colors flex items-center gap-1">
+          <ArrowLeft className="h-3.5 w-3.5" /> Directorio
+        </button>
+        <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+        <span className="text-slate-800 dark:text-slate-200 font-medium truncate">{getNombreCompleto()}</span>
+      </div>
+
       {/* ═══════════════════════════════════════════
           ENHANCED HEADER PROFILE CARD
          ═══════════════════════════════════════════ */}
@@ -1250,42 +1287,60 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
             </div>
           </div>
 
-          {/* Quick info row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-2">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-              <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <Hash className="h-4 w-4 text-emerald-600" />
+          {/* Quick info row - 6 cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-2">
+            <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+              <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                <Hash className="h-3.5 w-3.5 text-emerald-600" />
               </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Código</p>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{empleado.codigo_empleado}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-              <div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                <CreditCard className="h-4 w-4 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">DUI</p>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{empleado.dui}</p>
+              <div className="min-w-0">
+                <p className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Código</p>
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 font-mono truncate">{empleado.codigo_empleado}</p>
               </div>
             </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-              <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <DollarSign className="h-4 w-4 text-emerald-600" />
+            <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+              <div className="h-8 w-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                <CreditCard className="h-3.5 w-3.5 text-amber-600" />
               </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Salario</p>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{formatSalary(empleado.salario_base)}</p>
+              <div className="min-w-0">
+                <p className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">DUI</p>
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 font-mono truncate">{empleado.dui}</p>
               </div>
             </div>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-              <div className="h-9 w-9 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
-                <CalendarDays className="h-4 w-4 text-sky-600" />
+            <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+              <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
               </div>
-              <div>
-                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Fecha Ingreso</p>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{formatDate(empleado.fecha_ingreso)}</p>
+              <div className="min-w-0">
+                <p className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Salario</p>
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{formatSalary(empleado.salario_base)}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+              <div className="h-8 w-8 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center shrink-0">
+                <CalendarDays className="h-3.5 w-3.5 text-sky-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">Antigüedad</p>
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{seniority.text}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+              <div className="h-8 w-8 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center shrink-0">
+                <Shield className="h-3.5 w-3.5 text-teal-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">ISSS</p>
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 font-mono truncate">{empleado.numero_isss || '—'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+              <div className="h-8 w-8 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center shrink-0">
+                <Heart className="h-3.5 w-3.5 text-rose-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">AFP</p>
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 font-mono truncate">{empleado.numero_afp || '—'}</p>
               </div>
             </div>
           </div>
@@ -1381,7 +1436,7 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
                   <InfoField label="Apellido de Casada" value={empleado.apellido_casada} icon={<User className="h-3.5 w-3.5" />} />
                   <InfoField label="DUI" value={empleado.dui} icon={<CreditCard className="h-3.5 w-3.5" />} />
                   <InfoField label="NIT" value={empleado.nit} icon={<Hash className="h-3.5 w-3.5" />} />
-                  <InfoField label="Fecha Nacimiento" value={formatDate(empleado.fecha_nacimiento)} icon={<CalendarDays className="h-3.5 w-3.5" />} />
+                  <InfoField label="Fecha Nacimiento" value={`${formatDate(empleado.fecha_nacimiento)}${age ? ` (${age} años)` : ''}`} icon={<CalendarDays className="h-3.5 w-3.5" />} />
                   <InfoField label="Género" value={empleado.genero} icon={<User className="h-3.5 w-3.5" />} />
                   <InfoField label="Estado Civil" value={empleado.estado_civil} icon={<Users className="h-3.5 w-3.5" />} />
                   <InfoField label="Nacionalidad" value={empleado.nacionalidad} icon={<Globe className="h-3.5 w-3.5" />} />
@@ -1725,12 +1780,18 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
               </Card>
             </div>
 
-            {/* Request vacation button for EMPLEADO */}
-            {userRole === 'EMPLEADO' && (
-              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                <Palmtree className="h-4 w-4 mr-2" /> Solicitar Vacaciones
-              </Button>
-            )}
+            {/* Request vacation button for EMPLEADO + Legal reference */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 dark:bg-slate-800/50 px-3 py-2 rounded-lg">
+                <CalendarDays className="h-3.5 w-3.5" />
+                <span>Art. 177 CT — 15 días después de 1 año de servicio</span>
+              </div>
+              {userRole === 'EMPLEADO' && (
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                  <Palmtree className="h-4 w-4 mr-2" /> Solicitar Vacaciones
+                </Button>
+              )}
+            </div>
 
             {/* Per-year breakdown with progress bars */}
             <Card className="shadow-sm">
@@ -1803,62 +1864,115 @@ export default function EmployeeDetail({ empleadoId, onBack, userRole, accessTok
             TAB: INCIDENCIAS
            ═══════════════════════════════════════════ */}
         <TabsContent value="incidencias">
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Incidencias del Empleado
-              </CardTitle>
-              <CardDescription>Registro de incidencias, permisos y novedades</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {empleado.incidencias.length === 0 ? (
-                <div className="flex flex-col items-center py-10 text-slate-400">
-                  <AlertTriangle className="h-10 w-10 mb-2" />
-                  <p className="text-sm font-medium">Sin incidencias registradas</p>
-                  <p className="text-xs">Las incidencias del empleado aparecerán aquí</p>
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {empleado.incidencias.map(inc => {
-                    const tipoColors: Record<string, string> = {
-                      PERMISO: 'bg-sky-100 text-sky-700 border-sky-200',
-                      VACACION: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-                      ENFERMEDAD: 'bg-amber-100 text-amber-700 border-amber-200',
-                      AUSENCIA: 'bg-red-100 text-red-700 border-red-200',
-                      HORAS_EXTRA: 'bg-purple-100 text-purple-700 border-purple-200',
-                    };
-                    const estadoColors: Record<string, string> = {
-                      PENDIENTE: 'bg-yellow-100 text-yellow-700',
-                      APROBADA: 'bg-emerald-100 text-emerald-700',
-                      RECHAZADA: 'bg-red-100 text-red-700',
-                    };
-                    return (
-                      <div key={inc.id} className="p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className={tipoColors[inc.tipo] || 'bg-slate-100 text-slate-600'}>
-                              {inc.tipo}
-                            </Badge>
-                            <Badge className={estadoColors[inc.estado] || 'bg-slate-100 text-slate-600'}>
-                              {inc.estado}
-                            </Badge>
-                          </div>
-                          <span className="text-xs text-slate-400">{formatDate(inc.fecha_inicio)}</span>
-                        </div>
-                        {inc.descripcion && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{inc.descripcion}</p>}
-                        <div className="flex gap-4 mt-1.5 text-xs text-slate-400">
-                          {inc.cantidad_horas && <span>{inc.cantidad_horas} hrs</span>}
-                          {inc.monto && <span className="text-emerald-600 font-medium">{formatSalary(inc.monto)}</span>}
-                          {inc.fecha_fin && <span>Fin: {formatDate(inc.fecha_fin)}</span>}
-                        </div>
+          <div className="space-y-4">
+            {/* Summary by type */}
+            {empleado.incidencias.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {(() => {
+                  const byType: Record<string, { count: number; total: number }> = {};
+                  empleado.incidencias.forEach(inc => {
+                    if (!byType[inc.tipo]) byType[inc.tipo] = { count: 0, total: 0 };
+                    byType[inc.tipo].count++;
+                    if (inc.monto) byType[inc.tipo].total += inc.monto;
+                  });
+                  const tipoIcons: Record<string, React.ReactNode> = {
+                    HORAS_EXTRA: <Clock className="h-4 w-4" />,
+                    BONO: <DollarSign className="h-4 w-4" />,
+                    COMISION: <TrendingUp className="h-4 w-4" />,
+                    INCAPACIDAD_ISSS: <Heart className="h-4 w-4" />,
+                    PERMISO: <CalendarDays className="h-4 w-4" />,
+                    DESCUENTO_ESPECIAL: <AlertTriangle className="h-4 w-4" />,
+                  };
+                  const tipoColors: Record<string, string> = {
+                    HORAS_EXTRA: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+                    BONO: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+                    COMISION: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+                    INCAPACIDAD_ISSS: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                    PERMISO: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+                    DESCUENTO_ESPECIAL: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                  };
+                  return Object.entries(byType).map(([tipo, data]) => (
+                    <div key={tipo} className="p-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800/50">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={tipoColors[tipo] || 'bg-slate-100 text-slate-600 p-1 rounded'}>
+                          {tipoIcons[tipo] || <AlertTriangle className="h-4 w-4" />}
+                        </span>
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">{tipo.replace(/_/g, ' ')}</span>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      <p className="text-lg font-bold text-slate-800 dark:text-slate-200">{data.count}</p>
+                      {data.total > 0 && <p className="text-xs text-emerald-600 font-medium">{formatSalary(data.total)}</p>}
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  Incidencias del Empleado
+                </CardTitle>
+                <CardDescription>Registro de incidencias, permisos y novedades</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {empleado.incidencias.length === 0 ? (
+                  <div className="flex flex-col items-center py-10 text-slate-400">
+                    <AlertTriangle className="h-10 w-10 mb-2" />
+                    <p className="text-sm font-medium">Sin incidencias registradas</p>
+                    <p className="text-xs">Las incidencias del empleado aparecerán aquí</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {empleado.incidencias.map(inc => {
+                      const tipoColors: Record<string, string> = {
+                        PERMISO: 'bg-sky-100 text-sky-700 border-sky-200',
+                        VACACION: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+                        ENFERMEDAD: 'bg-amber-100 text-amber-700 border-amber-200',
+                        AUSENCIA: 'bg-red-100 text-red-700 border-red-200',
+                        HORAS_EXTRA: 'bg-orange-100 text-orange-700 border-orange-200',
+                        BONO: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+                        COMISION: 'bg-teal-100 text-teal-700 border-teal-200',
+                        INCAPACIDAD_ISSS: 'bg-red-100 text-red-700 border-red-200',
+                      };
+                      const estadoColors: Record<string, string> = {
+                        PENDIENTE: 'bg-yellow-100 text-yellow-700',
+                        APROBADA: 'bg-emerald-100 text-emerald-700',
+                        RECHAZADA: 'bg-red-100 text-red-700',
+                      };
+                      const borderColors: Record<string, string> = {
+                        HORAS_EXTRA: 'border-l-orange-400',
+                        BONO: 'border-l-emerald-400',
+                        COMISION: 'border-l-teal-400',
+                        INCAPACIDAD_ISSS: 'border-l-red-400',
+                        PERMISO: 'border-l-sky-400',
+                      };
+                      return (
+                        <div key={inc.id} className={`p-3 rounded-lg border border-slate-100 dark:border-slate-700 border-l-4 ${borderColors[inc.tipo] || 'border-l-slate-300'} bg-slate-50/50 dark:bg-slate-800/30`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className={tipoColors[inc.tipo] || 'bg-slate-100 text-slate-600'}>
+                                {inc.tipo.replace(/_/g, ' ')}
+                              </Badge>
+                              <Badge className={estadoColors[inc.estado] || 'bg-slate-100 text-slate-600'}>
+                                {inc.estado}
+                              </Badge>
+                            </div>
+                            <span className="text-xs text-slate-400">{formatDate(inc.fecha_inicio)}</span>
+                          </div>
+                          {inc.descripcion && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{inc.descripcion}</p>}
+                          <div className="flex gap-4 mt-1.5 text-xs text-slate-400">
+                            {inc.cantidad_horas && <span>{inc.cantidad_horas} hrs</span>}
+                            {inc.monto && <span className="text-emerald-600 font-medium">{formatSalary(inc.monto)}</span>}
+                            {inc.fecha_fin && <span>Fin: {formatDate(inc.fecha_fin)}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* ═══════════════════════════════════════════
