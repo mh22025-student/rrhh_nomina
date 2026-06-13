@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Send, Building2, Download, Loader2, CheckCircle, XCircle,
-  Clock, AlertTriangle, RefreshCw
+  Clock, AlertTriangle, RefreshCw, Copy, ChevronDown, ChevronRight,
+  FileText, Users, DollarSign, Calendar, ShieldCheck, Info
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,9 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Progress } from '@/components/ui/progress';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 
 interface BankDispersionProps {
@@ -27,6 +31,7 @@ interface PlanillaOption {
   estado: string;
   total_neto_a_pagar: number;
   total_empleados: number;
+  fecha_generacion?: string;
 }
 
 interface DispersionResult {
@@ -53,15 +58,41 @@ interface RetornoBancario {
   banco: { nombre: string; codigo: string };
 }
 
+type Step = 1 | 2 | 3;
+
+// Bank color palette for avatars
+const bankColors = [
+  'bg-emerald-600 text-white',
+  'bg-teal-600 text-white',
+  'bg-cyan-600 text-white',
+  'bg-amber-600 text-white',
+  'bg-rose-600 text-white',
+  'bg-violet-600 text-white',
+  'bg-orange-600 text-white',
+  'bg-lime-600 text-white',
+];
+
+function getBankColor(index: number) {
+  return bankColors[index % bankColors.length];
+}
+
 export default function BankDispersion({ accessToken }: BankDispersionProps) {
   const { toast } = useToast();
   const [planillas, setPlanillas] = useState<PlanillaOption[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
+  const [selectedPlanilla, setSelectedPlanilla] = useState<PlanillaOption | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [dispersions, setDispersions] = useState<DispersionResult[]>([]);
   const [retornos, setRetornos] = useState<RetornoBancario[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [expandedBanks, setExpandedBanks] = useState<Set<string>>(new Set());
+  const [previewBank, setPreviewBank] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+
+  // Step logic
+  const currentStep: Step = !selectedId ? 1 : dispersions.length === 0 ? 2 : 3;
 
   const fetchPlanillas = useCallback(async () => {
     setLoading(true);
@@ -98,9 +129,23 @@ export default function BankDispersion({ accessToken }: BankDispersionProps) {
   useEffect(() => { fetchPlanillas(); }, [fetchPlanillas]);
 
   useEffect(() => {
-    if (selectedId) fetchDetail(selectedId);
-    else setRetornos([]);
-  }, [selectedId, fetchDetail]);
+    if (selectedId) {
+      fetchDetail(selectedId);
+      const p = planillas.find(pl => pl.id === selectedId);
+      setSelectedPlanilla(p || null);
+    } else {
+      setRetornos([]);
+      setSelectedPlanilla(null);
+    }
+  }, [selectedId, fetchDetail, planillas]);
+
+  // Reset state when selection changes
+  useEffect(() => {
+    setDispersions([]);
+    setExpandedBanks(new Set());
+    setPreviewBank(null);
+    setConfirmed(false);
+  }, [selectedId]);
 
   const handleGenerate = async () => {
     if (!selectedId) return;
@@ -132,17 +177,129 @@ export default function BankDispersion({ accessToken }: BankDispersionProps) {
     URL.revokeObjectURL(url);
   };
 
-  const retornoEstadoColors: Record<string, string> = {
-    PENDIENTE: 'bg-slate-100 text-slate-700',
-    ENVIADO: 'bg-blue-100 text-blue-800',
-    PROCESADO: 'bg-emerald-100 text-emerald-800',
-    CON_ERRORES: 'bg-red-100 text-red-800',
-    RECHAZADO: 'bg-red-100 text-red-800',
+  const handleCopyToClipboard = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      toast({ title: 'Copiado', description: 'Contenido copiado al portapapeles' });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo copiar', variant: 'destructive' });
+    }
   };
 
+  const toggleExpanded = (bancoId: string) => {
+    setExpandedBanks(prev => {
+      const next = new Set(prev);
+      if (next.has(bancoId)) next.delete(bancoId);
+      else next.add(bancoId);
+      return next;
+    });
+  };
+
+  const handleConfirm = () => {
+    setConfirmed(true);
+    toast({ title: 'Dispersión Confirmada', description: 'Los archivos han sido confirmados para envío bancario' });
+  };
+
+  // Parse CSV content into rows for display
+  const parseCSV = (csv: string) => {
+    return csv.split('\n').map(line => line.split(','));
+  };
+
+  // Summary calculations
+  const totalAmountDispersed = dispersions.reduce((s, d) => s + d.total_monto, 0);
+  const totalEmployees = dispersions.reduce((s, d) => s + d.total_empleados, 0);
+  const bankCount = dispersions.length;
+  const successRetornos = retornos.filter(r => r.estado === 'PROCESADO').length;
+  const errorRetornos = retornos.filter(r => r.estado === 'CON_ERRORES' || r.estado === 'RECHAZADO').length;
+
+  const retornoEstadoColors: Record<string, string> = {
+    PENDIENTE: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+    ENVIADO: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
+    EN_PROCESO: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300',
+    PROCESADO: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300',
+    CON_ERRORES: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
+    RECHAZADO: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
+  };
+
+  const retornoEstadoIcons: Record<string, React.ReactNode> = {
+    PENDIENTE: <Clock className="h-3 w-3" />,
+    ENVIADO: <Send className="h-3 w-3" />,
+    EN_PROCESO: <Loader2 className="h-3 w-3 animate-spin" />,
+    PROCESADO: <CheckCircle className="h-3 w-3" />,
+    CON_ERRORES: <XCircle className="h-3 w-3" />,
+    RECHAZADO: <XCircle className="h-3 w-3" />,
+  };
+
+  // Step indicator component
+  const steps = [
+    { num: 1, label: 'Seleccionar', icon: Info },
+    { num: 2, label: 'Generar', icon: Send },
+    { num: 3, label: 'Confirmar', icon: ShieldCheck },
+  ];
+
   return (
-    <div className="space-y-4">
-      {/* Select planilla */}
+    <div className="space-y-5">
+      {/* ========== STEP INDICATOR ========== */}
+      <Card className="shadow-sm overflow-hidden">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center justify-center">
+            {steps.map((step, i) => {
+              const isActive = currentStep === step.num;
+              const isCompleted = currentStep > step.num;
+              const Icon = step.icon;
+              return (
+                <React.Fragment key={step.num}>
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div
+                      className={`
+                        flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 transition-all duration-300
+                        ${isCompleted
+                          ? 'bg-teal-600 border-teal-600 text-white dark:bg-teal-700 dark:border-teal-700'
+                          : isActive
+                            ? 'bg-emerald-600 border-emerald-600 text-white dark:bg-emerald-700 dark:border-emerald-700 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/30'
+                            : 'bg-slate-100 border-slate-300 text-slate-400 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-500'
+                        }
+                      `}
+                    >
+                      {isCompleted ? (
+                        <CheckCircle className="h-5 w-5" />
+                      ) : (
+                        <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                      )}
+                    </div>
+                    <span
+                      className={`text-xs sm:text-sm font-medium transition-colors ${
+                        isCompleted
+                          ? 'text-teal-700 dark:text-teal-400'
+                          : isActive
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : 'text-slate-400 dark:text-slate-500'
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div
+                      className={`
+                        flex-1 h-0.5 mx-2 sm:mx-4 mb-5 transition-colors duration-300 rounded-full
+                        ${currentStep > step.num
+                          ? 'bg-teal-500 dark:bg-teal-600'
+                          : 'bg-slate-200 dark:bg-slate-700'
+                        }
+                      `}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ========== PLANILLA SELECTOR ========== */}
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -152,11 +309,17 @@ export default function BankDispersion({ accessToken }: BankDispersionProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           {loading ? (
-            <Skeleton className="h-10 w-full" />
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </div>
           ) : planillas.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-4">No hay planillas aprobadas para dispersión</p>
+            <div className="text-center py-8">
+              <Building2 className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+              <p className="text-sm text-slate-400 dark:text-slate-500">No hay planillas aprobadas para dispersión</p>
+            </div>
           ) : (
-            <div className="flex gap-3 items-end">
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
               <div className="flex-1">
                 <Select value={selectedId} onValueChange={setSelectedId}>
                   <SelectTrigger><SelectValue placeholder="Seleccione una planilla aprobada..." /></SelectTrigger>
@@ -172,9 +335,9 @@ export default function BankDispersion({ accessToken }: BankDispersionProps) {
               <Button
                 onClick={handleGenerate}
                 disabled={!selectedId || generating}
-                className="bg-emerald-600 hover:bg-emerald-700"
+                className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800 min-w-[180px]"
               >
-                {generating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+                {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
                 Generar Dispersión
               </Button>
             </div>
@@ -182,101 +345,454 @@ export default function BankDispersion({ accessToken }: BankDispersionProps) {
         </CardContent>
       </Card>
 
-      {/* Bank summary table */}
-      {dispersions.length > 0 && (
-        <Card className="shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Resumen por Banco</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-t border-b bg-slate-50/80">
-                    <th className="text-left font-medium text-slate-500 p-3">Banco</th>
-                    <th className="text-right font-medium text-slate-500 p-3">Empleados</th>
-                    <th className="text-right font-medium text-slate-500 p-3">Total</th>
-                    <th className="text-left font-medium text-slate-500 p-3">Archivo</th>
-                    <th className="text-center font-medium text-slate-500 p-3">Acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dispersions.map(d => (
-                    <tr key={d.banco_id} className="border-b hover:bg-slate-50/50">
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-slate-400" />
-                          <div>
-                            <p className="font-medium">{d.banco_nombre}</p>
-                            <p className="text-xs text-slate-400">Código: {d.banco_codigo}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-3 text-right">{d.total_empleados}</td>
-                      <td className="p-3 text-right font-medium">{fmt(d.total_monto)}</td>
-                      <td className="p-3 font-mono text-xs">{d.archivo_nombre}</td>
-                      <td className="p-3 text-center">
-                        <Button variant="outline" size="sm" onClick={() => handleDownload(d)}>
-                          <Download className="h-3.5 w-3.5 mr-1" /> Descargar
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {/* ========== PLANILLA INFO CARD ========== */}
+      {selectedPlanilla && (
+        <Card className="shadow-sm border-l-4 border-l-emerald-500 dark:border-l-emerald-600">
+          <CardContent className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              {/* Planilla Code & Type */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
+                    <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Planilla</p>
+                    <p className="font-semibold text-sm dark:text-slate-100">{selectedPlanilla.codigo_planilla}</p>
+                  </div>
+                </div>
+                <div className="flex gap-1.5 ml-10">
+                  <Badge variant="secondary" className="text-[10px] bg-slate-100 dark:bg-slate-700 dark:text-slate-300">
+                    {selectedPlanilla.tipo}
+                  </Badge>
+                  <Badge className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
+                    {selectedPlanilla.estado}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Total Neto */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/40">
+                    <DollarSign className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Total Neto</p>
+                </div>
+                <p className="text-2xl font-bold text-teal-700 dark:text-teal-400 ml-10">
+                  {fmt(selectedPlanilla.total_neto_a_pagar)}
+                </p>
+              </div>
+
+              {/* Total Employees */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-900/40">
+                    <Users className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Empleados</p>
+                </div>
+                <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-400 ml-10">
+                  {selectedPlanilla.total_empleados}
+                </p>
+              </div>
+
+              {/* Generation Date & Status */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40">
+                    <Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Estado</p>
+                </div>
+                <div className="flex items-center gap-2 ml-10">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                  </span>
+                  <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Aprobada</span>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Return status tracking */}
+      {/* ========== ENHANCED DISPERSIONS TABLE ========== */}
+      {dispersions.length > 0 && (
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Building2 className="h-4 w-4" /> Resumen por Banco
+            </CardTitle>
+            <CardDescription>
+              {bankCount} banco{bankCount !== 1 ? 's' : ''} — {totalEmployees} empleado{totalEmployees !== 1 ? 's' : ''} — {fmt(totalAmountDispersed)} total
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="space-y-0">
+              {dispersions.map((d, idx) => {
+                const isExpanded = expandedBanks.has(d.banco_id);
+                const isPreview = previewBank === d.banco_id;
+                const csvRows = parseCSV(d.contenido_csv);
+                const headerRow = csvRows[0] || [];
+                const dataRows = csvRows.slice(1);
+                const lines = d.contenido_csv.split('\n');
+                const previewLines = lines.slice(0, 8);
+                const fileSize = new Blob([d.contenido_csv]).size;
+                const fileSizeStr = fileSize > 1024 ? `${(fileSize / 1024).toFixed(1)} KB` : `${fileSize} B`;
+
+                // Find matching retorno for status
+                const matchingRetorno = retornos.find(r => r.banco_id === d.banco_id);
+                const status = matchingRetorno?.estado || 'ENVIADO';
+
+                // Progress based on status
+                const progressValue = status === 'PROCESADO' ? 100 : status === 'EN_PROCESO' ? 60 : status === 'ENVIADO' ? 30 : status === 'PENDIENTE' ? 10 : 0;
+
+                return (
+                  <div key={d.banco_id} className="border-b last:border-b-0">
+                    {/* Bank row */}
+                    <div
+                      className="flex items-center gap-3 sm:gap-4 p-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                      onClick={() => toggleExpanded(d.banco_id)}
+                    >
+                      {/* Bank avatar */}
+                      <Avatar className="h-10 w-10 shrink-0">
+                        <AvatarFallback className={getBankColor(idx)}>
+                          <span className="text-sm font-bold">{d.banco_nombre.charAt(0)}</span>
+                        </AvatarFallback>
+                      </Avatar>
+
+                      {/* Bank info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-medium text-sm dark:text-slate-100 truncate">{d.banco_nombre}</p>
+                          <Badge
+                            className={`text-[10px] ${retornoEstadoColors[status] || 'bg-slate-100 dark:bg-slate-700'} flex items-center gap-1`}
+                            variant="secondary"
+                          >
+                            {retornoEstadoIcons[status]}
+                            {status}
+                          </Badge>
+                          {status === 'EN_PROCESO' && (
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                          <span>Código: {d.banco_codigo}</span>
+                          <span className="hidden sm:inline">•</span>
+                          <span className="hidden sm:inline">{d.archivo_nombre}</span>
+                        </div>
+                        {/* Progress bar */}
+                        <div className="mt-2 flex items-center gap-2">
+                          <Progress value={progressValue} className="h-1.5 flex-1" />
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 w-8 text-right">{progressValue}%</span>
+                        </div>
+                      </div>
+
+                      {/* Stats */}
+                      <div className="text-right shrink-0">
+                        <p className="font-semibold text-sm dark:text-slate-100">{fmt(d.total_monto)}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{d.total_empleados} emp.</p>
+                      </div>
+
+                      {/* Expand icon */}
+                      <div className="shrink-0 text-slate-400 dark:text-slate-500">
+                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </div>
+                    </div>
+
+                    {/* Expandable content */}
+                    <Collapsible open={isExpanded} onOpenChange={() => toggleExpanded(d.banco_id)}>
+                      <CollapsibleContent>
+                        <div className="px-4 pb-4 space-y-3">
+                          {/* Action buttons */}
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleDownload(d); }}>
+                              <Download className="h-3.5 w-3.5 mr-1.5" /> Descargar CSV
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); setPreviewBank(isPreview ? null : d.banco_id); }}
+                            >
+                              <FileText className="h-3.5 w-3.5 mr-1.5" /> {isPreview ? 'Ocultar Vista' : 'Vista ACH'}
+                            </Button>
+                          </div>
+
+                          {/* ACH File Preview */}
+                          {isPreview && (
+                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                              <div className="flex items-center justify-between px-3 py-2 bg-slate-800 dark:bg-slate-900 border-b border-slate-700">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="h-3.5 w-3.5 text-slate-400" />
+                                  <span className="text-xs font-mono text-slate-300">{d.archivo_nombre}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-500">{lines.length} líneas • {fileSizeStr}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-slate-400 hover:text-white hover:bg-slate-700"
+                                    onClick={(e) => { e.stopPropagation(); handleCopyToClipboard(d.contenido_csv); }}
+                                  >
+                                    <Copy className="h-3 w-3 mr-1" />
+                                    {copied ? 'Copiado' : 'Copiar'}
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="bg-slate-900 dark:bg-slate-950 p-3 overflow-x-auto max-h-64">
+                                <pre className="text-xs font-mono leading-5">
+                                  {previewLines.map((line, lineIdx) => (
+                                    <div key={lineIdx} className="flex">
+                                      <span className="text-slate-600 dark:text-slate-700 w-8 text-right mr-3 select-none shrink-0">
+                                        {lineIdx + 1}
+                                      </span>
+                                      <span className={`${
+                                        lineIdx === 0
+                                          ? 'text-emerald-400 dark:text-emerald-500'
+                                          : 'text-slate-300 dark:text-slate-400'
+                                      }`}>
+                                        {line}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  {lines.length > 8 && (
+                                    <div className="flex">
+                                      <span className="text-slate-600 dark:text-slate-700 w-8 text-right mr-3 select-none shrink-0">
+                                        ...
+                                      </span>
+                                      <span className="text-slate-500 dark:text-slate-600 italic">
+                                        +{lines.length - 8} líneas más
+                                      </span>
+                                    </div>
+                                  )}
+                                </pre>
+                              </div>
+                              <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center gap-4 text-[10px] text-slate-500 dark:text-slate-400">
+                                <span>Banco: {d.banco_nombre} ({d.banco_codigo})</span>
+                                <span>•</span>
+                                <span>Registros: {d.total_empleados}</span>
+                                <span>•</span>
+                                <span>Total: {fmt(d.total_monto)}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Individual employee payments */}
+                          <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                            <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+                              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                                Pagos individuales ({dataRows.length})
+                              </p>
+                            </div>
+                            <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                              <table className="w-full text-xs">
+                                <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800">
+                                  <tr>
+                                    {headerRow.map((h, hi) => (
+                                      <th key={hi} className="text-left font-medium text-slate-500 dark:text-slate-400 p-2 whitespace-nowrap">
+                                        {h.replace(/_/g, ' ')}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {dataRows.map((row, ri) => (
+                                    <tr key={ri} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                                      {row.map((cell, ci) => (
+                                        <td key={ci} className={`p-2 whitespace-nowrap ${ci === row.length - 1 ? 'text-right font-medium text-teal-700 dark:text-teal-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                                          {ci === row.length - 1 ? fmt(parseFloat(cell) || 0) : cell}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ========== ACH FILE PREVIEW (Standalone when no dispersions expanded) ========== */}
+      {dispersions.length > 0 && !previewBank && (
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4" /> Vista Previa Archivos ACH
+            </CardTitle>
+            <CardDescription>Seleccione un banco arriba para ver la vista previa detallada, o vea un resumen abajo</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {dispersions.map((d, idx) => {
+                const lines = d.contenido_csv.split('\n');
+                const fileSize = new Blob([d.contenido_csv]).size;
+                const fileSizeStr = fileSize > 1024 ? `${(fileSize / 1024).toFixed(1)} KB` : `${fileSize} B`;
+                return (
+                  <div
+                    key={d.banco_id}
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 hover:border-emerald-300 dark:hover:border-emerald-700 cursor-pointer transition-colors group"
+                    onClick={() => { setPreviewBank(d.banco_id); setExpandedBanks(prev => new Set(prev).add(d.banco_id)); }}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Avatar className="h-7 w-7">
+                        <AvatarFallback className={`${getBankColor(idx)} text-xs`}>
+                          {d.banco_nombre.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium dark:text-slate-100 truncate">{d.banco_nombre}</p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{d.banco_codigo}</p>
+                      </div>
+                    </div>
+                    {/* Mini code preview */}
+                    <div className="rounded bg-slate-900 dark:bg-slate-950 p-2 mb-2">
+                      <pre className="text-[10px] font-mono leading-4 text-slate-400 dark:text-slate-500 overflow-hidden max-h-12">
+                        {lines.slice(0, 3).join('\n')}
+                      </pre>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                      <span>{lines.length} líneas</span>
+                      <span>{fileSizeStr}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ========== RETURN STATUS TRACKING ========== */}
       {retornos.length > 0 && (
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Estado de Retornos Bancarios</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <RefreshCw className="h-4 w-4" /> Estado de Retornos Bancarios
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-t border-b bg-slate-50/80">
-                    <th className="text-left font-medium text-slate-500 p-3">Banco</th>
-                    <th className="text-left font-medium text-slate-500 p-3">Archivo</th>
-                    <th className="text-left font-medium text-slate-500 p-3">Estado</th>
-                    <th className="text-right font-medium text-slate-500 p-3">Registros</th>
-                    <th className="text-right font-medium text-slate-500 p-3">Monto</th>
-                    <th className="text-left font-medium text-slate-500 p-3">Fecha Envío</th>
+                  <tr className="border-t border-b bg-slate-50/80 dark:bg-slate-800/50">
+                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Banco</th>
+                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Archivo</th>
+                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Estado</th>
+                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Registros</th>
+                    <th className="text-right font-medium text-slate-500 dark:text-slate-400 p-3">Monto</th>
+                    <th className="text-left font-medium text-slate-500 dark:text-slate-400 p-3">Fecha Envío</th>
                   </tr>
                 </thead>
                 <tbody>
                   {retornos.map(r => (
-                    <tr key={r.id} className="border-b hover:bg-slate-50/50">
+                    <tr key={r.id} className="border-b hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                       <td className="p-3">
                         <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-slate-400" />
-                          <span>{r.banco?.nombre || 'N/A'}</span>
+                          <Building2 className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                          <span className="dark:text-slate-200">{r.banco?.nombre || 'N/A'}</span>
                         </div>
                       </td>
-                      <td className="p-3 font-mono text-xs">{r.archivo_nombre || '-'}</td>
+                      <td className="p-3 font-mono text-xs dark:text-slate-300">{r.archivo_nombre || '-'}</td>
                       <td className="p-3">
-                        <Badge className={`text-[10px] ${retornoEstadoColors[r.estado] || 'bg-slate-100'}`} variant="secondary">
+                        <Badge
+                          className={`text-[10px] ${retornoEstadoColors[r.estado] || 'bg-slate-100 dark:bg-slate-700'} flex items-center gap-1 w-fit`}
+                          variant="secondary"
+                        >
+                          {retornoEstadoIcons[r.estado]}
                           {r.estado}
                         </Badge>
                       </td>
-                      <td className="p-3 text-right">{r.total_registros}</td>
-                      <td className="p-3 text-right font-medium">{fmt(r.total_monto)}</td>
-                      <td className="p-3 text-xs">{r.fecha_envio ? new Date(r.fecha_envio).toLocaleDateString('es-SV') : '-'}</td>
+                      <td className="p-3 text-right dark:text-slate-200">{r.total_registros}</td>
+                      <td className="p-3 text-right font-medium dark:text-slate-200">{fmt(r.total_monto)}</td>
+                      <td className="p-3 text-xs dark:text-slate-300">{r.fecha_envio ? new Date(r.fecha_envio).toLocaleDateString('es-SV') : '-'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             {retornos.some(r => r.estado === 'CON_ERRORES' || r.estado === 'RECHAZADO') && (
-              <div className="p-3 bg-red-50 text-xs text-red-700 flex items-center gap-2">
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 text-xs text-red-700 dark:text-red-400 flex items-center gap-2">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 Algunos retornos tienen errores. Revise los detalles con el banco.
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ========== SUMMARY FOOTER ========== */}
+      {dispersions.length > 0 && (
+        <Card className={`shadow-sm overflow-hidden ${confirmed ? 'border-teal-300 dark:border-teal-700' : ''}`}>
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+              {/* Summary stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 w-full lg:w-auto">
+                <div className="text-center sm:text-left">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Total Dispersado</p>
+                  <p className="text-xl font-bold text-teal-700 dark:text-teal-400">{fmt(totalAmountDispersed)}</p>
+                </div>
+                <div className="text-center sm:text-left">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Empleados Pagados</p>
+                  <p className="text-xl font-bold text-cyan-700 dark:text-cyan-400">{totalEmployees}</p>
+                </div>
+                <div className="text-center sm:text-left">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Bancos</p>
+                  <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400">{bankCount}</p>
+                </div>
+                <div className="text-center sm:text-left">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Estado Retornos</p>
+                  <div className="flex items-center gap-2 justify-center sm:justify-start">
+                    {successRetornos > 0 && (
+                      <span className="flex items-center gap-1 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                        <CheckCircle className="h-3.5 w-3.5" /> {successRetornos}
+                      </span>
+                    )}
+                    {errorRetornos > 0 && (
+                      <span className="flex items-center gap-1 text-sm font-medium text-red-700 dark:text-red-400">
+                        <XCircle className="h-3.5 w-3.5" /> {errorRetornos}
+                      </span>
+                    )}
+                    {successRetornos === 0 && errorRetornos === 0 && (
+                      <span className="flex items-center gap-1 text-sm font-medium text-amber-700 dark:text-amber-400">
+                        <Clock className="h-3.5 w-3.5" /> Pendiente
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Confirm button */}
+              <div className="w-full lg:w-auto">
+                {confirmed ? (
+                  <div className="flex items-center gap-2 justify-center lg:justify-end text-teal-700 dark:text-teal-400 font-medium">
+                    <CheckCircle className="h-5 w-5" />
+                    <span>Dispersión Confirmada</span>
+                  </div>
+                ) : (
+                  <Button
+                    onClick={handleConfirm}
+                    className="w-full lg:w-auto bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-800 min-w-[200px]"
+                    size="lg"
+                  >
+                    <ShieldCheck className="h-4 w-4 mr-2" />
+                    Confirmar Dispersión
+                  </Button>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

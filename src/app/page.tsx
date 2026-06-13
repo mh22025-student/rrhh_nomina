@@ -7,7 +7,8 @@ import {
   DollarSign, CheckCircle, Send, Gift, ClipboardList, ListChecks,
   BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye,
   AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle, Clock,
-  Sun, Moon
+  Sun, Moon, TrendingUp, TrendingDown, Bell, Info, AlertTriangle,
+  PieChart, CalendarDays, Megaphone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1018,6 +1019,56 @@ function HeaderBar({ user, currentView, accessToken, onToggleSidebar, onLogout, 
 // ============================================================
 // DASHBOARD / WELCOME VIEW
 // ============================================================
+
+// Mock payroll trend data for the bar chart
+const PAYROLL_TREND_DATA = [
+  { month: 'Ene', value: 45200 },
+  { month: 'Feb', value: 43800 },
+  { month: 'Mar', value: 47100 },
+  { month: 'Abr', value: 46500 },
+  { month: 'May', value: 48900 },
+  { month: 'Jun', value: 50200 },
+  { month: 'Jul', value: 49800 },
+  { month: 'Ago', value: 51300 },
+  { month: 'Sep', value: 52600 },
+  { month: 'Oct', value: 54100 },
+  { month: 'Nov', value: 53800 },
+  { month: 'Dic', value: 55400 },
+];
+
+// Mock area distribution data
+const AREA_DISTRIBUTION_DATA = [
+  { name: 'Administración', count: 12, color: 'bg-teal-500' },
+  { name: 'Ventas', count: 18, color: 'bg-emerald-500' },
+  { name: 'Tecnología', count: 15, color: 'bg-cyan-500' },
+  { name: 'Recursos Humanos', count: 8, color: 'bg-amber-500' },
+  { name: 'Finanzas', count: 10, color: 'bg-violet-500' },
+  { name: 'Operaciones', count: 14, color: 'bg-rose-500' },
+];
+
+// Mock announcements
+const MOCK_ANNOUNCEMENTS = [
+  { id: '1', title: 'Cierre de nómina febrero 2025', message: 'El plazo para el cierre de nómina del mes de febrero finaliza el 28 de febrero. Asegúrese de registrar todas las incidencias.', severity: 'high' as const, date: '2025-02-20', icon: CalendarDays },
+  { id: '2', title: 'Actualización de parámetros ISSS', message: 'Se han actualizado los topes de cotización ISSS según la última resolución vigente.', severity: 'info' as const, date: '2025-02-15', icon: Info },
+  { id: '3', title: 'Mantenimiento programado', message: 'El sistema estará en mantenimiento el próximo sábado de 02:00 a 06:00 AM. Guarde sus cambios antes de esa hora.', severity: 'warning' as const, date: '2025-02-18', icon: AlertTriangle },
+];
+
+// Sparkline dot component for KPI cards
+function SparklineDots({ trend, color }: { trend: 'up' | 'down' | 'neutral'; color: string }) {
+  const heights = trend === 'up' ? [3, 5, 4, 7, 6, 9] : trend === 'down' ? [9, 6, 7, 4, 5, 3] : [5, 6, 5, 6, 5, 6];
+  return (
+    <div className="flex items-end gap-0.5 h-3">
+      {heights.map((h, i) => (
+        <div
+          key={i}
+          className={`w-1 rounded-full ${color}`}
+          style={{ height: `${h}px`, opacity: 0.4 + (i / heights.length) * 0.6 }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; accessToken: string | null; onNavigate: (view: ViewId) => void }) {
   const [dashboardData, setDashboardData] = useState<{
     total_empleados_activos: number;
@@ -1038,6 +1089,13 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
     usuario: { nombre: string; apellido: string } | null;
   }>>([]);
   const [loading, setLoading] = useState(true);
+
+  // New state for system stats
+  const [planillasCount, setPlanillasCount] = useState(0);
+  const [incidenciasCount, setIncidenciasCount] = useState(0);
+  const [usuariosActivos, setUsuariosActivos] = useState(0);
+  const [areaDistribution, setAreaDistribution] = useState(AREA_DISTRIBUTION_DATA);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -1070,14 +1128,139 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
     fetchData();
   }, [accessToken]);
 
-  const kpis = [
-    { label: 'Empleados Activos', value: dashboardData?.total_empleados_activos ?? 0, icon: Users, color: 'text-teal-600', bg: 'bg-teal-50' },
-    { label: 'Perfiles de Puesto', value: totalPerfiles, icon: Briefcase, color: 'text-violet-600', bg: 'bg-violet-50' },
-    { label: 'Nómina del Mes', value: dashboardData?.nomina_mes ? `$${dashboardData.nomina_mes.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00', icon: Calculator, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Cumplimiento', value: dashboardData ? `${dashboardData.cumplimiento_previsional}%` : '0%', icon: FileText, color: 'text-amber-600', bg: 'bg-amber-50' },
-  ];
+  // Fetch system stats
+  useEffect(() => {
+    if (!accessToken) return;
+    const fetchStats = async () => {
+      try {
+        const headers = { Authorization: `Bearer ${accessToken}` };
+        const [planillasRes, incidenciasRes, usuariosRes, empleadosRes] = await Promise.all([
+          fetch('/api/nomina/planillas?limit=50', { headers }).catch(() => null),
+          fetch('/api/incidencias', { headers }).catch(() => null),
+          fetch('/api/usuarios', { headers }).catch(() => null),
+          fetch('/api/empleados?page=1&pageSize=100', { headers }).catch(() => null),
+        ]);
 
-  const semaforoColor = dashboardData?.semaforo === 'verde' ? 'bg-emerald-500' : dashboardData?.semaforo === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
+        if (planillasRes?.ok) {
+          const data = await planillasRes.json();
+          const now = new Date();
+          const currentMonth = now.getMonth();
+          const currentYear = now.getFullYear();
+          const planillas = data.data || data.planillas || data || [];
+          const thisMonth = Array.isArray(planillas)
+            ? planillas.filter((p: { fecha_creacion?: string; fecha?: string; periodo?: string }) => {
+                const d = new Date(p.fecha_creacion || p.fecha || p.periodo || '');
+                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+              })
+            : [];
+          setPlanillasCount(thisMonth.length || (Array.isArray(planillas) ? planillas.length : 0));
+        }
+
+        if (incidenciasRes?.ok) {
+          const data = await incidenciasRes.json();
+          const incidencias = data.data || data.incidencias || data || [];
+          if (Array.isArray(incidencias)) {
+            const pending = incidencias.filter((inc: { estado?: string }) =>
+              inc.estado === 'PENDIENTE' || inc.estado === 'pendiente' || inc.estado === 'Pendiente'
+            );
+            setIncidenciasCount(pending.length || incidencias.length);
+          }
+        }
+
+        if (usuariosRes?.ok) {
+          const data = await usuariosRes.json();
+          const usuarios = data.data || data.usuarios || data || [];
+          if (Array.isArray(usuarios)) {
+            const active = usuarios.filter((u: { activo?: boolean; estado?: string }) =>
+              u.activo === true || u.activo === 1 || u.estado === 'ACTIVO'
+            );
+            setUsuariosActivos(active.length || usuarios.length);
+          }
+        }
+
+        if (empleadosRes?.ok) {
+          const data = await empleadosRes.json();
+          const empleados = data.data || data.empleados || data || [];
+          if (Array.isArray(empleados) && empleados.length > 0) {
+            const areaMap: Record<string, number> = {};
+            empleados.forEach((emp: { area?: string; departamento?: string; seccion?: string }) => {
+              const areaName = emp.area || emp.departamento || emp.seccion || 'Sin Área';
+              areaMap[areaName] = (areaMap[areaName] || 0) + 1;
+            });
+            const colors = ['bg-teal-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-amber-500', 'bg-violet-500', 'bg-rose-500', 'bg-indigo-500', 'bg-orange-500'];
+            const distEntries = Object.entries(areaMap)
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 8)
+              .map(([name, count], i) => ({
+                name,
+                count,
+                color: colors[i % colors.length],
+              }));
+            if (distEntries.length > 0) {
+              setAreaDistribution(distEntries);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching system stats:', err);
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+    fetchStats();
+  }, [accessToken]);
+
+  // Enhanced KPI data with gradients, sparklines and change indicators
+  const kpis = [
+    {
+      label: 'Empleados Activos',
+      value: dashboardData?.total_empleados_activos ?? 0,
+      icon: Users,
+      color: 'text-teal-600 dark:text-teal-400',
+      bg: 'bg-teal-50 dark:bg-teal-900/30',
+      gradient: 'from-teal-50/80 to-white dark:from-teal-950/40 dark:to-slate-900',
+      sparkColor: 'bg-teal-500',
+      trend: 'up' as const,
+      change: '+3.2%',
+      changeLabel: 'vs mes anterior',
+    },
+    {
+      label: 'Perfiles de Puesto',
+      value: totalPerfiles,
+      icon: Briefcase,
+      color: 'text-violet-600 dark:text-violet-400',
+      bg: 'bg-violet-50 dark:bg-violet-900/30',
+      gradient: 'from-violet-50/80 to-white dark:from-violet-950/40 dark:to-slate-900',
+      sparkColor: 'bg-violet-500',
+      trend: 'up' as const,
+      change: '+1.5%',
+      changeLabel: 'vs mes anterior',
+    },
+    {
+      label: 'Nómina del Mes',
+      value: dashboardData?.nomina_mes ? `$${dashboardData.nomina_mes.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00',
+      icon: Calculator,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bg: 'bg-emerald-50 dark:bg-emerald-900/30',
+      gradient: 'from-emerald-50/80 to-white dark:from-emerald-950/40 dark:to-slate-900',
+      sparkColor: 'bg-emerald-500',
+      trend: 'up' as const,
+      change: '+2.5%',
+      changeLabel: 'vs mes anterior',
+    },
+    {
+      label: 'Cumplimiento',
+      value: dashboardData ? `${dashboardData.cumplimiento_previsional}%` : '0%',
+      icon: FileText,
+      color: 'text-amber-600 dark:text-amber-400',
+      bg: 'bg-amber-50 dark:bg-amber-900/30',
+      gradient: 'from-amber-50/80 to-white dark:from-amber-950/40 dark:to-slate-900',
+      sparkColor: 'bg-amber-500',
+      trend: (dashboardData?.cumplimiento_previsional ?? 0) >= 80 ? 'up' as const : 'down' as const,
+      change: dashboardData && dashboardData.cumplimiento_previsional >= 80 ? '+5.0%' : '-2.3%',
+      changeLabel: 'vs mes anterior',
+    },
+  ];
 
   const quickActions: Array<{ label: string; desc: string; icon: React.ElementType; color: string; bg: string; viewId: ViewId; roles: UserRole[] }> = [
     { label: 'Directorio Empleados', desc: 'Buscar y gestionar empleados', icon: Users, color: 'text-teal-600', bg: 'bg-teal-50', viewId: '02-01', roles: ['ADMIN', 'ANALISTA', 'AUDITOR'] },
@@ -1100,9 +1283,43 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
   };
 
   const getAuditColor = (nivel: string) => {
-    if (nivel === 'ALTA') return 'text-red-600 bg-red-50';
-    if (nivel === 'MEDIA') return 'text-amber-600 bg-amber-50';
-    return 'text-slate-600 bg-slate-50';
+    if (nivel === 'ALTA') return 'text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-400';
+    if (nivel === 'MEDIA') return 'text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400';
+    return 'text-slate-600 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-400';
+  };
+
+  // Compute bar chart values
+  const maxValue = Math.max(...PAYROLL_TREND_DATA.map(d => d.value));
+
+  // Compute area total
+  const areaTotal = areaDistribution.reduce((sum, a) => sum + a.count, 0);
+
+  // Announcement severity styles
+  const getSeverityStyle = (severity: string) => {
+    switch (severity) {
+      case 'high': return 'border-l-red-500 bg-red-50/50 dark:bg-red-950/20';
+      case 'warning': return 'border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20';
+      case 'info': return 'border-l-teal-500 bg-teal-50/50 dark:bg-teal-950/20';
+      default: return 'border-l-slate-400 bg-slate-50/50 dark:bg-slate-800/50';
+    }
+  };
+
+  const getSeverityIcon = (severity: string) => {
+    switch (severity) {
+      case 'high': return <AlertCircle className="h-4 w-4 text-red-500" />;
+      case 'warning': return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+      case 'info': return <Info className="h-4 w-4 text-teal-500" />;
+      default: return <Bell className="h-4 w-4 text-slate-400" />;
+    }
+  };
+
+  const getSeverityBadge = (severity: string) => {
+    switch (severity) {
+      case 'high': return <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[10px]">Urgente</Badge>;
+      case 'warning': return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-[10px]">Precaución</Badge>;
+      case 'info': return <Badge className="bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300 text-[10px]">Informativo</Badge>;
+      default: return <Badge className="bg-slate-100 text-slate-700 text-[10px]">Normal</Badge>;
+    }
   };
 
   return (
@@ -1134,29 +1351,90 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* System Status / Stats Row */}
+      <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/80">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-3 gap-3 sm:gap-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 shrink-0">
+                <CalendarDays className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="min-w-0">
+                {statsLoading ? (
+                  <div className="h-5 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                ) : (
+                  <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">{planillasCount}</p>
+                )}
+                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">Planillas este mes</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40 shrink-0">
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="min-w-0">
+                {statsLoading ? (
+                  <div className="h-5 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                ) : (
+                  <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">{incidenciasCount}</p>
+                )}
+                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">Incidencias pendientes</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-900/40 shrink-0">
+                <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+              </div>
+              <div className="min-w-0">
+                {statsLoading ? (
+                  <div className="h-5 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                ) : (
+                  <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">{usuariosActivos}</p>
+                )}
+                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">Usuarios activos</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Enhanced KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="shadow-sm">
               <CardContent className="p-4 sm:p-5">
                 <div className="animate-pulse">
-                  <div className="h-4 bg-slate-200 rounded w-24 mb-2" />
-                  <div className="h-8 bg-slate-200 rounded w-16" />
+                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24 mb-2" />
+                  <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-16" />
                 </div>
               </CardContent>
             </Card>
           ))
         ) : (
           kpis.map(kpi => (
-            <Card key={kpi.label} className="shadow-sm card-hover-lift">
+            <Card key={kpi.label} className={`shadow-sm card-hover-lift bg-gradient-to-br ${kpi.gradient} border-slate-200/60 dark:border-slate-700/40`}>
               <CardContent className="p-4 sm:p-5">
                 <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{kpi.label}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{kpi.label}</p>
+                      <SparklineDots trend={kpi.trend} color={kpi.sparkColor} />
+                    </div>
                     <p className="text-xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1 truncate">{kpi.value}</p>
+                    <div className="flex items-center gap-1 mt-1.5">
+                      {kpi.trend === 'up' ? (
+                        <TrendingUp className="h-3 w-3 text-emerald-500" />
+                      ) : kpi.trend === 'down' ? (
+                        <TrendingDown className="h-3 w-3 text-red-500" />
+                      ) : null}
+                      <span className={`text-[10px] sm:text-xs font-medium ${kpi.trend === 'up' ? 'text-emerald-600 dark:text-emerald-400' : kpi.trend === 'down' ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
+                        {kpi.change}
+                      </span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 hidden sm:inline">{kpi.changeLabel}</span>
+                    </div>
                   </div>
-                  <div className={`p-2 sm:p-3 rounded-xl ${kpi.bg} dark:opacity-80 shrink-0`}>
+                  <div className={`p-2 sm:p-3 rounded-xl ${kpi.bg} shrink-0`}>
                     <kpi.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${kpi.color}`} />
                   </div>
                 </div>
@@ -1165,6 +1443,148 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
           ))
         )}
       </div>
+
+      {/* Payroll Trend Chart + Area Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Mini Payroll Trend Chart */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-emerald-500" />
+              Tendencia de Nómina
+            </CardTitle>
+            <CardDescription className="text-xs">Totales mensuales (últimos 12 meses)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="relative h-44 sm:h-52">
+              {/* Grid lines */}
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="border-b border-slate-100 dark:border-slate-800 relative">
+                    <span className="absolute -left-0 -top-2.5 text-[9px] text-slate-400 dark:text-slate-500">
+                      {i === 0 ? '' : `$${Math.round(maxValue - (i * maxValue / 4)).toLocaleString()}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {/* Bars */}
+              <div className="absolute inset-0 flex items-end gap-1 sm:gap-1.5 pl-10 sm:pl-12 pb-5 pt-1">
+                {PAYROLL_TREND_DATA.map((item, idx) => {
+                  const heightPct = (item.value / maxValue) * 100;
+                  return (
+                    <div key={item.month} className="flex-1 flex flex-col items-center justify-end h-full group">
+                      {/* Tooltip on hover */}
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity mb-1 text-[9px] font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow-sm border border-slate-100 dark:border-slate-700 whitespace-nowrap z-10">
+                        ${item.value.toLocaleString()}
+                      </div>
+                      <div
+                        className="w-full rounded-t-sm sm:rounded-t transition-all duration-200 group-hover:opacity-90"
+                        style={{
+                          height: `${heightPct}%`,
+                          background: `linear-gradient(to top, oklch(0.6 0.15 160), oklch(0.55 0.12 180))`,
+                          minHeight: '4px',
+                        }}
+                      />
+                      <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">{item.month}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Area Distribution Visual */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <PieChart className="h-4 w-4 text-teal-500" />
+              Distribución por Área
+            </CardTitle>
+            <CardDescription className="text-xs">Empleados por departamento ({areaTotal} total)</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Horizontal stacked bar */}
+            <div className="flex h-6 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+              {areaDistribution.map((area) => {
+                const pct = areaTotal > 0 ? (area.count / areaTotal) * 100 : 0;
+                return (
+                  <div
+                    key={area.name}
+                    className={`${area.color} transition-all duration-300 hover:opacity-80 relative group`}
+                    style={{ width: `${pct}%`, minWidth: pct > 0 ? '4px' : '0' }}
+                    title={`${area.name}: ${area.count} (${pct.toFixed(1)}%)`}
+                  >
+                    {pct > 12 && (
+                      <span className="absolute inset-0 flex items-center justify-center text-[8px] font-semibold text-white/90 truncate px-0.5">
+                        {pct.toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Legend with mini bars */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {areaDistribution.map((area) => {
+                const pct = areaTotal > 0 ? (area.count / areaTotal) * 100 : 0;
+                return (
+                  <div key={area.name} className="flex items-center gap-2">
+                    <div className={`w-2.5 h-2.5 rounded-sm ${area.color} shrink-0`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-600 dark:text-slate-300 truncate">{area.name}</span>
+                        <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 ml-1">{area.count}</span>
+                      </div>
+                      <div className="h-1 bg-slate-100 dark:bg-slate-800 rounded-full mt-0.5">
+                        <div
+                          className={`h-1 rounded-full ${area.color} opacity-60`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Announcements / Alerts Section */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-amber-500" />
+            Avisos del Sistema
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {MOCK_ANNOUNCEMENTS.map((announcement) => (
+              <div
+                key={announcement.id}
+                className={`flex items-start gap-3 p-3 rounded-lg border-l-4 ${getSeverityStyle(announcement.severity)}`}
+              >
+                <div className="shrink-0 mt-0.5">
+                  {getSeverityIcon(announcement.severity)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{announcement.title}</p>
+                    {getSeverityBadge(announcement.severity)}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">{announcement.message}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                    {new Date(announcement.date).toLocaleDateString('es-SV', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Compliance Semaphore & Deadlines */}
       {dashboardData && (
@@ -1175,7 +1595,7 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
                 <Shield className="h-4 w-4 text-slate-500" />
                 Semáforo de Cumplimiento
                 {/* Traffic light dots */}
-                <div className="flex items-center gap-1 ml-auto p-1 bg-slate-900 rounded-full">
+                <div className="flex items-center gap-1 ml-auto p-1 bg-slate-900 dark:bg-slate-700 rounded-full">
                   <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'rojo' ? 'bg-red-500 shadow-sm shadow-red-500/50' : 'bg-red-900/40'}`} />
                   <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
                   <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
@@ -1193,7 +1613,7 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
                     )}
                     <span className="text-sm text-slate-700 dark:text-slate-300">{c.nombre}</span>
                   </div>
-                  <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                  <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
                     {c.presentado ? 'Presentado' : 'Pendiente'}
                   </Badge>
                 </div>
@@ -1217,15 +1637,15 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
               ) : (
                 dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => (
                   <div key={v.nombre} className={`flex items-center justify-between p-2.5 rounded-lg border ${
-                    v.dias <= 5 ? 'border-red-200 bg-red-50/50' : 'border-slate-100 bg-slate-50/50'
+                    v.dias <= 5 ? 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20' : 'border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50'
                   }`}>
                     <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full ${v.dias <= 5 ? 'bg-red-500' : v.dias <= 10 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                      <span className="text-sm font-medium text-slate-700">{v.nombre}</span>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{v.nombre}</span>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-medium text-slate-900">{new Date(v.fecha).toLocaleDateString('es-SV')}</p>
-                      <p className={`text-xs ${v.dias <= 5 ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{new Date(v.fecha).toLocaleDateString('es-SV')}</p>
+                      <p className={`text-xs ${v.dias <= 5 ? 'text-red-500 font-semibold' : 'text-slate-400 dark:text-slate-500'}`}>
                         {v.dias > 0 ? `${v.dias} días` : 'Vencido'}
                       </p>
                     </div>

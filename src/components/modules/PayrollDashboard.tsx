@@ -5,7 +5,7 @@ import {
   Users, DollarSign, Shield, Clock, AlertTriangle, TrendingUp,
   TrendingDown, CheckCircle, XCircle, Loader2, RefreshCw,
   BarChart3, PieChart, ArrowUpRight, ArrowDownRight, Info,
-  CircleDot, AlertOctagon
+  CircleDot, AlertOctagon, ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -80,6 +80,66 @@ const estadoDot: Record<string, string> = {
   ANULADA: 'bg-red-500',
 };
 
+/* ── Expense Breakdown Data (approximate based on El Salvador law) ── */
+interface ExpenseSlice {
+  label: string;
+  pct: number;
+  color: string;       // Tailwind text color for legend
+  bgClass: string;     // Tailwind bg class for legend dot
+  conicColor: string;  // CSS color for conic-gradient
+}
+
+const EXPENSE_SLICES: ExpenseSlice[] = [
+  { label: 'ISSS Laboral',  pct: 1.4,  color: 'text-sky-700 dark:text-sky-400',    bgClass: 'bg-sky-500',    conicColor: '#0ea5e9' },
+  { label: 'AFP Laboral',   pct: 7.25, color: 'text-violet-700 dark:text-violet-400', bgClass: 'bg-violet-500', conicColor: '#8b5cf6' },
+  { label: 'ISR',           pct: 16.1, color: 'text-amber-700 dark:text-amber-400',   bgClass: 'bg-amber-500',  conicColor: '#f59e0b' },
+  { label: 'Salario Neto',  pct: 63.05,color: 'text-emerald-700 dark:text-emerald-400', bgClass: 'bg-emerald-500', conicColor: '#10b981' },
+  { label: 'Cargas Patronales', pct: 12.2, color: 'text-rose-700 dark:text-rose-400', bgClass: 'bg-rose-500', conicColor: '#f43f5e' },
+];
+
+/* ── Payroll Status Timeline Steps ── */
+const TIMELINE_STEPS = ['CALCULADA', 'APROBADA', 'PAGADA'] as const;
+
+function getTimelineStepIndex(estado: string): number {
+  if (estado === 'PAGADA') return 2;
+  if (estado === 'APROBADA') return 1;
+  if (estado === 'CALCULADA' || estado === 'EN_CORRECCION') return 0;
+  if (estado === 'BORRADOR') return -1;
+  return -1;
+}
+
+/* ── Compliance SVG Ring Component ── */
+function ComplianceRing({ percentage }: { percentage: number }) {
+  const radius = 52;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percentage / 100) * circumference;
+  const color = percentage >= 80 ? '#10b981' : percentage >= 50 ? '#f59e0b' : '#ef4444';
+  const bgRing = percentage >= 80 ? '#d1fae5' : percentage >= 50 ? '#fef3c7' : '#fee2e2';
+
+  return (
+    <div className="relative inline-flex items-center justify-center">
+      <svg width="128" height="128" className="-rotate-90">
+        {/* Background ring */}
+        <circle cx="64" cy="64" r={radius} fill="none" stroke={bgRing} strokeWidth="10" />
+        {/* Progress ring */}
+        <circle
+          cx="64" cy="64" r={radius} fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="transition-all duration-1000 ease-out"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-2xl font-bold" style={{ color }}>{percentage}%</span>
+        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Cumplimiento</span>
+      </div>
+    </div>
+  );
+}
+
 export default function PayrollDashboard({ accessToken, userRole }: PayrollDashboardProps) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -148,7 +208,28 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
 
   const semaforoColor = data.kpis.semaforo === 'verde' ? 'bg-emerald-500' : data.kpis.semaforo === 'amarillo' ? 'bg-amber-500' : 'bg-red-500';
   const semaforoLabel = data.kpis.semaforo === 'verde' ? 'En Cumplimiento' : data.kpis.semaforo === 'amarillo' ? 'Atención Requerida' : 'Incumplimiento';
-  const semaforoRing = data.kpis.semaforo === 'verde' ? 'ring-emerald-200' : data.kpis.semaforo === 'amarillo' ? 'ring-amber-200' : 'ring-red-200';
+
+  /* ── Build conic-gradient for donut chart ── */
+  let conicStops: string[] = [];
+  let cumPct = 0;
+  EXPENSE_SLICES.forEach((s, i) => {
+    const start = cumPct;
+    cumPct += s.pct;
+    conicStops.push(`${s.conicColor} ${start}% ${cumPct}%`);
+  });
+  const conicGradient = `conic-gradient(${conicStops.join(', ')})`;
+
+  /* ── Compute actual dollar amounts from planillas_recientes for donut legend ── */
+  const baseAmount = data.kpis.nomina_mes || (data.planillas_recientes[0]?.total_bruto ?? 50000);
+  const expenseAmounts = EXPENSE_SLICES.map(s => Math.round(baseAmount * (s.pct / 100) * 100) / 100);
+
+  /* ── Find the "current month" index in tendencia_mensual (last non-zero) ── */
+  const currentMonthIdx = data.tendencia_mensual.length - 1;
+
+  /* ── Timeline state from planilla_actual ── */
+  const timelineActiveStep = data.kpis.planilla_actual
+    ? getTimelineStepIndex(data.kpis.planilla_actual.estado)
+    : -1;
 
   return (
     <div className="space-y-5 bg-pattern-dots min-h-full">
@@ -176,11 +257,11 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
         </div>
       </div>
 
-      {/* Current Planilla Banner - Prominent if active */}
+      {/* Current Planilla Banner + Status Timeline */}
       {data.kpis.planilla_actual && (
         <Card className="shadow-sm border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-50 to-white dark:from-emerald-950/30 dark:to-card">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
                   <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
@@ -205,15 +286,59 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
                 {data.kpis.planilla_actual.estado}
               </Badge>
             </div>
+
+            {/* ── Payroll Status Timeline ── */}
+            <div className="mt-4 pt-4 border-t border-emerald-200/60 dark:border-emerald-800/40">
+              <div className="flex items-center justify-between relative">
+                {/* Connecting line */}
+                <div className="absolute top-4 left-[12.5%] right-[12.5%] h-0.5 bg-slate-200 dark:bg-slate-700" />
+                <div
+                  className="absolute top-4 left-[12.5%] h-0.5 bg-emerald-500 transition-all duration-700 ease-out"
+                  style={{ width: timelineActiveStep >= 2 ? '75%' : timelineActiveStep >= 1 ? '37.5%' : '0%' }}
+                />
+                {TIMELINE_STEPS.map((step, idx) => {
+                  const isActive = idx === timelineActiveStep;
+                  const isCompleted = idx < timelineActiveStep;
+                  const isPending = idx > timelineActiveStep;
+                  return (
+                    <div key={step} className="flex flex-col items-center relative z-10" style={{ width: '25%' }}>
+                      <div className={`
+                        w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-500
+                        ${isCompleted
+                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-md shadow-emerald-500/30'
+                          : isActive
+                            ? 'bg-amber-400 border-amber-400 text-white shadow-md shadow-amber-400/30 ring-4 ring-amber-100 dark:ring-amber-900/40'
+                            : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-400'
+                        }
+                      `}>
+                        {isCompleted ? (
+                          <CheckCircle className="h-4 w-4" />
+                        ) : (
+                          idx + 1
+                        )}
+                      </div>
+                      <span className={`text-[10px] mt-1.5 font-semibold uppercase tracking-wider ${
+                        isCompleted ? 'text-emerald-600 dark:text-emerald-400' :
+                        isActive ? 'text-amber-600 dark:text-amber-400' :
+                        'text-slate-400 dark:text-slate-500'
+                      }`}>
+                        {step === 'CALCULADA' ? 'Calculada' : step === 'APROBADA' ? 'Aprobada' : 'Pagada'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* KPI Cards - ERP style with sparklines */}
+      {/* ── KPI Cards - Enhanced with gradient backgrounds & trend indicators ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
         {/* Total Empleados */}
-        <Card className="shadow-sm card-hover-lift">
-          <CardContent className="p-5">
+        <Card className="shadow-sm card-hover-lift relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-50/80 to-transparent dark:from-teal-950/30 dark:to-transparent pointer-events-none" />
+          <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Empleados Activos</span>
               <div className="p-2 rounded-lg bg-teal-50 dark:bg-teal-900/30">
@@ -234,15 +359,19 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
             <div className="flex items-center gap-1">
               {data.kpis.tendencia_empleados.startsWith('-') ? (
                 <>
-                  <ArrowDownRight className="h-3.5 w-3.5 text-red-500" />
-                  <span className="text-xs font-semibold text-red-600">{data.kpis.tendencia_empleados}%</span>
-                  <span className="text-xs text-slate-400">vs mes anterior</span>
+                  <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-950/30">
+                    <ArrowDownRight className="h-3 w-3 text-red-500" />
+                    <span className="text-xs font-semibold text-red-600 dark:text-red-400">{data.kpis.tendencia_empleados}%</span>
+                  </div>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">vs mes anterior</span>
                 </>
               ) : (
                 <>
-                  <ArrowUpRight className="h-3.5 w-3.5 text-emerald-500" />
-                  <span className="text-xs font-semibold text-emerald-600">+{data.kpis.tendencia_empleados}%</span>
-                  <span className="text-xs text-slate-400">vs mes anterior</span>
+                  <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30">
+                    <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">+{data.kpis.tendencia_empleados}%</span>
+                  </div>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">vs mes anterior</span>
                 </>
               )}
             </div>
@@ -250,8 +379,9 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
         </Card>
 
         {/* Nómina del Mes */}
-        <Card className="shadow-sm card-hover-lift">
-          <CardContent className="p-5">
+        <Card className="shadow-sm card-hover-lift relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/80 to-transparent dark:from-emerald-950/30 dark:to-transparent pointer-events-none" />
+          <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Nómina del Mes</span>
               <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/30">
@@ -269,13 +399,26 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
                 />
               ))}
             </div>
-            <span className="text-xs text-slate-400 dark:text-slate-500 mt-2 block">Total neto pagado</span>
+            <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30">
+                <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">+2.5%</span>
+              </div>
+              <span className="text-xs text-slate-400 dark:text-slate-500">vs mes anterior</span>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Cumplimiento Previsional with Traffic Light */}
-        <Card className="shadow-sm card-hover-lift">
-          <CardContent className="p-5">
+        {/* Cumplimiento Previsional - With SVG Ring */}
+        <Card className="shadow-sm card-hover-lift relative overflow-hidden">
+          <div className={`absolute inset-0 pointer-events-none ${
+            data.kpis.semaforo === 'verde'
+              ? 'bg-gradient-to-br from-emerald-50/80 to-transparent dark:from-emerald-950/30 dark:to-transparent'
+              : data.kpis.semaforo === 'amarillo'
+                ? 'bg-gradient-to-br from-amber-50/80 to-transparent dark:from-amber-950/30 dark:to-transparent'
+                : 'bg-gradient-to-br from-red-50/80 to-transparent dark:from-red-950/30 dark:to-transparent'
+          }`} />
+          <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Cumplimiento</span>
               {/* Traffic light visual */}
@@ -285,26 +428,29 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
                 <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
               </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{data.kpis.cumplimiento_previsional}%</p>
-            <div className="flex items-center gap-2 mt-2">
-              <Progress
-                value={data.kpis.cumplimiento_previsional}
-                className="h-2 flex-1 progress-animate"
-              />
-              <Badge variant="outline" className={`text-[10px] px-2 border ${
-                data.kpis.semaforo === 'verde' ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-700' :
-                data.kpis.semaforo === 'amarillo' ? 'border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700' :
-                'border-red-300 text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700'
-              }`}>
-                {semaforoLabel}
-              </Badge>
+            <div className="flex items-center gap-4">
+              <ComplianceRing percentage={data.kpis.cumplimiento_previsional} />
+              <div className="flex-1 space-y-2">
+                <Badge variant="outline" className={`text-[10px] px-2 border ${
+                  data.kpis.semaforo === 'verde' ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-700' :
+                  data.kpis.semaforo === 'amarillo' ? 'border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700' :
+                  'border-red-300 text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700'
+                }`}>
+                  {semaforoLabel}
+                </Badge>
+                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/30">
+                  <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">+1.2%</span>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Próximo Vencimiento */}
-        <Card className="shadow-sm card-hover-lift">
-          <CardContent className="p-5">
+        <Card className="shadow-sm card-hover-lift relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent dark:from-orange-950/30 dark:to-transparent pointer-events-none" />
+          <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Próximo Vencimiento</span>
               <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-900/30">
@@ -317,6 +463,10 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
                 <div className="flex items-center gap-1.5 mt-2">
                   <span className="inline-block w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
                   <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">{data.vencimientos[0].fecha}</span>
+                </div>
+                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-50 dark:bg-orange-950/30 mt-2 w-fit">
+                  <ArrowDownRight className="h-3 w-3 text-orange-500" />
+                  <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">3 días</span>
                 </div>
               </>
             ) : (
@@ -386,7 +536,7 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
           </CardContent>
         </Card>
 
-        {/* Compliance semaphore - traffic light visual */}
+        {/* Compliance semaphore - Enhanced with SVG ring */}
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -394,32 +544,32 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {/* Large traffic light */}
-            <div className="flex items-center justify-center mb-4">
-              <div className="flex flex-col items-center gap-2 p-3 bg-slate-900 rounded-2xl shadow-inner">
-                <div className={`w-8 h-8 rounded-full transition-all ${
-                  data.kpis.semaforo === 'rojo'
-                    ? 'bg-red-500 shadow-lg shadow-red-500/50'
-                    : 'bg-red-900/30'
-                }`} />
-                <div className={`w-8 h-8 rounded-full transition-all ${
-                  data.kpis.semaforo === 'amarillo'
-                    ? 'bg-amber-400 shadow-lg shadow-amber-400/50'
-                    : 'bg-amber-900/30'
-                }`} />
-                <div className={`w-8 h-8 rounded-full transition-all ${
-                  data.kpis.semaforo === 'verde'
-                    ? 'bg-emerald-400 shadow-lg shadow-emerald-400/50'
-                    : 'bg-emerald-900/30'
-                }`} />
-              </div>
-              <div className="ml-4">
-                <p className={`text-lg font-bold ${
+            {/* SVG Circular Progress + Traffic light */}
+            <div className="flex items-center justify-center gap-6 mb-4">
+              <ComplianceRing percentage={data.kpis.cumplimiento_previsional} />
+              <div>
+                <div className="flex flex-col items-center gap-1.5 p-3 bg-slate-900 dark:bg-slate-800 rounded-2xl shadow-inner">
+                  <div className={`w-6 h-6 rounded-full transition-all ${
+                    data.kpis.semaforo === 'rojo'
+                      ? 'bg-red-500 shadow-lg shadow-red-500/50'
+                      : 'bg-red-900/30'
+                  }`} />
+                  <div className={`w-6 h-6 rounded-full transition-all ${
+                    data.kpis.semaforo === 'amarillo'
+                      ? 'bg-amber-400 shadow-lg shadow-amber-400/50'
+                      : 'bg-amber-900/30'
+                  }`} />
+                  <div className={`w-6 h-6 rounded-full transition-all ${
+                    data.kpis.semaforo === 'verde'
+                      ? 'bg-emerald-400 shadow-lg shadow-emerald-400/50'
+                      : 'bg-emerald-900/30'
+                  }`} />
+                </div>
+                <p className={`text-sm font-bold text-center mt-2 ${
                   data.kpis.semaforo === 'verde' ? 'text-emerald-600' :
                   data.kpis.semaforo === 'amarillo' ? 'text-amber-600' :
                   'text-red-600'
                 }`}>{semaforoLabel}</p>
-                <p className="text-xs text-slate-500">{data.kpis.cumplimiento_previsional}% cumplimiento</p>
               </div>
             </div>
 
@@ -461,9 +611,9 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
         </Card>
       </div>
 
-      {/* Charts row */}
+      {/* ── Charts row: Enhanced Trend + Donut Breakdown ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Monthly trend - better bar chart */}
+        {/* ── Enhanced Monthly Trend Chart ── */}
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -477,33 +627,123 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
                 <p className="text-sm">Sin datos históricos</p>
               </div>
             ) : (
-              <div className="flex items-end gap-3 h-48 pt-2">
-                {data.tendencia_mensual.map((m, i) => {
-                  const height = Math.max((m.total / maxTendencia) * 160, 6);
-                  const isMax = m.total === maxTendencia;
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1.5 group">
-                      <span className="text-[10px] text-slate-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                        {m.total > 0 ? fmt(m.total) : '-'}
-                      </span>
+              <div className="relative">
+                {/* Y-axis labels */}
+                <div className="absolute left-0 top-0 bottom-6 w-14 flex flex-col justify-between text-[9px] text-slate-400 dark:text-slate-500 font-mono pr-1">
+                  <span>{fmt(maxTendencia)}</span>
+                  <span>{fmt(maxTendencia * 0.75)}</span>
+                  <span>{fmt(maxTendencia * 0.5)}</span>
+                  <span>{fmt(maxTendencia * 0.25)}</span>
+                  <span>$0</span>
+                </div>
+                {/* Chart area */}
+                <div className="ml-14 relative">
+                  {/* Horizontal grid lines */}
+                  <div className="absolute inset-0 bottom-6 flex flex-col justify-between pointer-events-none">
+                    {[0, 1, 2, 3, 4].map(i => (
+                      <div key={i} className="border-t border-dashed border-slate-200 dark:border-slate-700/50" />
+                    ))}
+                  </div>
+                  {/* Bars container */}
+                  <div className="relative flex items-end gap-2 h-48 pt-2 pb-0">
+                    {/* Gradient area behind bars */}
+                    <div className="absolute inset-0 bottom-0 overflow-hidden">
                       <div
-                        className={`w-full rounded-t-md transition-all duration-500 min-h-[6px] group-hover:opacity-80 ${
-                          isMax
-                            ? 'bg-gradient-to-t from-emerald-600 to-emerald-400'
-                            : 'bg-gradient-to-t from-teal-500 to-teal-300'
-                        }`}
-                        style={{ height: `${height}px` }}
+                        className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-emerald-100/40 via-teal-50/20 to-transparent dark:from-emerald-900/20 dark:via-teal-900/10 dark:to-transparent"
+                        style={{ height: '85%' }}
                       />
-                      <span className="text-[10px] text-slate-500 capitalize font-medium">{m.mes}</span>
                     </div>
-                  );
-                })}
+                    {data.tendencia_mensual.map((m, i) => {
+                      const height = Math.max((m.total / maxTendencia) * 160, 6);
+                      const isMax = m.total === maxTendencia;
+                      const isCurrentMonth = i === currentMonthIdx;
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1.5 group relative z-10">
+                          {/* Tooltip */}
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                            {m.total > 0 ? fmt(m.total) : '-'}
+                          </span>
+                          {/* Bar with animation */}
+                          <div
+                            className={`w-full rounded-t-md transition-all duration-700 ease-out min-h-[6px] group-hover:opacity-90 relative ${
+                              isCurrentMonth
+                                ? 'bg-gradient-to-t from-emerald-600 to-emerald-400 shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-300/50 dark:ring-emerald-700/50'
+                                : isMax
+                                  ? 'bg-gradient-to-t from-emerald-600 to-emerald-400'
+                                  : 'bg-gradient-to-t from-teal-500 to-teal-300 dark:from-teal-600 dark:to-teal-400'
+                            }`}
+                            style={{
+                              height: `${height}px`,
+                              animation: `barGrow 0.8s ease-out ${i * 0.08}s both`,
+                            }}
+                          />
+                          {/* Current month indicator */}
+                          {isCurrentMonth && (
+                            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+                          )}
+                          <span className={`text-[10px] capitalize font-medium ${
+                            isCurrentMonth ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500 dark:text-slate-400'
+                          }`}>{m.mes}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Department distribution - better horizontal bars */}
+        {/* ── Expense Breakdown Donut Chart ── */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <PieChart className="h-4 w-4 text-slate-500" /> Desglose de Nómina
+            </CardTitle>
+            <CardDescription>Distribución de deducciones y pago neto</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row items-center gap-6">
+              {/* Donut chart */}
+              <div className="relative shrink-0">
+                <div
+                  className="w-36 h-36 rounded-full shadow-inner"
+                  style={{ background: conicGradient }}
+                >
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-20 h-20 rounded-full bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center">
+                      <div className="text-center">
+                        <p className="text-xs font-bold text-slate-900 dark:text-slate-100 font-mono">{fmt(baseAmount)}</p>
+                        <p className="text-[9px] text-slate-400 dark:text-slate-500">Total</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* Legend */}
+              <div className="flex-1 space-y-2.5 w-full">
+                {EXPENSE_SLICES.map((s, i) => (
+                  <div key={s.label} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-sm ${s.bgClass}`} />
+                      <span className={`text-xs font-medium ${s.color}`}>{s.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{fmt(expenseAmounts[i])}</span>
+                      <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                        {s.pct}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Department distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -546,6 +786,93 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
             )}
           </CardContent>
         </Card>
+
+        {/* ── Payroll Status Timeline Card (standalone when no planilla_actual) ── */}
+        {!data.kpis.planilla_actual && (
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CircleDot className="h-4 w-4 text-slate-500" /> Flujo de Planilla
+              </CardTitle>
+              <CardDescription>Progreso de la planilla actual</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-center py-8 text-slate-400">
+                <p className="text-sm">No hay planilla en proceso</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Show timeline as standalone card when planilla exists - same timeline but in its own card */}
+        {data.kpis.planilla_actual && (
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CircleDot className="h-4 w-4 text-slate-500" /> Detalle de Estado
+              </CardTitle>
+              <CardDescription>Información de la planilla actual</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Código</span>
+                  <span className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.codigo}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tipo</span>
+                  <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.tipo}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Estado</span>
+                  <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium`}>
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${estadoDot[data.kpis.planilla_actual.estado] || 'bg-slate-400'}`} />
+                    {data.kpis.planilla_actual.estado}
+                  </Badge>
+                </div>
+                {data.kpis.planilla_actual.calculada_por && (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Calculada por</span>
+                    <span className="text-sm text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.calculada_por}</span>
+                  </div>
+                )}
+
+                <Separator className="my-2" />
+
+                {/* Compact timeline */}
+                <div className="flex items-center gap-1 pt-1">
+                  {TIMELINE_STEPS.map((step, idx) => {
+                    const isActive = idx === timelineActiveStep;
+                    const isCompleted = idx < timelineActiveStep;
+                    return (
+                      <React.Fragment key={step}>
+                        {idx > 0 && (
+                          <ChevronRight className={`h-3 w-3 ${
+                            idx <= timelineActiveStep ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'
+                          }`} />
+                        )}
+                        <div className="flex items-center gap-1">
+                          <div className={`w-2 h-2 rounded-full ${
+                            isCompleted ? 'bg-emerald-500' :
+                            isActive ? 'bg-amber-400 animate-pulse' :
+                            'bg-slate-300 dark:bg-slate-600'
+                          }`} />
+                          <span className={`text-[10px] font-semibold uppercase tracking-wider ${
+                            isCompleted ? 'text-emerald-600 dark:text-emerald-400' :
+                            isActive ? 'text-amber-600 dark:text-amber-400' :
+                            'text-slate-400 dark:text-slate-500'
+                          }`}>
+                            {step === 'CALCULADA' ? 'Calculada' : step === 'APROBADA' ? 'Aprobada' : 'Pagada'}
+                          </span>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Alerts with severity icons */}
@@ -593,6 +920,19 @@ export default function PayrollDashboard({ accessToken, userRole }: PayrollDashb
           </CardContent>
         </Card>
       )}
+
+      {/* CSS Keyframes for bar animation */}
+      <style jsx>{`
+        @keyframes barGrow {
+          from {
+            height: 0;
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 }

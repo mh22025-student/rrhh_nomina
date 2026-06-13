@@ -74,14 +74,34 @@ export async function GET(request: NextRequest) {
 
 // POST /api/incidencias - Create incidencia
 export async function POST(request: NextRequest) {
-  const roleCheck = requireRoles('ADMIN', 'ANALISTA' as UserRole)(request);
-  if ('error' in roleCheck) {
-    return roleCheck.error;
+  const user = verifyAuth(request);
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
   }
-  const { user } = roleCheck;
+
+  // EMPLEADO can create their own incidences; ADMIN/ANALISTA can create for anyone
+  const isEmpleado = user.rol === 'EMPLEADO';
+  if (!isEmpleado) {
+    const roleCheck = requireRoles('ADMIN', 'ANALISTA' as UserRole)(request);
+    if ('error' in roleCheck) {
+      return roleCheck.error;
+    }
+  }
 
   try {
     const body = await request.json();
+
+    // If EMPLEADO, force their own empleado_id
+    if (isEmpleado) {
+      const empleado = await db.empleado.findFirst({
+        where: { usuario: { id: user.userId } },
+        select: { id: true },
+      });
+      if (!empleado) {
+        return NextResponse.json({ error: 'No tiene perfil de empleado asociado' }, { status: 404 });
+      }
+      body.empleado_id = empleado.id;
+    }
 
     // Validate required fields
     const required = ['empleado_id', 'tipo', 'fecha_inicio'];
