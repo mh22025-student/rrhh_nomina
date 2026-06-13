@@ -71,6 +71,52 @@ export async function GET(request: NextRequest) {
         })
       : null;
 
+    // Generate dynamic notifications for this employee
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const notificaciones: Array<{ id: string; titulo: string; mensaje: string; prioridad: string; fecha: string; leida: boolean }> = [];
+
+    // Check for pending solicitudes
+    const pendingSolicitudes = solicitudes.filter(s => s.estado === 'PENDIENTE');
+    if (pendingSolicitudes.length > 0) {
+      notificaciones.push({
+        id: `solicitudes-pendientes-${emp.id}`,
+        titulo: 'Solicitudes Pendientes',
+        mensaje: `Tiene ${pendingSolicitudes.length} solicitud(es) pendiente(s) de respuesta`,
+        prioridad: 'MEDIA',
+        fecha: now.toISOString(),
+        leida: false,
+      });
+    }
+
+    // Check for upcoming vacation balance
+    const currentYearVacation = vacaciones.find(v => v.anio === currentYear);
+    if (currentYearVacation && currentYearVacation.dias_pendientes > 0) {
+      notificaciones.push({
+        id: `vacation-balance-${emp.id}-${currentYear}`,
+        titulo: 'Vacaciones Disponibles',
+        mensaje: `Tiene ${currentYearVacation.dias_pendientes} día(s) de vacaciones disponibles para el periodo ${currentYear}`,
+        prioridad: 'BAJA',
+        fecha: now.toISOString(),
+        leida: false,
+      });
+    }
+
+    // Compliance deadline reminder
+    const day15 = new Date(currentYear, currentMonth - 1, 15);
+    const daysUntilISSS = Math.ceil((day15.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysUntilISSS > 0 && daysUntilISSS <= 10) {
+      notificaciones.push({
+        id: `isss-deadline-${currentYear}-${currentMonth}`,
+        titulo: 'Vencimiento ISSS',
+        mensaje: `La planilla ISSS vence en ${daysUntilISSS} día(s)`,
+        prioridad: 'ALTA',
+        fecha: now.toISOString(),
+        leida: false,
+      });
+    }
+
     return NextResponse.json({
       empleado: {
         id: emp.id,
@@ -106,6 +152,14 @@ export async function GET(request: NextRequest) {
       })),
       documentos,
       solicitudes,
+      notificaciones: notificaciones.map((n) => ({
+        id: n.id,
+        titulo: n.titulo,
+        mensaje: n.mensaje,
+        prioridad: n.prioridad || 'MEDIA',
+        fecha: n.fecha,
+        leida: n.leida,
+      })),
     });
   } catch (error) {
     console.error('Error fetching self-service data:', error);
@@ -171,5 +225,82 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating solicitud:', error);
     return NextResponse.json({ error: 'Error al crear solicitud' }, { status: 500 });
+  }
+}
+
+// PATCH /api/selfservice - Cancel a pending solicitud
+export async function PATCH(request: NextRequest) {
+  const user = verifyAuth(request);
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
+  const roleCheck = requireRoles('EMPLEADO', 'ADMIN')(request);
+  if ('error' in roleCheck) {
+    return roleCheck.error;
+  }
+
+  try {
+    const body = await request.json();
+    const { solicitud_id, estado } = body;
+
+    if (!solicitud_id || estado !== 'CANCELADA') {
+      return NextResponse.json({ error: 'Parámetros inválidos' }, { status: 400 });
+    }
+
+    // Find employee linked to this user
+    const usuario = await db.usuario.findUnique({
+      where: { id: user.userId },
+      include: { empleado: true },
+    });
+
+    if (!usuario?.empleado) {
+      return NextResponse.json({ error: 'No tiene perfil de empleado asociado' }, { status: 404 });
+    }
+
+    // Find the solicitud and verify ownership + pending status
+    const solicitud = await db.solicitudSelfService.findUnique({
+      where: { id: solicitud_id },
+    });
+
+    if (!solicitud) {
+      return NextResponse.json({ error: 'Solicitud no encontrada' }, { status: 404 });
+    }
+
+    if (solicitud.empleado_id !== usuario.empleado.id) {
+      return NextResponse.json({ error: 'No tiene permisos para cancelar esta solicitud' }, { status: 403 });
+    }
+
+    if (solicitud.estado !== 'PENDIENTE') {
+      return NextResponse.json({ error: 'Solo se pueden cancelar solicitudes pendientes' }, { status: 400 });
+    }
+
+    const updated = await db.solicitudSelfService.update({
+      where: { id: solicitud_id },
+      data: {
+        estado: 'CANCELADA',
+        fecha_resolucion: new Date().toISOString(),
+      },
+    });
+
+    // Audit log
+    await db.bitacoraAuditoria.create({
+      data: {
+        usuario_id: user.userId,
+        usuario_email: user.email,
+        accion: 'CANCELAR',
+        tabla_afectada: 'solicitudes_self_service',
+        registro_id: solicitud_id,
+        valor_anterior: JSON.stringify(solicitud),
+        valor_nuevo: JSON.stringify(updated),
+        nivel_criticidad: 'NORMAL',
+        detalle_adicional: `Solicitud cancelada: ${solicitud.tipo}`,
+      },
+    });
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    console.error('Error cancelling solicitud:', error);
+    return NextResponse.json({ error: 'Error al cancelar solicitud' }, { status: 500 });
   }
 }

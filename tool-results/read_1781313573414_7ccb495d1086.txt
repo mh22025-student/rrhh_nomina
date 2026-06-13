@@ -1,0 +1,750 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useEffect, useCallback } from 'react';
+     4→     4→import {
+     5→     5→  AlertCircle, Clock, CheckCircle2, XCircle, Plus, Loader2, Search,
+     6→     6→  Zap, Gift, Percent, Heart, CalendarDays, FileText, Eye, Ban,
+     7→     7→  Moon, Sun, Briefcase, Timer,
+     8→     8→} from 'lucide-react';
+     9→     9→import { Button } from '@/components/ui/button';
+    10→    10→import { Input } from '@/components/ui/input';
+    11→    11→import { Label } from '@/components/ui/label';
+    12→    12→import { Badge } from '@/components/ui/badge';
+    13→    13→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    14→    14→import {
+    15→    15→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    16→    16→} from '@/components/ui/select';
+    17→    17→import {
+    18→    18→  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+    19→    19→} from '@/components/ui/dialog';
+    20→    20→import { Skeleton } from '@/components/ui/skeleton';
+    21→    21→import { useToast } from '@/hooks/use-toast';
+    22→    22→
+    23→    23→type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+    24→    24→
+    25→    25→interface IncidenceManagerProps {
+    26→    26→  accessToken: string | null;
+    27→    27→  userRole: UserRole;
+    28→    28→}
+    29→    29→
+    30→    30→interface Incidencia {
+    31→    31→  id: string;
+    32→    32→  tipo: string;
+    33→    33→  estado: string;
+    34→    34→  fecha_inicio: string;
+    35→    35→  fecha_fin: string | null;
+    36→    36→  cantidad_horas: number | null;
+    37→    37→  tipo_horas_extra: string | null;
+    38→    38→  monto: number | null;
+    39→    39→  descripcion: string | null;
+    40→    40→  numero_incapacidad: string | null;
+    41→    41→  empleado: {
+    42→    42→    id: string;
+    43→    43→    codigo_empleado: string;
+    44→    44→    primer_nombre: string;
+    45→    45→    segundo_nombre: string | null;
+    46→    46→    primer_apellido: string;
+    47→    47→    segundo_apellido: string | null;
+    48→    48→  };
+    49→    49→  aprobada_por: { nombre: string; apellido: string } | null;
+    50→    50→}
+    51→    51→
+    52→    52→interface EmpleadoOption {
+    53→    53→  id: string;
+    54→    54→  codigo_empleado: string;
+    55→    55→  primer_nombre: string;
+    56→    56→  primer_apellido: string;
+    57→    57→}
+    58→    58→
+    59→    59→const TIPO_LABELS: Record<string, string> = {
+    60→    60→  HORAS_EXTRA: 'Horas Extra',
+    61→    61→  AUSENCIA: 'Ausencia',
+    62→    62→  INCAPACIDAD_ISSS: 'Incapacidad ISSS',
+    63→    63→  PERMISO: 'Permiso',
+    64→    64→  COMISION: 'Comisión',
+    65→    65→  BONO: 'Bono',
+    66→    66→  DESCUENTO_ESPECIAL: 'Descuento Especial',
+    67→    67→};
+    68→    68→
+    69→    69→const TIPO_ICONS: Record<string, React.ElementType> = {
+    70→    70→  HORAS_EXTRA: Timer,
+    71→    71→  AUSENCIA: CalendarDays,
+    72→    72→  INCAPACIDAD_ISSS: Heart,
+    73→    73→  PERMISO: FileText,
+    74→    74→  COMISION: Percent,
+    75→    75→  BONO: Gift,
+    76→    76→  DESCUENTO_ESPECIAL: Ban,
+    77→    77→};
+    78→    78→
+    79→    79→const TIPO_COLORS: Record<string, { bg: string; icon: string; accent: string; border: string }> = {
+    80→    80→  HORAS_EXTRA: { bg: 'bg-sky-50 dark:bg-sky-900/20', icon: 'text-sky-600 dark:text-sky-400', accent: 'bg-sky-500', border: 'border-sky-200 dark:border-sky-800' },
+    81→    81→  AUSENCIA: { bg: 'bg-slate-50 dark:bg-slate-800', icon: 'text-slate-600 dark:text-slate-400', accent: 'bg-slate-500', border: 'border-slate-200 dark:border-slate-700' },
+    82→    82→  INCAPACIDAD_ISSS: { bg: 'bg-rose-50 dark:bg-rose-900/20', icon: 'text-rose-600 dark:text-rose-400', accent: 'bg-rose-500', border: 'border-rose-200 dark:border-rose-800' },
+    83→    83→  PERMISO: { bg: 'bg-amber-50 dark:bg-amber-900/20', icon: 'text-amber-600 dark:text-amber-400', accent: 'bg-amber-500', border: 'border-amber-200 dark:border-amber-800' },
+    84→    84→  COMISION: { bg: 'bg-violet-50 dark:bg-violet-900/20', icon: 'text-violet-600 dark:text-violet-400', accent: 'bg-violet-500', border: 'border-violet-200 dark:border-violet-800' },
+    85→    85→  BONO: { bg: 'bg-emerald-50 dark:bg-emerald-900/20', icon: 'text-emerald-600 dark:text-emerald-400', accent: 'bg-emerald-500', border: 'border-emerald-200 dark:border-emerald-800' },
+    86→    86→  DESCUENTO_ESPECIAL: { bg: 'bg-red-50 dark:bg-red-900/20', icon: 'text-red-600 dark:text-red-400', accent: 'bg-red-500', border: 'border-red-200 dark:border-red-800' },
+    87→    87→};
+    88→    88→
+    89→    89→const ESTADO_COLORS: Record<string, string> = {
+    90→    90→  PENDIENTE: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+    91→    91→  APROBADA: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+    92→    92→  RECHAZADA: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+    93→    93→};
+    94→    94→
+    95→    95→const ESTADO_DOT: Record<string, string> = {
+    96→    96→  PENDIENTE: 'bg-amber-500',
+    97→    97→  APROBADA: 'bg-emerald-500',
+    98→    98→  RECHAZADA: 'bg-red-500',
+    99→    99→};
+   100→   100→
+   101→   101→function AvatarInitials({ nombre, apellido }: { nombre: string; apellido: string }) {
+   102→   102→  const initials = (nombre[0] || '') + (apellido[0] || '');
+   103→   103→  return (
+   104→   104→    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+   105→   105→      {initials.toUpperCase()}
+   106→   106→    </div>
+   107→   107→  );
+   108→   108→}
+   109→   109→
+   110→   110→export default function IncidenceManager({ accessToken, userRole }: IncidenceManagerProps) {
+   111→   111→  const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
+   112→   112→  const [empleados, setEmpleados] = useState<EmpleadoOption[]>([]);
+   113→   113→  const [loading, setLoading] = useState(true);
+   114→   114→  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: 10, totalPages: 0 });
+   115→   115→  const [tipoFilter, setTipoFilter] = useState('all');
+   116→   116→  const [estadoFilter, setEstadoFilter] = useState('all');
+   117→   117→  const [searchEmpleado, setSearchEmpleado] = useState('');
+   118→   118→  const [dialogOpen, setDialogOpen] = useState(false);
+   119→   119→  const [saving, setSaving] = useState(false);
+   120→   120→  const [previewMode, setPreviewMode] = useState(false);
+   121→   121→  const { toast } = useToast();
+   122→   122→
+   123→   123→  const [form, setForm] = useState({
+   124→   124→    empleado_id: '',
+   125→   125→    tipo: 'HORAS_EXTRA',
+   126→   126→    fecha_inicio: '',
+   127→   127→    fecha_fin: '',
+   128→   128→    descripcion: '',
+   129→   129→    // Conditional
+   130→   130→    cantidad_horas: '',
+   131→   131→    tipo_horas_extra: 'DIURNA',
+   132→   132→    monto: '',
+   133→   133→    numero_incapacidad: '',
+   134→   134→  });
+   135→   135→
+   136→   136→  const fetchIncidencias = useCallback(async () => {
+   137→   137→    setLoading(true);
+   138→   138→    try {
+   139→   139→      const params = new URLSearchParams();
+   140→   140→      params.set('page', String(pagination.page));
+   141→   141→      params.set('pageSize', String(pagination.pageSize));
+   142→   142→      if (tipoFilter && tipoFilter !== 'all') params.set('tipo', tipoFilter);
+   143→   143→      if (estadoFilter && estadoFilter !== 'all') params.set('estado', estadoFilter);
+   144→   144→
+   145→   145→      const res = await fetch(`/api/incidencias?${params.toString()}`, {
+   146→   146→        headers: { Authorization: `Bearer ${accessToken}` },
+   147→   147→      });
+   148→   148→      const data = await res.json();
+   149→   149→      if (res.ok) {
+   150→   150→        setIncidencias(data.data);
+   151→   151→        setPagination(data.pagination);
+   152→   152→      }
+   153→   153→    } catch (err) {
+   154→   154→      console.error('Error fetching incidencias:', err);
+   155→   155→    } finally {
+   156→   156→      setLoading(false);
+   157→   157→    }
+   158→   158→  }, [accessToken, pagination.page, pagination.pageSize, tipoFilter, estadoFilter]);
+   159→   159→
+   160→   160→  useEffect(() => { fetchIncidencias(); }, [fetchIncidencias]);
+   161→   161→
+   162→   162→  // Fetch employees for dropdown
+   163→   163→  useEffect(() => {
+   164→   164→    const fetchEmpleados = async () => {
+   165→   165→      try {
+   166→   166→        const res = await fetch('/api/empleados?pageSize=100&estado=ACTIVO', {
+   167→   167→          headers: { Authorization: `Bearer ${accessToken}` },
+   168→   168→        });
+   169→   169→        const data = await res.json();
+   170→   170→        if (res.ok) setEmpleados(data.data || []);
+   171→   171→      } catch { /* ignore */ }
+   172→   172→    };
+   173→   173→    fetchEmpleados();
+   174→   174→  }, [accessToken]);
+   175→   175→
+   176→   176→  // Summary counts
+   177→   177→  const summary = {
+   178→   178→    total: pagination.total,
+   179→   179→    pendientes: incidencias.filter(i => i.estado === 'PENDIENTE').length,
+   180→   180→    aprobadas: incidencias.filter(i => i.estado === 'APROBADA').length,
+   181→   181→    rechazadas: incidencias.filter(i => i.estado === 'RECHAZADA').length,
+   182→   182→  };
+   183→   183→
+   184→   184→  const handleCreate = async () => {
+   185→   185→    // Validate
+   186→   186→    if (!form.empleado_id) { toast({ title: 'Error', description: 'Seleccione un empleado', variant: 'destructive' }); return; }
+   187→   187→    if (!form.tipo) { toast({ title: 'Error', description: 'Seleccione el tipo de incidencia', variant: 'destructive' }); return; }
+   188→   188→    if (!form.fecha_inicio) { toast({ title: 'Error', description: 'Fecha inicio es requerida', variant: 'destructive' }); return; }
+   189→   189→
+   190→   190→    if (form.tipo === 'HORAS_EXTRA' && (!form.cantidad_horas || parseFloat(form.cantidad_horas) <= 0)) {
+   191→   191→      toast({ title: 'Error', description: 'Cantidad de horas es requerida para HORAS_EXTRA', variant: 'destructive' });
+   192→   192→      return;
+   193→   193→    }
+   194→   194→    if (['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && (!form.monto || parseFloat(form.monto) <= 0)) {
+   195→   195→      toast({ title: 'Error', description: 'Monto es requerido', variant: 'destructive' });
+   196→   196→      return;
+   197→   197→    }
+   198→   198→
+   199→   199→    setSaving(true);
+   200→   200→    try {
+   201→   201→      const body: Record<string, unknown> = {
+   202→   202→        empleado_id: form.empleado_id,
+   203→   203→        tipo: form.tipo,
+   204→   204→        fecha_inicio: form.fecha_inicio,
+   205→   205→        fecha_fin: form.fecha_fin || null,
+   206→   206→        descripcion: form.descripcion || null,
+   207→   207→      };
+   208→   208→
+   209→   209→      if (form.tipo === 'HORAS_EXTRA') {
+   210→   210→        body.cantidad_horas = parseFloat(form.cantidad_horas);
+   211→   211→        body.tipo_horas_extra = form.tipo_horas_extra;
+   212→   212→      }
+   213→   213→      if (form.tipo === 'INCAPACIDAD_ISSS') {
+   214→   214→        body.numero_incapacidad = form.numero_incapacidad;
+   215→   215→      }
+   216→   216→      if (['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo)) {
+   217→   217→        body.monto = parseFloat(form.monto);
+   218→   218→      }
+   219→   219→
+   220→   220→      const res = await fetch('/api/incidencias', {
+   221→   221→        method: 'POST',
+   222→   222→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   223→   223→        body: JSON.stringify(body),
+   224→   224→      });
+   225→   225→      const data = await res.json();
+   226→   226→      if (res.ok) {
+   227→   227→        toast({ title: 'Incidencia creada', description: 'La incidencia ha sido registrada' });
+   228→   228→        setDialogOpen(false);
+   229→   229→        setPreviewMode(false);
+   230→   230→        resetForm();
+   231→   231→        fetchIncidencias();
+   232→   232→      } else {
+   233→   233→        toast({ title: 'Error', description: data.error || 'Error al crear incidencia', variant: 'destructive' });
+   234→   234→      }
+   235→   235→    } catch {
+   236→   236→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   237→   237→    } finally {
+   238→   238→      setSaving(false);
+   239→   239→    }
+   240→   240→  };
+   241→   241→
+   242→   242→  const handleApproveReject = async (id: string, estado: 'APROBADA' | 'RECHAZADA') => {
+   243→   243→    try {
+   244→   244→      const res = await fetch(`/api/incidencias/${id}`, {
+   245→   245→        method: 'PUT',
+   246→   246→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   247→   247→        body: JSON.stringify({ estado }),
+   248→   248→      });
+   249→   249→      const data = await res.json();
+   250→   250→      if (res.ok) {
+   251→   251→        toast({ title: `Incidencia ${estado.toLowerCase()}`, description: `La incidencia ha sido ${estado === 'APROBADA' ? 'aprobada' : 'rechazada'}` });
+   252→   252→        fetchIncidencias();
+   253→   253→      } else {
+   254→   254→        toast({ title: 'Error', description: data.error || 'Error al actualizar', variant: 'destructive' });
+   255→   255→      }
+   256→   256→    } catch {
+   257→   257→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   258→   258→    }
+   259→   259→  };
+   260→   260→
+   261→   261→  const resetForm = () => {
+   262→   262→    setForm({
+   263→   263→      empleado_id: '', tipo: 'HORAS_EXTRA', fecha_inicio: '', fecha_fin: '',
+   264→   264→      descripcion: '', cantidad_horas: '', tipo_horas_extra: 'DIURNA',
+   265→   265→      monto: '', numero_incapacidad: '',
+   266→   266→    });
+   267→   267→  };
+   268→   268→
+   269→   269→  const formatDate = (d: string) => new Date(d).toLocaleDateString('es-SV');
+   270→   270→  const formatMonto = (v: number | null) => v ? `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+   271→   271→  const getNombreEmp = (inc: Incidencia) =>
+   272→   272→    `${inc.empleado.primer_nombre} ${inc.empleado.primer_apellido}`;
+   273→   273→
+   274→   274→  const canCreate = userRole === 'ADMIN' || userRole === 'ANALISTA';
+   275→   275→  const canApprove = userRole === 'ADMIN' || userRole === 'APROBADOR';
+   276→   276→
+   277→   277→  const filteredEmpleados = searchEmpleado
+   278→   278→    ? empleados.filter(e => `${e.primer_nombre} ${e.primer_apellido} ${e.codigo_empleado}`.toLowerCase().includes(searchEmpleado.toLowerCase()))
+   279→   279→    : empleados;
+   280→   280→
+   281→   281→  const selectedEmpleadoName = form.empleado_id
+   282→   282→    ? (() => {
+   283→   283→        const emp = empleados.find(e => e.id === form.empleado_id);
+   284→   284→        return emp ? `${emp.primer_nombre} ${emp.primer_apellido}` : '';
+   285→   285→      })()
+   286→   286→    : '';
+   287→   287→
+   288→   288→  return (
+   289→   289→    <div className="space-y-4">
+   290→   290→      {/* Header */}
+   291→   291→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   292→   292→        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+   293→   293→          <AlertCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> Incidencias de Nómina
+   294→   294→        </h2>
+   295→   295→        {canCreate && (
+   296→   296→          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800" onClick={() => { setDialogOpen(true); setPreviewMode(false); }}>
+   297→   297→            <Plus className="h-4 w-4 mr-1" /> Nueva Incidencia
+   298→   298→          </Button>
+   299→   299→        )}
+   300→   300→      </div>
+   301→   301→
+   302→   302→      {/* Summary Cards */}
+   303→   303→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   304→   304→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   305→   305→          <CardContent className="p-4 flex items-center gap-3">
+   306→   306→            <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800">
+   307→   307→              <AlertCircle className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+   308→   308→            </div>
+   309→   309→            <div>
+   310→   310→              <p className="text-xs text-slate-500 dark:text-slate-400">Total Incidencias</p>
+   311→   311→              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{summary.total}</p>
+   312→   312→            </div>
+   313→   313→          </CardContent>
+   314→   314→        </Card>
+   315→   315→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800 border-l-4 border-l-amber-500">
+   316→   316→          <CardContent className="p-4 flex items-center gap-3">
+   317→   317→            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/30">
+   318→   318→              <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+   319→   319→            </div>
+   320→   320→            <div>
+   321→   321→              <p className="text-xs text-slate-500 dark:text-slate-400">Pendientes</p>
+   322→   322→              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{summary.pendientes}</p>
+   323→   323→            </div>
+   324→   324→          </CardContent>
+   325→   325→        </Card>
+   326→   326→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800 border-l-4 border-l-emerald-500">
+   327→   327→          <CardContent className="p-4 flex items-center gap-3">
+   328→   328→            <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/30">
+   329→   329→              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   330→   330→            </div>
+   331→   331→            <div>
+   332→   332→              <p className="text-xs text-slate-500 dark:text-slate-400">Aprobadas</p>
+   333→   333→              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{summary.aprobadas}</p>
+   334→   334→            </div>
+   335→   335→          </CardContent>
+   336→   336→        </Card>
+   337→   337→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800 border-l-4 border-l-red-500">
+   338→   338→          <CardContent className="p-4 flex items-center gap-3">
+   339→   339→            <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-900/30">
+   340→   340→              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+   341→   341→            </div>
+   342→   342→            <div>
+   343→   343→              <p className="text-xs text-slate-500 dark:text-slate-400">Rechazadas</p>
+   344→   344→              <p className="text-2xl font-bold text-red-600 dark:text-red-400">{summary.rechazadas}</p>
+   345→   345→            </div>
+   346→   346→          </CardContent>
+   347→   347→        </Card>
+   348→   348→      </div>
+   349→   349→
+   350→   350→      {/* Filters */}
+   351→   351→      <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   352→   352→        <CardContent className="p-4">
+   353→   353→          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+   354→   354→            <Select value={tipoFilter} onValueChange={v => { setTipoFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+   355→   355→              <SelectTrigger className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Tipo" /></SelectTrigger>
+   356→   356→              <SelectContent>
+   357→   357→                <SelectItem value="all">Todos los tipos</SelectItem>
+   358→   358→                {Object.entries(TIPO_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+   359→   359→              </SelectContent>
+   360→   360→            </Select>
+   361→   361→            <Select value={estadoFilter} onValueChange={v => { setEstadoFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+   362→   362→              <SelectTrigger className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Estado" /></SelectTrigger>
+   363→   363→              <SelectContent>
+   364→   364→                <SelectItem value="all">Todos los estados</SelectItem>
+   365→   365→                <SelectItem value="PENDIENTE">Pendiente</SelectItem>
+   366→   366→                <SelectItem value="APROBADA">Aprobada</SelectItem>
+   367→   367→                <SelectItem value="RECHAZADA">Rechazada</SelectItem>
+   368→   368→              </SelectContent>
+   369→   369→            </Select>
+   370→   370→          </div>
+   371→   371→        </CardContent>
+   372→   372→      </Card>
+   373→   373→
+   374→   374→      {/* Incidence Cards Grid */}
+   375→   375→      {loading ? (
+   376→   376→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   377→   377→          {Array.from({ length: 6 }).map((_, i) => (
+   378→   378→            <Card key={i} className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   379→   379→              <CardContent className="p-4 space-y-3">
+   380→   380→                <Skeleton className="h-5 w-3/4 dark:bg-slate-700" />
+   381→   381→                <Skeleton className="h-4 w-1/2 dark:bg-slate-700" />
+   382→   382→                <Skeleton className="h-4 w-2/3 dark:bg-slate-700" />
+   383→   383→              </CardContent>
+   384→   384→            </Card>
+   385→   385→          ))}
+   386→   386→        </div>
+   387→   387→      ) : incidencias.length === 0 ? (
+   388→   388→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   389→   389→          <CardContent className="p-12 text-center">
+   390→   390→            <AlertCircle className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+   391→   391→            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300">No se encontraron incidencias</h3>
+   392→   392→            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Intente ajustar los filtros</p>
+   393→   393→          </CardContent>
+   394→   394→        </Card>
+   395→   395→      ) : (
+   396→   396→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   397→   397→          {incidencias.map(inc => {
+   398→   398→            const tipoStyle = TIPO_COLORS[inc.tipo] || TIPO_COLORS.AUSENCIA;
+   399→   399→            const TipoIcon = TIPO_ICONS[inc.tipo] || AlertCircle;
+   400→   400→            return (
+   401→   401→              <Card
+   402→   402→                key={inc.id}
+   403→   403→                className={`shadow-sm hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 dark:bg-slate-900 dark:hover:border-slate-700 border-l-4 ${tipoStyle.border} ${tipoStyle.bg}`}
+   404→   404→              >
+   405→   405→                <CardContent className="p-4">
+   406→   406→                  {/* Type icon + Status */}
+   407→   407→                  <div className="flex items-start justify-between mb-3">
+   408→   408→                    <div className={`p-2 rounded-lg ${tipoStyle.bg} border ${tipoStyle.border}`}>
+   409→   409→                      <TipoIcon className={`h-5 w-5 ${tipoStyle.icon}`} />
+   410→   410→                    </div>
+   411→   411→                    <div className="flex items-center gap-1.5">
+   412→   412→                      <span className={`w-2 h-2 rounded-full ${ESTADO_DOT[inc.estado] || 'bg-slate-400'}`} />
+   413→   413→                      <Badge className={`${ESTADO_COLORS[inc.estado] || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'} text-[11px] px-2 py-0.5`}>
+   414→   414→                        {inc.estado}
+   415→   415→                      </Badge>
+   416→   416→                    </div>
+   417→   417→                  </div>
+   418→   418→
+   419→   419→                  {/* Type label */}
+   420→   420→                  <p className={`text-xs font-medium ${tipoStyle.icon} mb-2`}>
+   421→   421→                    {TIPO_LABELS[inc.tipo] || inc.tipo}
+   422→   422→                  </p>
+   423→   423→
+   424→   424→                  {/* Employee info with avatar */}
+   425→   425→                  <div className="flex items-center gap-2.5 mb-3">
+   426→   426→                    <AvatarInitials nombre={inc.empleado.primer_nombre} apellido={inc.empleado.primer_apellido} />
+   427→   427→                    <div className="min-w-0">
+   428→   428→                      <p className="text-sm font-medium truncate dark:text-slate-100">{getNombreEmp(inc)}</p>
+   429→   429→                      <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{inc.empleado.codigo_empleado}</p>
+   430→   430→                    </div>
+   431→   431→                  </div>
+   432→   432→
+   433→   433→                  {/* Date range */}
+   434→   434→                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2">
+   435→   435→                    <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+   436→   436→                    <span>{formatDate(inc.fecha_inicio)}</span>
+   437→   437→                    {inc.fecha_fin && (
+   438→   438→                      <>
+   439→   439→                        <span>→</span>
+   440→   440→                        <span>{formatDate(inc.fecha_fin)}</span>
+   441→   441→                      </>
+   442→   442→                    )}
+   443→   443→                  </div>
+   444→   444→
+   445→   445→                  {/* Amount / Hours in prominent display */}
+   446→   446→                  <div className="bg-white dark:bg-slate-800 rounded-lg p-3 mb-3 border border-slate-100 dark:border-slate-700">
+   447→   447→                    {inc.cantidad_horas ? (
+   448→   448→                      <div className="flex items-center justify-between">
+   449→   449→                        <span className="text-xs text-slate-500 dark:text-slate-400">Horas Extra</span>
+   450→   450→                        <span className="text-xl font-bold text-sky-600 dark:text-sky-400">{inc.cantidad_horas}h</span>
+   451→   451→                      </div>
+   452→   452→                    ) : inc.monto ? (
+   453→   453→                      <div className="flex items-center justify-between">
+   454→   454→                        <span className="text-xs text-slate-500 dark:text-slate-400">Monto</span>
+   455→   455→                        <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{formatMonto(inc.monto)}</span>
+   456→   456→                      </div>
+   457→   457→                    ) : (
+   458→   458→                      <div className="flex items-center justify-between">
+   459→   459→                        <span className="text-xs text-slate-500 dark:text-slate-400">Sin monto/horas</span>
+   460→   460→                        <span className="text-sm text-slate-400 dark:text-slate-500">—</span>
+   461→   461→                      </div>
+   462→   462→                    )}
+   463→   463→                    {inc.tipo_horas_extra && (
+   464→   464→                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Tipo: {inc.tipo_horas_extra}</p>
+   465→   465→                    )}
+   466→   466→                    {inc.numero_incapacidad && (
+   467→   467→                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Incapacidad #: {inc.numero_incapacidad}</p>
+   468→   468→                    )}
+   469→   469→                  </div>
+   470→   470→
+   471→   471→                  {/* Description snippet */}
+   472→   472→                  {inc.descripcion && (
+   473→   473→                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 line-clamp-2">{inc.descripcion}</p>
+   474→   474→                  )}
+   475→   475→
+   476→   476→                  {/* Action buttons */}
+   477→   477→                  {canApprove && inc.estado === 'PENDIENTE' && (
+   478→   478→                    <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+   479→   479→                      <Button
+   480→   480→                        variant="outline"
+   481→   481→                        size="sm"
+   482→   482→                        className="flex-1 h-8 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/20"
+   483→   483→                        onClick={() => handleApproveReject(inc.id, 'APROBADA')}
+   484→   484→                      >
+   485→   485→                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Aprobar
+   486→   486→                      </Button>
+   487→   487→                      <Button
+   488→   488→                        variant="outline"
+   489→   489→                        size="sm"
+   490→   490→                        className="flex-1 h-8 text-xs text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
+   491→   491→                        onClick={() => handleApproveReject(inc.id, 'RECHAZADA')}
+   492→   492→                      >
+   493→   493→                        <XCircle className="h-3.5 w-3.5 mr-1" /> Rechazar
+   494→   494→                      </Button>
+   495→   495→                    </div>
+   496→   496→                  )}
+   497→   497→
+   498→   498→                  {/* Approved by info */}
+   499→   499→                  {inc.aprobada_por && (
+   500→   500→                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2">
+   501→   501→                      Por: {inc.aprobada_por.nombre} {inc.aprobada_por.apellido}
+   502→   502→                    </p>
+   503→   503→                  )}
+   504→   504→                </CardContent>
+   505→   505→              </Card>
+   506→   506→            );
+   507→   507→          })}
+   508→   508→        </div>
+   509→   509→      )}
+   510→   510→
+   511→   511→      {/* Pagination */}
+   512→   512→      {pagination.totalPages > 1 && (
+   513→   513→        <div className="flex items-center justify-center gap-2">
+   514→   514→          <Button
+   515→   515→            variant="outline"
+   516→   516→            size="sm"
+   517→   517→            disabled={pagination.page <= 1}
+   518→   518→            onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
+   519→   519→            className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+   520→   520→          >
+   521→   521→            Anterior
+   522→   522→          </Button>
+   523→   523→          <span className="text-sm text-slate-500 dark:text-slate-400">
+   524→   524→            Página {pagination.page} de {pagination.totalPages}
+   525→   525→          </span>
+   526→   526→          <Button
+   527→   527→            variant="outline"
+   528→   528→            size="sm"
+   529→   529→            disabled={pagination.page >= pagination.totalPages}
+   530→   530→            onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+   531→   531→            className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+   532→   532→          >
+   533→   533→            Siguiente
+   534→   534→          </Button>
+   535→   535→        </div>
+   536→   536→      )}
+   537→   537→
+   538→   538→      {/* New Incidence Dialog */}
+   539→   539→      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setPreviewMode(false); } }}>
+   540→   540→        <DialogContent className="sm:max-w-lg dark:bg-slate-900 dark:border-slate-800">
+   541→   541→          <DialogHeader>
+   542→   542→            <DialogTitle className="dark:text-slate-100">Nueva Incidencia</DialogTitle>
+   543→   543→            <DialogDescription className="dark:text-slate-400">Registrar una incidencia de nómina</DialogDescription>
+   544→   544→          </DialogHeader>
+   545→   545→
+   546→   546→          {!previewMode ? (
+   547→   547→            <div className="space-y-4">
+   548→   548→              {/* Employee search */}
+   549→   549→              <div>
+   550→   550→                <Label className="dark:text-slate-300">Empleado *</Label>
+   551→   551→                <div className="space-y-2 mt-1">
+   552→   552→                  <div className="relative">
+   553→   553→                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+   554→   554→                    <Input
+   555→   555→                      placeholder="Buscar empleado..."
+   556→   556→                      value={searchEmpleado}
+   557→   557→                      onChange={e => setSearchEmpleado(e.target.value)}
+   558→   558→                      className="h-9 pl-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+   559→   559→                    />
+   560→   560→                  </div>
+   561→   561→                  <Select value={form.empleado_id} onValueChange={v => setForm(p => ({ ...p, empleado_id: v }))}>
+   562→   562→                    <SelectTrigger className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Seleccionar empleado" /></SelectTrigger>
+   563→   563→                    <SelectContent>
+   564→   564→                      {filteredEmpleados.slice(0, 20).map(e => (
+   565→   565→                        <SelectItem key={e.id} value={e.id}>
+   566→   566→                          {e.primer_nombre} {e.primer_apellido} ({e.codigo_empleado})
+   567→   567→                        </SelectItem>
+   568→   568→                      ))}
+   569→   569→                    </SelectContent>
+   570→   570→                  </Select>
+   571→   571→                </div>
+   572→   572→              </div>
+   573→   573→
+   574→   574→              {/* Type selector with visual icons */}
+   575→   575→              <div>
+   576→   576→                <Label className="dark:text-slate-300 mb-2 block">Tipo de Incidencia *</Label>
+   577→   577→                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+   578→   578→                  {Object.entries(TIPO_LABELS).map(([key, label]) => {
+   579→   579→                    const tipoStyle = TIPO_COLORS[key];
+   580→   580→                    const TipoIcon = TIPO_ICONS[key] || AlertCircle;
+   581→   581→                    const isSelected = form.tipo === key;
+   582→   582→                    return (
+   583→   583→                      <button
+   584→   584→                        key={key}
+   585→   585→                        type="button"
+   586→   586→                        onClick={() => setForm(p => ({ ...p, tipo: key }))}
+   587→   587→                        className={`flex flex-col items-center gap-1.5 p-2.5 rounded-lg border text-xs transition-all ${
+   588→   588→                          isSelected
+   589→   589→                            ? `${tipoStyle.bg} ${tipoStyle.border} ${tipoStyle.icon} ring-2 ring-offset-1 dark:ring-offset-slate-900`
+   590→   590→                            : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+   591→   591→                        }`}
+   592→   592→                      >
+   593→   593→                        <TipoIcon className="h-5 w-5" />
+   594→   594→                        <span className="text-[10px] leading-tight text-center">{label}</span>
+   595→   595→                      </button>
+   596→   596→                    );
+   597→   597→                  })}
+   598→   598→                </div>
+   599→   599→              </div>
+   600→   600→
+   601→   601→              {/* Date range */}
+   602→   602→              <div className="grid grid-cols-2 gap-3">
+   603→   603→                <div>
+   604→   604→                  <Label className="dark:text-slate-300">Fecha Inicio *</Label>
+   605→   605→                  <Input type="date" value={form.fecha_inicio} onChange={e => setForm(p => ({ ...p, fecha_inicio: e.target.value }))} className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   606→   606→                </div>
+   607→   607→                <div>
+   608→   608→                  <Label className="dark:text-slate-300">Fecha Fin</Label>
+   609→   609→                  <Input type="date" value={form.fecha_fin} onChange={e => setForm(p => ({ ...p, fecha_fin: e.target.value }))} className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   610→   610→                </div>
+   611→   611→              </div>
+   612→   612→
+   613→   613→              {/* Conditional: HORAS_EXTRA */}
+   614→   614→              {form.tipo === 'HORAS_EXTRA' && (
+   615→   615→                <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800">
+   616→   616→                  <div>
+   617→   617→                    <Label className="text-sky-700 dark:text-sky-300">Cantidad de Horas *</Label>
+   618→   618→                    <Input type="number" step="0.5" value={form.cantidad_horas} onChange={e => setForm(p => ({ ...p, cantidad_horas: e.target.value }))} className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   619→   619→                    <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">Máximo 10h/semana (Art. 169 CT)</p>
+   620→   620→                  </div>
+   621→   621→                  <div>
+   622→   622→                    <Label className="text-sky-700 dark:text-sky-300">Tipo de Horas Extra</Label>
+   623→   623→                    <Select value={form.tipo_horas_extra} onValueChange={v => setForm(p => ({ ...p, tipo_horas_extra: v }))}>
+   624→   624→                      <SelectTrigger className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue /></SelectTrigger>
+   625→   625→                      <SelectContent>
+   626→   626→                        <SelectItem value="DIURNA">Diurna</SelectItem>
+   627→   627→                        <SelectItem value="NOCTURNA">Nocturna</SelectItem>
+   628→   628→                        <SelectItem value="DESCANSO">Día de Descanso</SelectItem>
+   629→   629→                        <SelectItem value="ASUETO">Asueto</SelectItem>
+   630→   630→                      </SelectContent>
+   631→   631→                    </Select>
+   632→   632→                  </div>
+   633→   633→                </div>
+   634→   634→              )}
+   635→   635→
+   636→   636→              {/* Conditional: INCAPACIDAD_ISSS */}
+   637→   637→              {form.tipo === 'INCAPACIDAD_ISSS' && (
+   638→   638→                <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
+   639→   639→                  <Label className="text-rose-700 dark:text-rose-300">Número de Incapacidad *</Label>
+   640→   640→                  <Input value={form.numero_incapacidad} onChange={e => setForm(p => ({ ...p, numero_incapacidad: e.target.value }))} className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   641→   641→                </div>
+   642→   642→              )}
+   643→   643→
+   644→   644→              {/* Conditional: COMISION/BONO/DESCUENTO_ESPECIAL */}
+   645→   645→              {['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && (
+   646→   646→                <div className={`p-3 rounded-lg border ${
+   647→   647→                  form.tipo === 'BONO'
+   648→   648→                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+   649→   649→                    : form.tipo === 'COMISION'
+   650→   650→                    ? 'bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-800'
+   651→   651→                    : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+   652→   652→                }`}>
+   653→   653→                  <Label className={`${
+   654→   654→                    form.tipo === 'BONO'
+   655→   655→                      ? 'text-emerald-700 dark:text-emerald-300'
+   656→   656→                      : form.tipo === 'COMISION'
+   657→   657→                      ? 'text-violet-700 dark:text-violet-300'
+   658→   658→                      : 'text-red-700 dark:text-red-300'
+   659→   659→                  }`}>Monto (USD) *</Label>
+   660→   660→                  <Input type="number" step="0.01" value={form.monto} onChange={e => setForm(p => ({ ...p, monto: e.target.value }))} className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   661→   661→                </div>
+   662→   662→              )}
+   663→   663→
+   664→   664→              <div>
+   665→   665→                <Label className="dark:text-slate-300">Descripción</Label>
+   666→   666→                <Input value={form.descripcion} onChange={e => setForm(p => ({ ...p, descripcion: e.target.value }))} className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   667→   667→              </div>
+   668→   668→
+   669→   669→              <div className="flex justify-end gap-2 pt-2">
+   670→   670→                <Button variant="outline" onClick={() => setDialogOpen(false)} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">Cancelar</Button>
+   671→   671→                <Button
+   672→   672→                  variant="outline"
+   673→   673→                  onClick={() => setPreviewMode(true)}
+   674→   674→                  className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+   675→   675→                >
+   676→   676→                  <Eye className="h-4 w-4 mr-1" /> Vista Previa
+   677→   677→                </Button>
+   678→   678→                <Button className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800" onClick={handleCreate} disabled={saving}>
+   679→   679→                  {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Crear Incidencia
+   680→   680→                </Button>
+   681→   681→              </div>
+   682→   682→            </div>
+   683→   683→          ) : (
+   684→   684→            /* Preview Mode */
+   685→   685→            <div className="space-y-4">
+   686→   686→              <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+   687→   687→                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 font-medium">VISTA PREVIA DE INCIDENCIA</p>
+   688→   688→                <div className="space-y-3">
+   689→   689→                  <div className="flex items-center gap-2">
+   690→   690→                    <AvatarInitials
+   691→   691→                      nombre={selectedEmpleadoName ? selectedEmpleadoName.split(' ')[0] : '?'}
+   692→   692→                      apellido={selectedEmpleadoName ? selectedEmpleadoName.split(' ').slice(1).join(' ') || selectedEmpleadoName[0] : '?'}
+   693→   693→                    />
+   694→   694→                    <div>
+   695→   695→                      <p className="font-medium dark:text-slate-100">{selectedEmpleadoName || 'Sin empleado'}</p>
+   696→   696→                      <p className="text-xs text-slate-500 dark:text-slate-400">{TIPO_LABELS[form.tipo]}</p>
+   697→   697→                    </div>
+   698→   698→                  </div>
+   699→   699→                  <div className="grid grid-cols-2 gap-2 text-sm">
+   700→   700→                    <div>
+   701→   701→                      <p className="text-xs text-slate-500 dark:text-slate-400">Fecha Inicio</p>
+   702→   702→                      <p className="dark:text-slate-200">{form.fecha_inicio ? formatDate(form.fecha_inicio) : '—'}</p>
+   703→   703→                    </div>
+   704→   704→                    <div>
+   705→   705→                      <p className="text-xs text-slate-500 dark:text-slate-400">Fecha Fin</p>
+   706→   706→                      <p className="dark:text-slate-200">{form.fecha_fin ? formatDate(form.fecha_fin) : '—'}</p>
+   707→   707→                    </div>
+   708→   708→                    {form.tipo === 'HORAS_EXTRA' && form.cantidad_horas && (
+   709→   709→                      <div>
+   710→   710→                        <p className="text-xs text-slate-500 dark:text-slate-400">Horas</p>
+   711→   711→                        <p className="font-bold text-sky-600 dark:text-sky-400">{form.cantidad_horas}h ({form.tipo_horas_extra})</p>
+   712→   712→                      </div>
+   713→   713→                    )}
+   714→   714→                    {['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && form.monto && (
+   715→   715→                      <div>
+   716→   716→                        <p className="text-xs text-slate-500 dark:text-slate-400">Monto</p>
+   717→   717→                        <p className="font-bold text-emerald-600 dark:text-emerald-400">${parseFloat(form.monto).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+   718→   718→                      </div>
+   719→   719→                    )}
+   720→   720→                    {form.tipo === 'INCAPACIDAD_ISSS' && form.numero_incapacidad && (
+   721→   721→                      <div>
+   722→   722→                        <p className="text-xs text-slate-500 dark:text-slate-400">Incapacidad #</p>
+   723→   723→                        <p className="dark:text-slate-200">{form.numero_incapacidad}</p>
+   724→   724→                      </div>
+   725→   725→                    )}
+   726→   726→                  </div>
+   727→   727→                  {form.descripcion && (
+   728→   728→                    <div>
+   729→   729→                      <p className="text-xs text-slate-500 dark:text-slate-400">Descripción</p>
+   730→   730→                      <p className="text-sm dark:text-slate-300">{form.descripcion}</p>
+   731→   731→                    </div>
+   732→   732→                  )}
+   733→   733→                </div>
+   734→   734→              </div>
+   735→   735→              <div className="flex justify-end gap-2">
+   736→   736→                <Button variant="outline" onClick={() => setPreviewMode(false)} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">
+   737→   737→                  ← Editar
+   738→   738→                </Button>
+   739→   739→                <Button className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800" onClick={handleCreate} disabled={saving}>
+   740→   740→                  {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null} Confirmar Incidencia
+   741→   741→                </Button>
+   742→   742→              </div>
+   743→   743→            </div>
+   744→   744→          )}
+   745→   745→        </DialogContent>
+   746→   746→      </Dialog>
+   747→   747→    </div>
+   748→   748→  );
+   749→   749→}
+   750→   750→

@@ -1,0 +1,647 @@
+  1350→        </div>
+  1351→        </div>
+  1352→      </div>
+  1353→
+  1354→      {/* System Status / Stats Row */}
+  1355→      <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/80">
+  1356→        <CardContent className="p-4">
+  1357→          <div className="grid grid-cols-3 gap-3 sm:gap-6">
+  1358→            <div className="flex items-center gap-3">
+  1359→              <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 shrink-0">
+  1360→                <CalendarDays className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+  1361→              </div>
+  1362→              <div className="min-w-0">
+  1363→                {statsLoading ? (
+  1364→                  <div className="h-5 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+  1365→                ) : (
+  1366→                  <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">{planillasCount}</p>
+  1367→                )}
+  1368→                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">Planillas este mes</p>
+  1369→              </div>
+  1370→            </div>
+  1371→            <div className="flex items-center gap-3">
+  1372→              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40 shrink-0">
+  1373→                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+  1374→              </div>
+  1375→              <div className="min-w-0">
+  1376→                {statsLoading ? (
+  1377→                  <div className="h-5 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+  1378→                ) : (
+  1379→                  <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">{incidenciasCount}</p>
+  1380→                )}
+  1381→                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">Incidencias pendientes</p>
+  1382→              </div>
+  1383→            </div>
+  1384→            <div className="flex items-center gap-3">
+  1385→              <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-900/40 shrink-0">
+  1386→                <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+  1387→              </div>
+  1388→              <div className="min-w-0">
+  1389→                {statsLoading ? (
+  1390→                  <div className="h-5 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+  1391→                ) : (
+  1392→                  <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">{usuariosActivos}</p>
+  1393→                )}
+  1394→                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">Usuarios activos</p>
+  1395→              </div>
+  1396→            </div>
+  1397→          </div>
+  1398→        </CardContent>
+  1399→      </Card>
+  1400→
+  1401→      {/* Enhanced KPI Cards */}
+  1402→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+  1403→        {loading ? (
+  1404→          Array.from({ length: 4 }).map((_, i) => (
+  1405→            <Card key={i} className="shadow-sm">
+  1406→              <CardContent className="p-4 sm:p-5">
+  1407→                <div className="animate-pulse">
+  1408→                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24 mb-2" />
+  1409→                  <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-16" />
+  1410→                </div>
+  1411→              </CardContent>
+  1412→            </Card>
+  1413→          ))
+  1414→        ) : (
+  1415→          kpis.map(kpi => (
+  1416→            <Card key={kpi.label} className={`shadow-sm card-hover-lift bg-gradient-to-br ${kpi.gradient} border-slate-200/60 dark:border-slate-700/40`}>
+  1417→              <CardContent className="p-4 sm:p-5">
+  1418→                <div className="flex items-center justify-between">
+  1419→                  <div className="min-w-0 flex-1">
+  1420→                    <div className="flex items-center gap-1.5">
+  1421→                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{kpi.label}</p>
+  1422→                      <SparklineDots trend={kpi.trend} color={kpi.sparkColor} />
+  1423→                    </div>
+  1424→                    <p className="text-xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1 truncate">{kpi.value}</p>
+  1425→                    <div className="flex items-center gap-1 mt-1.5">
+  1426→                      {kpi.trend === 'up' ? (
+  1427→                        <TrendingUp className="h-3 w-3 text-emerald-500" />
+  1428→                      ) : kpi.trend === 'down' ? (
+  1429→                        <TrendingDown className="h-3 w-3 text-red-500" />
+  1430→                      ) : null}
+  1431→                      <span className={`text-[10px] sm:text-xs font-medium ${kpi.trend === 'up' ? 'text-emerald-600 dark:text-emerald-400' : kpi.trend === 'down' ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
+  1432→                        {kpi.change}
+  1433→                      </span>
+  1434→                      <span className="text-[10px] text-slate-400 dark:text-slate-500 hidden sm:inline">{kpi.changeLabel}</span>
+  1435→                    </div>
+  1436→                  </div>
+  1437→                  <div className={`p-2 sm:p-3 rounded-xl ${kpi.bg} shrink-0`}>
+  1438→                    <kpi.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${kpi.color}`} />
+  1439→                  </div>
+  1440→                </div>
+  1441→              </CardContent>
+  1442→            </Card>
+  1443→          ))
+  1444→        )}
+  1445→      </div>
+  1446→
+  1447→      {/* Payroll Trend Chart + Area Distribution */}
+  1448→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1449→        {/* Mini Payroll Trend Chart */}
+  1450→        <Card className="shadow-sm">
+  1451→          <CardHeader className="pb-3">
+  1452→            <CardTitle className="text-base flex items-center gap-2">
+  1453→              <BarChart3 className="h-4 w-4 text-emerald-500" />
+  1454→              Tendencia de Nómina
+  1455→            </CardTitle>
+  1456→            <CardDescription className="text-xs">Totales mensuales (últimos 12 meses)</CardDescription>
+  1457→          </CardHeader>
+  1458→          <CardContent>
+  1459→            <div className="relative h-44 sm:h-52">
+  1460→              {/* Grid lines */}
+  1461→              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+  1462→                {[...Array(5)].map((_, i) => (
+  1463→                  <div key={i} className="border-b border-slate-100 dark:border-slate-800 relative">
+  1464→                    <span className="absolute -left-0 -top-2.5 text-[9px] text-slate-400 dark:text-slate-500">
+  1465→                      {i === 0 ? '' : `$${Math.round(maxValue - (i * maxValue / 4)).toLocaleString()}`}
+  1466→                    </span>
+  1467→                  </div>
+  1468→                ))}
+  1469→              </div>
+  1470→              {/* Bars */}
+  1471→              <div className="absolute inset-0 flex items-end gap-1 sm:gap-1.5 pl-10 sm:pl-12 pb-5 pt-1">
+  1472→                {PAYROLL_TREND_DATA.map((item, idx) => {
+  1473→                  const heightPct = (item.value / maxValue) * 100;
+  1474→                  return (
+  1475→                    <div key={item.month} className="flex-1 flex flex-col items-center justify-end h-full group">
+  1476→                      {/* Tooltip on hover */}
+  1477→                      <div className="opacity-0 group-hover:opacity-100 transition-opacity mb-1 text-[9px] font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow-sm border border-slate-100 dark:border-slate-700 whitespace-nowrap z-10">
+  1478→                        ${item.value.toLocaleString()}
+  1479→                      </div>
+  1480→                      <div
+  1481→                        className="w-full rounded-t-sm sm:rounded-t transition-all duration-200 group-hover:opacity-90"
+  1482→                        style={{
+  1483→                          height: `${heightPct}%`,
+  1484→                          background: `linear-gradient(to top, oklch(0.6 0.15 160), oklch(0.55 0.12 180))`,
+  1485→                          minHeight: '4px',
+  1486→                        }}
+  1487→                      />
+  1488→                      <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">{item.month}</span>
+  1489→                    </div>
+  1490→                  );
+  1491→                })}
+  1492→              </div>
+  1493→            </div>
+  1494→          </CardContent>
+  1495→        </Card>
+  1496→
+  1497→        {/* Area Distribution Visual */}
+  1498→        <Card className="shadow-sm">
+  1499→          <CardHeader className="pb-3">
+  1500→            <CardTitle className="text-base flex items-center gap-2">
+  1501→              <PieChart className="h-4 w-4 text-teal-500" />
+  1502→              Distribución por Área
+  1503→            </CardTitle>
+  1504→            <CardDescription className="text-xs">Empleados por departamento ({areaTotal} total)</CardDescription>
+  1505→          </CardHeader>
+  1506→          <CardContent className="space-y-4">
+  1507→            {/* Horizontal stacked bar */}
+  1508→            <div className="flex h-6 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+  1509→              {areaDistribution.map((area) => {
+  1510→                const pct = areaTotal > 0 ? (area.count / areaTotal) * 100 : 0;
+  1511→                return (
+  1512→                  <div
+  1513→                    key={area.name}
+  1514→                    className={`${area.color} transition-all duration-300 hover:opacity-80 relative group`}
+  1515→                    style={{ width: `${pct}%`, minWidth: pct > 0 ? '4px' : '0' }}
+  1516→                    title={`${area.name}: ${area.count} (${pct.toFixed(1)}%)`}
+  1517→                  >
+  1518→                    {pct > 12 && (
+  1519→                      <span className="absolute inset-0 flex items-center justify-center text-[8px] font-semibold text-white/90 truncate px-0.5">
+  1520→                        {pct.toFixed(0)}%
+  1521→                      </span>
+  1522→                    )}
+  1523→                  </div>
+  1524→                );
+  1525→              })}
+  1526→            </div>
+  1527→
+  1528→            {/* Legend with mini bars */}
+  1529→            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+  1530→              {areaDistribution.map((area) => {
+  1531→                const pct = areaTotal > 0 ? (area.count / areaTotal) * 100 : 0;
+  1532→                return (
+  1533→                  <div key={area.name} className="flex items-center gap-2">
+  1534→                    <div className={`w-2.5 h-2.5 rounded-sm ${area.color} shrink-0`} />
+  1535→                    <div className="flex-1 min-w-0">
+  1536→                      <div className="flex items-center justify-between">
+  1537→                        <span className="text-xs text-slate-600 dark:text-slate-300 truncate">{area.name}</span>
+  1538→                        <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 ml-1">{area.count}</span>
+  1539→                      </div>
+  1540→                      <div className="h-1 bg-slate-100 dark:bg-slate-800 rounded-full mt-0.5">
+  1541→                        <div
+  1542→                          className={`h-1 rounded-full ${area.color} opacity-60`}
+  1543→                          style={{ width: `${pct}%` }}
+  1544→                        />
+  1545→                      </div>
+  1546→                    </div>
+  1547→                  </div>
+  1548→                );
+  1549→              })}
+  1550→            </div>
+  1551→          </CardContent>
+  1552→        </Card>
+  1553→      </div>
+  1554→
+  1555→      {/* Announcements / Alerts Section */}
+  1556→      <Card className="shadow-sm">
+  1557→        <CardHeader className="pb-3">
+  1558→          <CardTitle className="text-base flex items-center gap-2">
+  1559→            <Megaphone className="h-4 w-4 text-amber-500" />
+  1560→            Avisos del Sistema
+  1561→          </CardTitle>
+  1562→        </CardHeader>
+  1563→        <CardContent>
+  1564→          <div className="space-y-2">
+  1565→            {MOCK_ANNOUNCEMENTS.map((announcement) => (
+  1566→              <div
+  1567→                key={announcement.id}
+  1568→                className={`flex items-start gap-3 p-3 rounded-lg border-l-4 ${getSeverityStyle(announcement.severity)}`}
+  1569→              >
+  1570→                <div className="shrink-0 mt-0.5">
+  1571→                  {getSeverityIcon(announcement.severity)}
+  1572→                </div>
+  1573→                <div className="flex-1 min-w-0">
+  1574→                  <div className="flex items-center gap-2 flex-wrap">
+  1575→                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{announcement.title}</p>
+  1576→                    {getSeverityBadge(announcement.severity)}
+  1577→                  </div>
+  1578→                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">{announcement.message}</p>
+  1579→                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+  1580→                    {new Date(announcement.date).toLocaleDateString('es-SV', { day: '2-digit', month: 'short', year: 'numeric' })}
+  1581→                  </p>
+  1582→                </div>
+  1583→              </div>
+  1584→            ))}
+  1585→          </div>
+  1586→        </CardContent>
+  1587→      </Card>
+  1588→
+  1589→      {/* Compliance Semaphore & Deadlines */}
+  1590→      {dashboardData && (
+  1591→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1592→          <Card className="shadow-sm">
+  1593→            <CardHeader className="pb-3">
+  1594→              <CardTitle className="text-base flex items-center gap-2">
+  1595→                <Shield className="h-4 w-4 text-slate-500" />
+  1596→                Semáforo de Cumplimiento
+  1597→                {/* Traffic light dots */}
+  1598→                <div className="flex items-center gap-1 ml-auto p-1 bg-slate-900 dark:bg-slate-700 rounded-full">
+  1599→                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'rojo' ? 'bg-red-500 shadow-sm shadow-red-500/50' : 'bg-red-900/40'}`} />
+  1600→                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
+  1601→                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
+  1602→                </div>
+  1603→              </CardTitle>
+  1604→            </CardHeader>
+  1605→            <CardContent className="space-y-2.5">
+  1606→              {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => (
+  1607→                <div key={c.nombre} className="flex items-center justify-between p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
+  1608→                  <div className="flex items-center gap-2">
+  1609→                    {c.presentado ? (
+  1610→                      <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+  1611→                    ) : (
+  1612→                      <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+  1613→                    )}
+  1614→                    <span className="text-sm text-slate-700 dark:text-slate-300">{c.nombre}</span>
+  1615→                  </div>
+  1616→                  <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+  1617→                    {c.presentado ? 'Presentado' : 'Pendiente'}
+  1618→                  </Badge>
+  1619→                </div>
+  1620→              ))}
+  1621→            </CardContent>
+  1622→          </Card>
+  1623→
+  1624→          <Card className="shadow-sm">
+  1625→            <CardHeader className="pb-3">
+  1626→              <CardTitle className="text-base flex items-center gap-2">
+  1627→                <CalendarDays className="h-4 w-4 text-slate-500" />
+  1628→                Próximos Vencimientos
+  1629→              </CardTitle>
+  1630→            </CardHeader>
+  1631→            <CardContent className="space-y-2.5">
+  1632→              {dashboardData.vencimientos?.length === 0 ? (
+  1633→                <div className="flex items-center justify-center py-6 text-emerald-600">
+  1634→                  <CheckCircle className="h-5 w-5 mr-2" />
+  1635→                  <span className="text-sm font-medium">Todos los pagos al día</span>
+  1636→                </div>
+  1637→              ) : (
+  1638→                dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => (
+  1639→                  <div key={v.nombre} className={`flex items-center justify-between p-2.5 rounded-lg border ${
+  1640→                    v.dias <= 5 ? 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20' : 'border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50'
+  1641→                  }`}>
+  1642→                    <div className="flex items-center gap-2">
+  1643→                      <div className={`w-2 h-2 rounded-full ${v.dias <= 5 ? 'bg-red-500' : v.dias <= 10 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+  1644→                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{v.nombre}</span>
+  1645→                    </div>
+  1646→                    <div className="text-right">
+  1647→                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{new Date(v.fecha).toLocaleDateString('es-SV')}</p>
+  1648→                      <p className={`text-xs ${v.dias <= 5 ? 'text-red-500 font-semibold' : 'text-slate-400 dark:text-slate-500'}`}>
+  1649→                        {v.dias > 0 ? `${v.dias} días` : 'Vencido'}
+  1650→                      </p>
+  1651→                    </div>
+  1652→                  </div>
+  1653→                ))
+  1654→              )}
+  1655→            </CardContent>
+  1656→          </Card>
+  1657→        </div>
+  1658→      )}
+  1659→
+  1660→      {/* Quick actions and recent activity */}
+  1661→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  1662→        <Card className="shadow-sm">
+  1663→          <CardHeader className="pb-3">
+  1664→            <CardTitle className="text-base flex items-center gap-2">
+  1665→              <ListChecks className="h-4 w-4 text-slate-500" />
+  1666→              Acciones Rápidas
+  1667→            </CardTitle>
+  1668→          </CardHeader>
+  1669→          <CardContent>
+  1670→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+  1671→              {visibleActions.map(action => (
+  1672→                <button
+  1673→                  key={action.viewId + action.label}
+  1674→                  onClick={() => onNavigate(action.viewId)}
+  1675→                  className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-all cursor-pointer text-left border border-transparent hover:border-slate-200 dark:hover:border-slate-600 group card-hover-lift"
+  1676→                >
+  1677→                  <div className={`p-2.5 rounded-lg ${action.bg} dark:opacity-80 group-hover:scale-110 transition-transform`}>
+  1678→                    <action.icon className={`h-5 w-5 ${action.color}`} />
+  1679→                  </div>
+  1680→                  <div className="min-w-0">
+  1681→                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{action.label}</p>
+  1682→                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{action.desc}</p>
+  1683→                  </div>
+  1684→                </button>
+  1685→              ))}
+  1686→            </div>
+  1687→          </CardContent>
+  1688→        </Card>
+  1689→
+  1690→        <Card className="shadow-sm">
+  1691→          <CardHeader className="pb-3">
+  1692→            <CardTitle className="text-base flex items-center gap-2">
+  1693→              <ScrollText className="h-4 w-4 text-slate-500" />
+  1694→              Actividad Reciente
+  1695→            </CardTitle>
+  1696→          </CardHeader>
+  1697→          <CardContent>
+  1698→            {auditEntries.length === 0 ? (
+  1699→              <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+  1700→                <ScrollText className="h-8 w-8 mb-2" />
+  1701→                <p className="text-sm">Sin actividad reciente</p>
+  1702→              </div>
+  1703→            ) : (
+  1704→              <div className="space-y-2 max-h-64 overflow-y-auto">
+  1705→                {auditEntries.map((entry) => (
+  1706→                  <div key={entry.id} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+  1707→                    <div className={`p-1.5 rounded-md shrink-0 mt-0.5 ${getAuditColor(entry.nivel_criticidad)}`}>
+  1708→                      {getAuditIcon(entry.accion)}
+  1709→                    </div>
+  1710→                    <div className="min-w-0 flex-1">
+  1711→                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
+  1712→                        {entry.accion.replace(/_/g, ' ')}
+  1713→                        {entry.tabla_afectada && (
+  1714→                          <span className="text-slate-400 dark:text-slate-500 font-normal"> · {entry.tabla_afectada}</span>
+  1715→                        )}
+  1716→                      </p>
+  1717→                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+  1718→                        {entry.usuario?.nombre ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : entry.usuario_email || 'Sistema'}
+  1719→                        <span className="mx-1">·</span>
+  1720→                        {new Date(entry.fecha_accion).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+  1721→                      </p>
+  1722→                    </div>
+  1723→                  </div>
+  1724→                ))}
+  1725→              </div>
+  1726→            )}
+  1727→          </CardContent>
+  1728→        </Card>
+  1729→      </div>
+  1730→    </div>
+  1731→  );
+  1732→}
+  1733→
+  1734→// ============================================================
+  1735→// PLACEHOLDER VIEW
+  1736→// ============================================================
+  1737→function PlaceholderView({ viewId }: { viewId: ViewId }) {
+  1738→  const label = VIEW_LABELS[viewId] || 'Vista';
+  1739→  return (
+  1740→    <Card className="shadow-sm">
+  1741→      <CardContent className="p-12 text-center">
+  1742→        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 mb-4">
+  1743→          <LayoutDashboard className="h-8 w-8 text-slate-400" />
+  1744→        </div>
+  1745→        <h2 className="text-xl font-semibold text-slate-900">{label}</h2>
+  1746→        <p className="text-slate-500 mt-2 max-w-md mx-auto">
+  1747→          Este módulo se encuentra en desarrollo. Pronto estará disponible con todas sus funcionalidades.
+  1748→        </p>
+  1749→        <Badge variant="secondary" className="mt-4">
+  1750→          Vista {viewId}
+  1751→        </Badge>
+  1752→      </CardContent>
+  1753→    </Card>
+  1754→  );
+  1755→}
+  1756→
+  1757→// ============================================================
+  1758→// MAIN APPLICATION LAYOUT
+  1759→// ============================================================
+  1760→interface AppLayoutProps {
+  1761→  user: UserData;
+  1762→  accessToken: string | null;
+  1763→  onLogout: () => void;
+  1764→}
+  1765→
+  1766→function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
+  1767→  const [currentView, setCurrentView] = useState<ViewId>('dashboard');
+  1768→  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  1769→  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  1770→
+  1771→  const renderView = () => {
+  1772→    if (currentView === 'dashboard') {
+  1773→      return <WelcomeDashboard user={user} accessToken={accessToken} onNavigate={setCurrentView} />;
+  1774→    }
+  1775→    switch (currentView) {
+  1776→      case '02-01':
+  1777→        return <EmployeeDirectory accessToken={accessToken} userRole={user.rol} onNavigateToDetail={(id) => { setSelectedEmployeeId(id); setCurrentView('02-02'); }} onNavigateToNew={() => setCurrentView('02-03')} />;
+  1778→      case '02-02':
+  1779→        return selectedEmployeeId ? <EmployeeDetail empleadoId={selectedEmployeeId} onBack={() => setCurrentView('02-01')} userRole={user.rol} accessToken={accessToken} /> : <PlaceholderView viewId={currentView} />;
+  1780→      case '02-03':
+  1781→        return <NewEmployeeForm accessToken={accessToken} userRole={user.rol} onBack={() => setCurrentView('02-01')} onSuccess={() => setCurrentView('02-01')} />;
+  1782→      case '02-04':
+  1783→        return <IncidenceManager accessToken={accessToken} userRole={user.rol} />;
+  1784→      case '01-03':
+  1785→        return <UserManagement accessToken={accessToken} />;
+  1786→      case '04-01':
+  1787→        return <PayrollDashboard accessToken={accessToken || ''} userRole={user.rol} />;
+  1788→      case '04-02':
+  1789→        return <PayrollPeriods accessToken={accessToken || ''} userRole={user.rol} />;
+  1790→      case '04-03':
+  1791→        return <PayrollCalculation accessToken={accessToken || ''} userRole={user.rol} />;
+  1792→      case '04-04':
+  1793→        return <PayrollApproval accessToken={accessToken || ''} userRole={user.rol} />;
+  1794→      case '04-05':
+  1795→        return <BankDispersion accessToken={accessToken || ''} userRole={user.rol} />;
+  1796→      case '04-06':
+  1797→        return <AguinaldoView accessToken={accessToken || ''} userRole={user.rol} />;
+  1798→      case '04-07':
+  1799→        return <LiquidationView accessToken={accessToken || ''} userRole={user.rol} />;
+  1800→      case '03-01':
+  1801→        return <ProfileCatalog accessToken={accessToken || ''} userRole={user.rol} />;
+  1802→      case '03-02':
+  1803→        return <ProfileDescriptiveForm accessToken={accessToken || ''} userRole={user.rol} />;
+  1804→      case '03-03':
+  1805→        return <SalaryBands accessToken={accessToken || ''} userRole={user.rol} />;
+  1806→      case '05-01':
+  1807→        return <IsssReport accessToken={accessToken || ''} userRole={user.rol} />;
+  1808→      case '05-02':
+  1809→        return <AfpReport accessToken={accessToken || ''} userRole={user.rol} />;
+  1810→      case '05-03':
+  1811→        return <IsrReport accessToken={accessToken || ''} userRole={user.rol} />;
+  1812→      case '05-04':
+  1813→        return <TalentReport accessToken={accessToken || ''} userRole={user.rol} />;
+  1814→      case '06-01':
+  1815→        return <LegalParameters accessToken={accessToken || ''} userRole={user.rol} />;
+  1816→      case '06-02':
+  1817→        return <OrgChart accessToken={accessToken || ''} userRole={user.rol} />;
+  1818→      case '06-03':
+  1819→        return <Integrations accessToken={accessToken || ''} userRole={user.rol} />;
+  1820→      case '06-04':
+  1821→        return <AuditLog accessToken={accessToken || ''} userRole={user.rol} />;
+  1822→      case '06-05':
+  1823→        return <SelfServicePortal accessToken={accessToken || ''} userRole={user.rol} />;
+  1824→      default:
+  1825→        return <PlaceholderView viewId={currentView} />;
+  1826→    }
+  1827→  };
+  1828→
+  1829→  return (
+  1830→    <div className="flex h-screen bg-gray-50 dark:bg-slate-950 overflow-hidden">
+  1831→      <Sidebar
+  1832→        user={user}
+  1833→        currentView={currentView}
+  1834→        onNavigate={setCurrentView}
+  1835→        collapsed={sidebarCollapsed}
+  1836→        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+  1837→      />
+  1838→
+  1839→      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+  1840→        <HeaderBar
+  1841→          user={user}
+  1842→          currentView={currentView}
+  1843→          accessToken={accessToken}
+  1844→          onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+  1845→          onLogout={onLogout}
+  1846→          onNavigate={setCurrentView}
+  1847→        />
+  1848→
+  1849→        <main className="flex-1 overflow-y-auto p-4 lg:p-6 dark:bg-slate-950" key={currentView}>
+  1850→          <div className="animate-fade-in">
+  1851→            {renderView()}
+  1852→          </div>
+  1853→        </main>
+  1854→      </div>
+  1855→    </div>
+  1856→  );
+  1857→}
+  1858→
+  1859→// ============================================================
+  1860→// AUTH PROVIDER
+  1861→// ============================================================
+  1862→function AuthProvider({ children }: { children: React.ReactNode }) {
+  1863→  const [user, setUser] = useState<UserData | null>(null);
+  1864→  const [accessToken, setAccessToken] = useState<string | null>(null);
+  1865→  const [isLoading, setIsLoading] = useState(true);
+  1866→
+  1867→  const refreshAccessToken = useCallback(async (): Promise<string | null> => {
+  1868→    try {
+  1869→      const res = await fetch('/api/auth/refresh', { method: 'POST' });
+  1870→      if (!res.ok) return null;
+  1871→      const data = await res.json();
+  1872→      setAccessToken(data.accessToken);
+  1873→      setUser(data.user);
+  1874→      return data.accessToken;
+  1875→    } catch {
+  1876→      return null;
+  1877→    }
+  1878→  }, []);
+  1879→
+  1880→  // Check for existing session on mount
+  1881→  useEffect(() => {
+  1882→    const init = async () => {
+  1883→      const token = await refreshAccessToken();
+  1884→      if (!token) {
+  1885→        setUser(null);
+  1886→        setAccessToken(null);
+  1887→      }
+  1888→      setIsLoading(false);
+  1889→    };
+  1890→    init();
+  1891→  }, [refreshAccessToken]);
+  1892→
+  1893→  // Auto refresh token before expiry
+  1894→  useEffect(() => {
+  1895→    if (!accessToken) return;
+  1896→    const interval = setInterval(async () => {
+  1897→      const newToken = await refreshAccessToken();
+  1898→      if (!newToken) {
+  1899→        setUser(null);
+  1900→        setAccessToken(null);
+  1901→      }
+  1902→    }, 55 * 60 * 1000); // Refresh every 55 minutes (token expires in 1h)
+  1903→    return () => clearInterval(interval);
+  1904→  }, [accessToken, refreshAccessToken]);
+  1905→
+  1906→  const login = useCallback(async (email: string, password: string) => {
+  1907→    const res = await fetch('/api/auth/login', {
+  1908→      method: 'POST',
+  1909→      headers: { 'Content-Type': 'application/json' },
+  1910→      body: JSON.stringify({ email, password }),
+  1911→    });
+  1912→    const data = await res.json();
+  1913→    if (!res.ok) throw new Error(data.error || 'Error al iniciar sesión');
+  1914→    setAccessToken(data.accessToken);
+  1915→    setUser(data.user);
+  1916→  }, []);
+  1917→
+  1918→  const logout = useCallback(async () => {
+  1919→    try {
+  1920→      await fetch('/api/auth/logout', { method: 'POST' });
+  1921→    } catch {
+  1922→      // ignore
+  1923→    }
+  1924→    setAccessToken(null);
+  1925→    setUser(null);
+  1926→  }, []);
+  1927→
+  1928→  return (
+  1929→    <AuthContext.Provider value={{ user, accessToken, login, logout, refreshAccessToken, isLoading }}>
+  1930→      {children}
+  1931→    </AuthContext.Provider>
+  1932→  );
+  1933→}
+  1934→
+  1935→// ============================================================
+  1936→// MAIN PAGE
+  1937→// ============================================================
+  1938→export default function HomePage() {
+  1939→  const [loginError, setLoginError] = useState<string | null>(null);
+  1940→  const [isLoginLoading, setIsLoginLoading] = useState(false);
+  1941→
+  1942→  return (
+  1943→    <AuthProvider>
+  1944→      <AuthGate
+  1945→        loginError={loginError}
+  1946→        setLoginError={setLoginError}
+  1947→        isLoginLoading={isLoginLoading}
+  1948→        setIsLoginLoading={setIsLoginLoading}
+  1949→      />
+  1950→    </AuthProvider>
+  1951→  );
+  1952→}
+  1953→
+  1954→function AuthGate({
+  1955→  loginError,
+  1956→  setLoginError,
+  1957→  isLoginLoading,
+  1958→  setIsLoginLoading,
+  1959→}: {
+  1960→  loginError: string | null;
+  1961→  setLoginError: React.Dispatch<React.SetStateAction<string | null>>;
+  1962→  isLoginLoading: boolean;
+  1963→  setIsLoginLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  1964→}) {
+  1965→  const { user, accessToken, login, logout, isLoading } = useAuth();
+  1966→
+  1967→  const handleLogin = async (email: string, password: string) => {
+  1968→    setLoginError(null);
+  1969→    setIsLoginLoading(true);
+  1970→    try {
+  1971→      await login(email, password);
+  1972→    } catch (err) {
+  1973→      setLoginError(err instanceof Error ? err.message : 'Error desconocido');
+  1974→    } finally {
+  1975→      setIsLoginLoading(false);
+  1976→    }
+  1977→  };
+  1978→
+  1979→  if (isLoading) {
+  1980→    return (
+  1981→      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+  1982→        <div className="text-center">
+  1983→          <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mx-auto" />
+  1984→          <p className="text-sm text-slate-500 mt-2">Cargando...</p>
+  1985→        </div>
+  1986→      </div>
+  1987→    );
+  1988→  }
+  1989→
+  1990→  if (!user) {
+  1991→    return <LoginScreen onLogin={handleLogin} isLoading={isLoginLoading} error={loginError} />;
+  1992→  }
+  1993→
+  1994→  return <AppLayout user={user} accessToken={accessToken} onLogout={logout} />;
+  1995→}
+  1996→

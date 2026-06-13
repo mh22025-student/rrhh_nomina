@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Search, Plus, Users, Loader2, ChevronLeft, ChevronRight,
   User, SearchX, FileDown, FileSpreadsheet, ChevronDown,
-  UserCheck, DollarSign, Building2, UserX
+  UserCheck, DollarSign, Building2, UserX, Eye, Pencil,
+  Calendar, X, Filter, UserPlus, TrendingUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,9 @@ import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip, TooltipTrigger, TooltipContent,
+} from '@/components/ui/tooltip';
 
 type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
 
@@ -54,25 +58,26 @@ interface Empleado {
   dui: string;
   estado: string;
   salario_base: number;
+  fecha_ingreso: string;
   area: Area | null;
   perfil_puesto: PerfilPuesto | null;
 }
 
-const AVATAR_COLORS = [
-  'bg-emerald-500',
-  'bg-teal-500',
-  'bg-sky-500',
-  'bg-violet-500',
-  'bg-amber-500',
-  'bg-rose-500',
+const AVATAR_GRADIENTS = [
+  'from-emerald-400 to-teal-500',
+  'from-teal-400 to-cyan-500',
+  'from-amber-400 to-orange-500',
+  'from-rose-400 to-pink-500',
+  'from-violet-400 to-purple-500',
+  'from-cyan-400 to-emerald-500',
 ];
 
-function getAvatarColor(name: string): string {
+function getAvatarGradient(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
 }
 
 function getInitials(emp: Empleado): string {
@@ -107,7 +112,10 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
       const data = await res.json();
       if (res.ok) {
         setEmployees(data.data);
-        setPagination(data.pagination);
+        setPagination(prev => ({
+          ...data.pagination,
+          pageSize: prev.pageSize,
+        }));
       }
     } catch (err) {
       console.error('Error fetching employees:', err);
@@ -147,11 +155,17 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
   const stats = useMemo(() => {
     const total = pagination.total;
     const activos = employees.filter(e => e.estado === 'ACTIVO').length;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nuevos = employees.filter(e => {
+      if (!e.fecha_ingreso) return false;
+      const fecha = new Date(e.fecha_ingreso);
+      return fecha >= startOfMonth;
+    }).length;
     const avgSalary = employees.length > 0
       ? employees.reduce((sum, e) => sum + e.salario_base, 0) / employees.length
       : 0;
-    const uniqueAreas = new Set(employees.map(e => e.area?.nombre).filter(Boolean)).size;
-    return { total, activos, avgSalary, uniqueAreas };
+    return { total, activos, nuevos, avgSalary };
   }, [employees, pagination.total]);
 
   const formatSalary = (amount: number) => `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -159,38 +173,23 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
   const getNombreCompleto = (emp: Empleado) =>
     `${emp.primer_nombre}${emp.segundo_nombre ? ' ' + emp.segundo_nombre : ''} ${emp.primer_apellido}${emp.segundo_apellido ? ' ' + emp.segundo_apellido : ''}`;
 
-  const exportCSV = () => {
-    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Salario', 'Estado'];
-    const rows = employees.map(emp => [
-      emp.codigo_empleado,
-      getNombreCompleto(emp),
-      emp.dui,
-      emp.area?.nombre || '',
-      emp.perfil_puesto?.nombre_puesto || '',
-      emp.salario_base.toString(),
-      emp.estado,
-    ]);
-    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `empleados_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('es-SV', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-  const exportExcel = () => {
-    // For now, export as CSV with Excel-friendly BOM
-    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Salario', 'Estado'];
+  const exportCSV = () => {
+    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Salario (USD)', 'Estado', 'Fecha de Ingreso'];
     const rows = employees.map(emp => [
       emp.codigo_empleado,
-      getNombreCompleto(emp),
+      `"${getNombreCompleto(emp)}"`,
       emp.dui,
       emp.area?.nombre || '',
       emp.perfil_puesto?.nombre_puesto || '',
-      emp.salario_base.toString(),
+      emp.salario_base.toFixed(2),
       emp.estado,
+      emp.fecha_ingreso ? new Date(emp.fecha_ingreso).toLocaleDateString('es-SV') : '',
     ]);
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
     const BOM = '\uFEFF';
@@ -198,7 +197,32 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `empleados_${new Date().toISOString().slice(0, 10)}.csv`;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.download = `directorio_empleados_${dateStr}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = () => {
+    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Salario (USD)', 'Estado', 'Fecha de Ingreso'];
+    const rows = employees.map(emp => [
+      emp.codigo_empleado,
+      `"${getNombreCompleto(emp)}"`,
+      emp.dui,
+      emp.area?.nombre || '',
+      emp.perfil_puesto?.nombre_puesto || '',
+      emp.salario_base.toFixed(2),
+      emp.estado,
+      emp.fecha_ingreso ? new Date(emp.fecha_ingreso).toLocaleDateString('es-SV') : '',
+    ]);
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.download = `directorio_empleados_${dateStr}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -211,7 +235,17 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
     setPagination(p => ({ ...p, page: 1 }));
   };
 
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (search) count++;
+    if (areaFilter !== 'all') count++;
+    if (estadoFilter !== 'all') count++;
+    if (perfilFilter !== 'all') count++;
+    return count;
+  }, [search, areaFilter, estadoFilter, perfilFilter]);
+
   const canCreate = userRole === 'ADMIN' || userRole === 'ANALISTA';
+  const canEdit = userRole === 'ADMIN' || userRole === 'ANALISTA';
 
   const getEstadoBadge = (estado: string) => {
     if (estado === 'ACTIVO') return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800';
@@ -222,23 +256,33 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
   // Salary range max for progress bar
   const SALARY_MAX = 5000;
 
+  // Compute pagination display
+  const pageStart = ((pagination.page - 1) * pagination.pageSize) + 1;
+  const pageEnd = Math.min(pagination.page * pagination.pageSize, pagination.total);
+
   // Empty state component
   const EmptyState = () => (
-    <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-500">
-      <div className="p-6 rounded-full bg-slate-50 dark:bg-slate-800 mb-5">
-        <SearchX className="h-14 w-14 text-slate-300 dark:text-slate-600" />
+    <div className="flex flex-col items-center justify-center py-16 text-slate-400 dark:text-slate-500">
+      <div className="relative mb-6">
+        <div className="p-5 rounded-full bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700">
+          <SearchX className="h-16 w-16 text-slate-300 dark:text-slate-500" />
+        </div>
+        <div className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-white dark:bg-slate-800 shadow-md">
+          <Filter className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+        </div>
       </div>
-      <p className="text-base font-semibold text-slate-600 dark:text-slate-300">No se encontraron empleados</p>
+      <p className="text-lg font-semibold text-slate-600 dark:text-slate-300">No se encontraron empleados</p>
       <p className="text-sm text-slate-400 dark:text-slate-500 mt-1.5 max-w-xs text-center">
         No hay resultados para los filtros actuales. Pruebe ajustando la búsqueda o los filtros.
       </p>
-      {(search || areaFilter !== 'all' || estadoFilter !== 'all' || perfilFilter !== 'all') && (
+      {activeFilterCount > 0 && (
         <Button
           variant="outline"
           size="sm"
-          className="mt-4 text-sm border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+          className="mt-5 text-sm border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/30 transition-all duration-200"
           onClick={clearFilters}
         >
+          <X className="h-3.5 w-3.5 mr-1.5" />
           Limpiar Filtros
         </Button>
       )}
@@ -247,53 +291,55 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-            Directorio de Empleados
-            <Badge variant="secondary" className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold ml-1">
-              {pagination.total}
-            </Badge>
-          </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            {pagination.total} empleado{pagination.total !== 1 ? 's' : ''} registrado{pagination.total !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Export Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={employees.length === 0}>
-                <FileDown className="h-4 w-4 mr-1.5" /> Exportar <ChevronDown className="h-3 w-3 ml-1" />
+      {/* Enhanced Header Banner */}
+      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 dark:from-emerald-800 dark:via-emerald-900 dark:to-teal-900 p-6 text-white">
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iZ3JpZCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNIDQwIDAgTCAwIDAgMCA0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDUpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-50" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-teal-400/20 to-transparent rounded-full -translate-y-1/2 translate-x-1/4" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-emerald-400/20 to-transparent rounded-full translate-y-1/2 -translate-x-1/4" />
+        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold flex items-center gap-3">
+              <Users className="h-7 w-7" />
+              Directorio de Empleados
+            </h2>
+            <p className="text-emerald-100/80 mt-1 text-sm">
+              {pagination.total} empleado{pagination.total !== 1 ? 's' : ''} registrado{pagination.total !== 1 ? 's' : ''} en el sistema
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Export Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="sm" disabled={employees.length === 0} className="bg-white/15 hover:bg-white/25 text-white border-white/20 backdrop-blur-sm">
+                  <FileDown className="h-4 w-4 mr-1.5" /> Exportar <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={exportCSV}>
+                  <FileDown className="h-4 w-4 mr-2 text-slate-500" />
+                  Exportar CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportExcel}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
+                  Exportar Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {canCreate && (
+              <Button size="sm" className="bg-white text-emerald-700 hover:bg-emerald-50 font-semibold shadow-lg shadow-emerald-900/20" onClick={onNavigateToNew}>
+                <Plus className="h-4 w-4 mr-1.5" /> Nuevo Empleado
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportCSV}>
-                <FileDown className="h-4 w-4 mr-2 text-slate-500" />
-                Exportar CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportExcel}>
-                <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
-                Exportar Excel
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {canCreate && (
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={onNavigateToNew}>
-              <Plus className="h-4 w-4 mr-1.5" /> Nuevo Empleado
-            </Button>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
       {/* Summary Stats Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="shadow-sm border-0 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-900/20 dark:to-emerald-800/10">
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20">
-              <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-emerald-50 to-emerald-100/60 dark:from-emerald-900/20 dark:to-emerald-800/10 hover:shadow-md transition-all duration-200">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 shadow-sm">
+              <Users className="h-5 w-5 text-white" />
             </div>
             <div>
               <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70 font-medium">Total Empleados</p>
@@ -301,10 +347,10 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
             </div>
           </CardContent>
         </Card>
-        <Card className="shadow-sm border-0 bg-gradient-to-br from-teal-50 to-teal-100/50 dark:from-teal-900/20 dark:to-teal-800/10">
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-teal-500/10 dark:bg-teal-500/20">
-              <UserCheck className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-teal-50 to-teal-100/60 dark:from-teal-900/20 dark:to-teal-800/10 hover:shadow-md transition-all duration-200">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-teal-400 to-teal-500 shadow-sm">
+              <UserCheck className="h-5 w-5 text-white" />
             </div>
             <div>
               <p className="text-xs text-teal-700/70 dark:text-teal-400/70 font-medium">Activos</p>
@@ -312,25 +358,25 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
             </div>
           </CardContent>
         </Card>
-        <Card className="shadow-sm border-0 bg-gradient-to-br from-sky-50 to-sky-100/50 dark:from-sky-900/20 dark:to-sky-800/10">
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-sky-500/10 dark:bg-sky-500/20">
-              <DollarSign className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-cyan-50 to-cyan-100/60 dark:from-cyan-900/20 dark:to-cyan-800/10 hover:shadow-md transition-all duration-200">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-400 to-cyan-500 shadow-sm">
+              <UserPlus className="h-5 w-5 text-white" />
             </div>
             <div>
-              <p className="text-xs text-sky-700/70 dark:text-sky-400/70 font-medium">Salario Promedio</p>
-              <p className="text-2xl font-bold text-sky-700 dark:text-sky-300 leading-tight">${stats.avgSalary.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
+              <p className="text-xs text-cyan-700/70 dark:text-cyan-400/70 font-medium">Nuevos este mes</p>
+              <p className="text-2xl font-bold text-cyan-700 dark:text-cyan-300 leading-tight">{stats.nuevos}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="shadow-sm border-0 bg-gradient-to-br from-violet-50 to-violet-100/50 dark:from-violet-900/20 dark:to-violet-800/10">
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-              <Building2 className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+        <Card className="shadow-sm border-0 bg-gradient-to-br from-amber-50 to-amber-100/60 dark:from-amber-900/20 dark:to-amber-800/10 hover:shadow-md transition-all duration-200">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 shadow-sm">
+              <TrendingUp className="h-5 w-5 text-white" />
             </div>
             <div>
-              <p className="text-xs text-violet-700/70 dark:text-violet-400/70 font-medium">Áreas</p>
-              <p className="text-2xl font-bold text-violet-700 dark:text-violet-300 leading-tight">{stats.uniqueAreas}</p>
+              <p className="text-xs text-amber-700/70 dark:text-amber-400/70 font-medium">Salario Promedio</p>
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-300 leading-tight">${stats.avgSalary.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
             </div>
           </CardContent>
         </Card>
@@ -339,38 +385,100 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
       {/* Search and Filters */}
       <Card className="shadow-sm">
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            <div className="sm:col-span-2 lg:col-span-1 xl:col-span-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                placeholder="Buscar por nombre, DUI, código..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
-                className="pl-9 h-9 border-slate-200 dark:border-slate-700 focus:border-emerald-400 focus:ring-emerald-400 bg-white dark:bg-slate-800"
-              />
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              <div className="sm:col-span-2 lg:col-span-1 xl:col-span-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Buscar por nombre, DUI, código..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                  className="pl-9 h-9 border-slate-200 dark:border-slate-700 focus:border-emerald-400 focus:ring-emerald-400 bg-white dark:bg-slate-800"
+                />
+              </div>
+              <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+                <SelectTrigger className="h-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                  <Building2 className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+                  <SelectValue placeholder="Área" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las áreas</SelectItem>
+                  {areas.map(a => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={estadoFilter} onValueChange={(v) => { setEstadoFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+                <SelectTrigger className="h-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                  <UserCheck className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+                  <SelectValue placeholder="Estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los estados</SelectItem>
+                  <SelectItem value="ACTIVO">Activo</SelectItem>
+                  <SelectItem value="INACTIVO">Inactivo</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={perfilFilter} onValueChange={(v) => { setPerfilFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+                <SelectTrigger className="h-9 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                  <User className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+                  <SelectValue placeholder="Puesto" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los puestos</SelectItem>
+                  {perfiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre_puesto}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Área" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas las áreas</SelectItem>
-                {areas.map(a => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={estadoFilter} onValueChange={(v) => { setEstadoFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Estado" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                <SelectItem value="ACTIVO">Activo</SelectItem>
-                <SelectItem value="INACTIVO">Inactivo</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={perfilFilter} onValueChange={(v) => { setPerfilFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Puesto" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los puestos</SelectItem>
-                {perfiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre_puesto}</SelectItem>)}
-              </SelectContent>
-            </Select>
+
+            {/* Active Filter Chips */}
+            {activeFilterCount > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <Filter className="h-3 w-3" />
+                  Filtros activos:
+                </span>
+                {search && (
+                  <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 gap-1 pr-1.5">
+                    &quot;{search}&quot;
+                    <button onClick={() => { setSearch(''); setPagination(p => ({ ...p, page: 1 })); }} className="ml-0.5 p-0.5 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-800 transition-colors">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {areaFilter !== 'all' && (
+                  <Badge variant="secondary" className="bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-800 gap-1 pr-1.5">
+                    {areas.find(a => a.id === areaFilter)?.nombre || 'Área'}
+                    <button onClick={() => { setAreaFilter('all'); setPagination(p => ({ ...p, page: 1 })); }} className="ml-0.5 p-0.5 rounded-full hover:bg-teal-200 dark:hover:bg-teal-800 transition-colors">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {estadoFilter !== 'all' && (
+                  <Badge variant="secondary" className="bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400 dark:border-cyan-800 gap-1 pr-1.5">
+                    {estadoFilter}
+                    <button onClick={() => { setEstadoFilter('all'); setPagination(p => ({ ...p, page: 1 })); }} className="ml-0.5 p-0.5 rounded-full hover:bg-cyan-200 dark:hover:bg-cyan-800 transition-colors">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {perfilFilter !== 'all' && (
+                  <Badge variant="secondary" className="bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 gap-1 pr-1.5">
+                    {perfiles.find(p => p.id === perfilFilter)?.nombre_puesto || 'Puesto'}
+                    <button onClick={() => { setPerfilFilter('all'); setPagination(p => ({ ...p, page: 1 })); }} className="ml-0.5 p-0.5 rounded-full hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 transition-colors duration-200"
+                  onClick={clearFilters}
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Limpiar todo
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -380,54 +488,63 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-700/30">
-                <TableHead className="w-[120px]">Código</TableHead>
-                <TableHead>Nombre Completo</TableHead>
-                <TableHead>Área</TableHead>
-                <TableHead>Puesto</TableHead>
-                <TableHead className="text-right">Salario</TableHead>
-                <TableHead className="w-[110px]">Estado</TableHead>
-                <TableHead className="w-[80px]">Acciones</TableHead>
+              <TableRow className="bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-800 dark:to-teal-800 hover:from-emerald-600 hover:to-teal-600 dark:hover:from-emerald-800 dark:hover:to-teal-800">
+                <TableHead className="text-white/90 font-semibold">Código</TableHead>
+                <TableHead className="text-white/90 font-semibold">Nombre Completo</TableHead>
+                <TableHead className="text-white/90 font-semibold">Área</TableHead>
+                <TableHead className="text-white/90 font-semibold">Puesto</TableHead>
+                <TableHead className="text-white/90 font-semibold text-right">Salario</TableHead>
+                <TableHead className="text-white/90 font-semibold">Estado</TableHead>
+                <TableHead className="text-white/90 font-semibold">Ingreso</TableHead>
+                <TableHead className="text-white/90 font-semibold text-center">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : employees.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="border-b-0">
+                  <TableCell colSpan={8} className="border-b-0">
                     <EmptyState />
                   </TableCell>
                 </TableRow>
               ) : (
-                employees.map(emp => {
+                employees.map((emp, idx) => {
                   const fullName = getNombreCompleto(emp);
-                  const avatarColor = getAvatarColor(fullName);
+                  const gradient = getAvatarGradient(fullName);
                   const salaryPercent = Math.min((emp.salario_base / SALARY_MAX) * 100, 100);
                   return (
                     <TableRow
                       key={emp.id}
-                      className="cursor-pointer group border-l-4 border-l-transparent hover:border-l-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/20 transition-all duration-200 border-b border-slate-100 dark:border-slate-800"
+                      className={`cursor-pointer group transition-all duration-200 border-l-4 border-l-transparent hover:border-l-emerald-500 hover:bg-emerald-50/60 dark:hover:bg-emerald-900/20 hover:shadow-sm ${idx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50/50 dark:bg-slate-800/30'}`}
                       onClick={() => onNavigateToDetail(emp.id)}
                     >
                       <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">{emp.codigo_empleado}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2.5">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className={`${avatarColor} text-white text-xs font-semibold`}>
+                          <Avatar className="h-8 w-8 shadow-sm">
+                            <AvatarFallback className={`bg-gradient-to-br ${gradient} text-white text-xs font-semibold`}>
                               {getInitials(emp)}
                             </AvatarFallback>
                           </Avatar>
                           <span className="font-medium text-slate-900 dark:text-slate-100">{fullName}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-slate-600 dark:text-slate-400">{emp.area?.nombre || '—'}</TableCell>
+                      <TableCell>
+                        {emp.area ? (
+                          <Badge variant="secondary" className="text-[11px] bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-800">
+                            {emp.area.nombre}
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-slate-400">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-sm text-slate-600 dark:text-slate-400">{emp.perfil_puesto?.nombre_puesto || '—'}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex flex-col items-end gap-1">
@@ -459,10 +576,33 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
                           </Badge>
                         )}
                       </TableCell>
+                      <TableCell className="text-sm text-slate-500 dark:text-slate-400">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3 text-slate-400" />
+                          {formatDate(emp.fecha_ingreso)}
+                        </div>
+                      </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onNavigateToDetail(emp.id); }} className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30">
-                          <User className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" onClick={() => onNavigateToDetail(emp.id)} className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30 transition-all duration-200">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Ver detalle</TooltipContent>
+                          </Tooltip>
+                          {canEdit && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="sm" onClick={() => onNavigateToDetail(emp.id)} className="h-8 w-8 p-0 text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-900/30 transition-all duration-200">
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Editar</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -477,7 +617,7 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
       <div className="lg:hidden space-y-3">
         {loading ? (
           Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i}><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
+            <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>
           ))
         ) : employees.length === 0 ? (
           <Card className="shadow-sm">
@@ -488,22 +628,35 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
         ) : (
           employees.map(emp => {
             const fullName = getNombreCompleto(emp);
-            const avatarColor = getAvatarColor(fullName);
+            const gradient = getAvatarGradient(fullName);
             const salaryPercent = Math.min((emp.salario_base / SALARY_MAX) * 100, 100);
             return (
-              <Card key={emp.id} className="shadow-sm cursor-pointer hover:shadow-md transition-all border-l-4 border-l-transparent hover:border-l-emerald-500 border border-slate-200 dark:border-slate-700 dark:bg-slate-800/50" onClick={() => onNavigateToDetail(emp.id)}>
+              <Card
+                key={emp.id}
+                className="shadow-sm cursor-pointer hover:shadow-md active:scale-[0.99] transition-all duration-200 border border-slate-200 dark:border-slate-700 dark:bg-slate-800/50 overflow-hidden"
+                onClick={() => onNavigateToDetail(emp.id)}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Avatar className="h-9 w-9 shrink-0">
-                        <AvatarFallback className={`${avatarColor} text-white text-xs font-semibold`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar className="h-10 w-10 shrink-0 shadow-sm">
+                        <AvatarFallback className={`bg-gradient-to-br ${gradient} text-white text-sm font-semibold`}>
                           {getInitials(emp)}
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">{fullName}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{emp.codigo_empleado} · DUI: {emp.dui}</p>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1.5">{emp.area?.nombre || 'Sin área'} — {emp.perfil_puesto?.nombre_puesto || 'Sin puesto'}</p>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          {emp.area && (
+                            <Badge variant="secondary" className="text-[10px] bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-800">
+                              {emp.area.nombre}
+                            </Badge>
+                          )}
+                          {emp.perfil_puesto && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">{emp.perfil_puesto.nombre_puesto}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     {emp.estado === 'ACTIVO' ? (
@@ -529,9 +682,17 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
                         className="h-1 w-14 mt-1 bg-slate-100 dark:bg-slate-700 [&>[data-slot=progress-indicator]]:bg-emerald-500"
                       />
                     </div>
-                    <Button variant="ghost" size="sm" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30">
-                      Ver detalle →
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      {emp.fecha_ingreso && (
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {formatDate(emp.fecha_ingreso)}
+                        </span>
+                      )}
+                      <Button variant="ghost" size="sm" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 h-7 text-xs transition-all duration-200">
+                        Ver detalle →
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -540,61 +701,77 @@ export default function EmployeeDirectory({ accessToken, userRole, onNavigateToD
         )}
       </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between px-1">
-        {pagination.totalPages > 1 ? (
-          <>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Mostrando {((pagination.page - 1) * pagination.pageSize) + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} de {pagination.total}
-            </p>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline" size="sm"
-                disabled={pagination.page <= 1}
-                onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
-                className="h-8 w-8 p-0 dark:border-slate-700"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
-                  let pageNum: number;
-                  if (pagination.totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (pagination.page <= 3) {
-                    pageNum = i + 1;
-                  } else if (pagination.page >= pagination.totalPages - 2) {
-                    pageNum = pagination.totalPages - 4 + i;
-                  } else {
-                    pageNum = pagination.page - 2 + i;
-                  }
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={pagination.page === pageNum ? 'default' : 'outline'}
-                      size="sm"
-                      className={`h-8 w-8 p-0 ${pagination.page === pageNum ? 'bg-emerald-600 hover:bg-emerald-700' : 'dark:border-slate-700'}`}
-                      onClick={() => setPagination(p => ({ ...p, page: pageNum }))}
-                    >
-                      {pageNum}
-                    </Button>
-                  );
-                })}
-              </div>
-              <Button
-                variant="outline" size="sm"
-                disabled={pagination.page >= pagination.totalPages}
-                onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
-                className="h-8 w-8 p-0 dark:border-slate-700"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </>
-        ) : (
-          <p className="text-sm text-slate-400 dark:text-slate-500">
-            {pagination.total > 0 && `${pagination.total} empleado${pagination.total !== 1 ? 's' : ''}`}
+      {/* Enhanced Pagination */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1 py-2">
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {pagination.total > 0
+              ? `Mostrando ${pageStart}–${pageEnd} de ${pagination.total} empleados`
+              : 'No hay empleados'
+            }
           </p>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-400 dark:text-slate-500">Filas:</span>
+            <Select
+              value={String(pagination.pageSize)}
+              onValueChange={(v) => setPagination(p => ({ ...p, pageSize: Number(v), page: 1 }))}
+            >
+              <SelectTrigger className="h-7 w-[65px] text-xs border-slate-200 dark:border-slate-700">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline" size="sm"
+              disabled={pagination.page <= 1}
+              onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
+              className="h-8 w-8 p-0 dark:border-slate-700 transition-all duration-200"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
+                let pageNum: number;
+                if (pagination.totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (pagination.page <= 3) {
+                  pageNum = i + 1;
+                } else if (pagination.page >= pagination.totalPages - 2) {
+                  pageNum = pagination.totalPages - 4 + i;
+                } else {
+                  pageNum = pagination.page - 2 + i;
+                }
+                const isCurrent = pagination.page === pageNum;
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={isCurrent ? 'default' : 'outline'}
+                    size="sm"
+                    className={`h-8 w-8 p-0 font-medium transition-all duration-200 ${isCurrent ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm' : 'dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 hover:text-emerald-700 dark:hover:text-emerald-400'}`}
+                    onClick={() => setPagination(p => ({ ...p, page: pageNum }))}
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            <Button
+              variant="outline" size="sm"
+              disabled={pagination.page >= pagination.totalPages}
+              onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+              className="h-8 w-8 p-0 dark:border-slate-700 transition-all duration-200"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         )}
       </div>
     </div>

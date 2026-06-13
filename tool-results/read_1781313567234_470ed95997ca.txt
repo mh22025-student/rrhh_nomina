@@ -1,0 +1,603 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import {
+     5→  Search, Plus, Users, Loader2, ChevronLeft, ChevronRight,
+     6→  User, SearchX, FileDown, FileSpreadsheet, ChevronDown,
+     7→  UserCheck, DollarSign, Building2, UserX
+     8→} from 'lucide-react';
+     9→import { Button } from '@/components/ui/button';
+    10→import { Input } from '@/components/ui/input';
+    11→import { Badge } from '@/components/ui/badge';
+    12→import { Card, CardContent } from '@/components/ui/card';
+    13→import {
+    14→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    15→} from '@/components/ui/table';
+    16→import {
+    17→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    18→} from '@/components/ui/select';
+    19→import { Skeleton } from '@/components/ui/skeleton';
+    20→import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+    21→import { Progress } from '@/components/ui/progress';
+    22→import {
+    23→  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+    24→} from '@/components/ui/dropdown-menu';
+    25→
+    26→type UserRole = 'ADMIN' | 'ANALISTA' | 'APROBADOR' | 'GERENCIA' | 'AUDITOR' | 'EMPLEADO';
+    27→
+    28→interface EmployeeDirectoryProps {
+    29→  accessToken: string | null;
+    30→  userRole: UserRole;
+    31→  onNavigateToDetail: (empleadoId: string) => void;
+    32→  onNavigateToNew: () => void;
+    33→}
+    34→
+    35→interface Area {
+    36→  id: string;
+    37→  nombre: string;
+    38→  codigo: string;
+    39→}
+    40→
+    41→interface PerfilPuesto {
+    42→  id: string;
+    43→  nombre_puesto: string;
+    44→  codigo: string;
+    45→}
+    46→
+    47→interface Empleado {
+    48→  id: string;
+    49→  codigo_empleado: string;
+    50→  primer_nombre: string;
+    51→  segundo_nombre: string | null;
+    52→  primer_apellido: string;
+    53→  segundo_apellido: string | null;
+    54→  dui: string;
+    55→  estado: string;
+    56→  salario_base: number;
+    57→  area: Area | null;
+    58→  perfil_puesto: PerfilPuesto | null;
+    59→}
+    60→
+    61→const AVATAR_COLORS = [
+    62→  'bg-emerald-500',
+    63→  'bg-teal-500',
+    64→  'bg-sky-500',
+    65→  'bg-violet-500',
+    66→  'bg-amber-500',
+    67→  'bg-rose-500',
+    68→];
+    69→
+    70→function getAvatarColor(name: string): string {
+    71→  let hash = 0;
+    72→  for (let i = 0; i < name.length; i++) {
+    73→    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    74→  }
+    75→  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    76→}
+    77→
+    78→function getInitials(emp: Empleado): string {
+    79→  return (emp.primer_nombre?.[0] || '') + (emp.primer_apellido?.[0] || '');
+    80→}
+    81→
+    82→export default function EmployeeDirectory({ accessToken, userRole, onNavigateToDetail, onNavigateToNew }: EmployeeDirectoryProps) {
+    83→  const [employees, setEmployees] = useState<Empleado[]>([]);
+    84→  const [areas, setAreas] = useState<Area[]>([]);
+    85→  const [perfiles, setPerfiles] = useState<PerfilPuesto[]>([]);
+    86→  const [loading, setLoading] = useState(true);
+    87→  const [search, setSearch] = useState('');
+    88→  const [areaFilter, setAreaFilter] = useState('all');
+    89→  const [estadoFilter, setEstadoFilter] = useState('all');
+    90→  const [perfilFilter, setPerfilFilter] = useState('all');
+    91→  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: 10, totalPages: 0 });
+    92→
+    93→  const fetchEmployees = useCallback(async () => {
+    94→    setLoading(true);
+    95→    try {
+    96→      const params = new URLSearchParams();
+    97→      params.set('page', String(pagination.page));
+    98→      params.set('pageSize', String(pagination.pageSize));
+    99→      if (search) params.set('search', search);
+   100→      if (areaFilter && areaFilter !== 'all') params.set('area_id', areaFilter);
+   101→      if (estadoFilter && estadoFilter !== 'all') params.set('estado', estadoFilter);
+   102→      if (perfilFilter && perfilFilter !== 'all') params.set('perfil_puesto_id', perfilFilter);
+   103→
+   104→      const res = await fetch(`/api/empleados?${params.toString()}`, {
+   105→        headers: { Authorization: `Bearer ${accessToken}` },
+   106→      });
+   107→      const data = await res.json();
+   108→      if (res.ok) {
+   109→        setEmployees(data.data);
+   110→        setPagination(data.pagination);
+   111→      }
+   112→    } catch (err) {
+   113→      console.error('Error fetching employees:', err);
+   114→    } finally {
+   115→      setLoading(false);
+   116→    }
+   117→  }, [accessToken, pagination.page, pagination.pageSize, search, areaFilter, estadoFilter, perfilFilter]);
+   118→
+   119→  useEffect(() => {
+   120→    fetchEmployees();
+   121→  }, [fetchEmployees]);
+   122→
+   123→  // Fetch areas and perfiles for filters
+   124→  useEffect(() => {
+   125→    const fetchFilters = async () => {
+   126→      try {
+   127→        const [areasRes, perfilesRes] = await Promise.all([
+   128→          fetch('/api/areas', { headers: { Authorization: `Bearer ${accessToken}` } }),
+   129→          fetch('/api/perfiles-puesto', { headers: { Authorization: `Bearer ${accessToken}` } }),
+   130→        ]);
+   131→        if (areasRes.ok) {
+   132→          const areasData = await areasRes.json();
+   133→          setAreas(areasData.data || areasData || []);
+   134→        }
+   135→        if (perfilesRes.ok) {
+   136→          const perfilesData = await perfilesRes.json();
+   137→          setPerfiles(perfilesData.data || perfilesData || []);
+   138→        }
+   139→      } catch {
+   140→        // Filters may fail silently
+   141→      }
+   142→    };
+   143→    fetchFilters();
+   144→  }, [accessToken]);
+   145→
+   146→  // Summary stats computed from current data
+   147→  const stats = useMemo(() => {
+   148→    const total = pagination.total;
+   149→    const activos = employees.filter(e => e.estado === 'ACTIVO').length;
+   150→    const avgSalary = employees.length > 0
+   151→      ? employees.reduce((sum, e) => sum + e.salario_base, 0) / employees.length
+   152→      : 0;
+   153→    const uniqueAreas = new Set(employees.map(e => e.area?.nombre).filter(Boolean)).size;
+   154→    return { total, activos, avgSalary, uniqueAreas };
+   155→  }, [employees, pagination.total]);
+   156→
+   157→  const formatSalary = (amount: number) => `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+   158→
+   159→  const getNombreCompleto = (emp: Empleado) =>
+   160→    `${emp.primer_nombre}${emp.segundo_nombre ? ' ' + emp.segundo_nombre : ''} ${emp.primer_apellido}${emp.segundo_apellido ? ' ' + emp.segundo_apellido : ''}`;
+   161→
+   162→  const exportCSV = () => {
+   163→    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Salario', 'Estado'];
+   164→    const rows = employees.map(emp => [
+   165→      emp.codigo_empleado,
+   166→      getNombreCompleto(emp),
+   167→      emp.dui,
+   168→      emp.area?.nombre || '',
+   169→      emp.perfil_puesto?.nombre_puesto || '',
+   170→      emp.salario_base.toString(),
+   171→      emp.estado,
+   172→    ]);
+   173→    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+   174→    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+   175→    const url = URL.createObjectURL(blob);
+   176→    const link = document.createElement('a');
+   177→    link.href = url;
+   178→    link.download = `empleados_${new Date().toISOString().slice(0, 10)}.csv`;
+   179→    link.click();
+   180→    URL.revokeObjectURL(url);
+   181→  };
+   182→
+   183→  const exportExcel = () => {
+   184→    // For now, export as CSV with Excel-friendly BOM
+   185→    const headers = ['Código', 'Nombre Completo', 'DUI', 'Área', 'Puesto', 'Salario', 'Estado'];
+   186→    const rows = employees.map(emp => [
+   187→      emp.codigo_empleado,
+   188→      getNombreCompleto(emp),
+   189→      emp.dui,
+   190→      emp.area?.nombre || '',
+   191→      emp.perfil_puesto?.nombre_puesto || '',
+   192→      emp.salario_base.toString(),
+   193→      emp.estado,
+   194→    ]);
+   195→    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+   196→    const BOM = '\uFEFF';
+   197→    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+   198→    const url = URL.createObjectURL(blob);
+   199→    const link = document.createElement('a');
+   200→    link.href = url;
+   201→    link.download = `empleados_${new Date().toISOString().slice(0, 10)}.csv`;
+   202→    link.click();
+   203→    URL.revokeObjectURL(url);
+   204→  };
+   205→
+   206→  const clearFilters = () => {
+   207→    setSearch('');
+   208→    setAreaFilter('all');
+   209→    setEstadoFilter('all');
+   210→    setPerfilFilter('all');
+   211→    setPagination(p => ({ ...p, page: 1 }));
+   212→  };
+   213→
+   214→  const canCreate = userRole === 'ADMIN' || userRole === 'ANALISTA';
+   215→
+   216→  const getEstadoBadge = (estado: string) => {
+   217→    if (estado === 'ACTIVO') return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800';
+   218→    if (estado === 'INACTIVO') return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800';
+   219→    return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
+   220→  };
+   221→
+   222→  // Salary range max for progress bar
+   223→  const SALARY_MAX = 5000;
+   224→
+   225→  // Empty state component
+   226→  const EmptyState = () => (
+   227→    <div className="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-500">
+   228→      <div className="p-6 rounded-full bg-slate-50 dark:bg-slate-800 mb-5">
+   229→        <SearchX className="h-14 w-14 text-slate-300 dark:text-slate-600" />
+   230→      </div>
+   231→      <p className="text-base font-semibold text-slate-600 dark:text-slate-300">No se encontraron empleados</p>
+   232→      <p className="text-sm text-slate-400 dark:text-slate-500 mt-1.5 max-w-xs text-center">
+   233→        No hay resultados para los filtros actuales. Pruebe ajustando la búsqueda o los filtros.
+   234→      </p>
+   235→      {(search || areaFilter !== 'all' || estadoFilter !== 'all' || perfilFilter !== 'all') && (
+   236→        <Button
+   237→          variant="outline"
+   238→          size="sm"
+   239→          className="mt-4 text-sm border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+   240→          onClick={clearFilters}
+   241→        >
+   242→          Limpiar Filtros
+   243→        </Button>
+   244→      )}
+   245→    </div>
+   246→  );
+   247→
+   248→  return (
+   249→    <div className="space-y-4">
+   250→      {/* Header */}
+   251→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   252→        <div>
+   253→          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+   254→            <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   255→            Directorio de Empleados
+   256→            <Badge variant="secondary" className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold ml-1">
+   257→              {pagination.total}
+   258→            </Badge>
+   259→          </h2>
+   260→          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+   261→            {pagination.total} empleado{pagination.total !== 1 ? 's' : ''} registrado{pagination.total !== 1 ? 's' : ''}
+   262→          </p>
+   263→        </div>
+   264→        <div className="flex items-center gap-2">
+   265→          {/* Export Dropdown */}
+   266→          <DropdownMenu>
+   267→            <DropdownMenuTrigger asChild>
+   268→              <Button variant="outline" size="sm" disabled={employees.length === 0}>
+   269→                <FileDown className="h-4 w-4 mr-1.5" /> Exportar <ChevronDown className="h-3 w-3 ml-1" />
+   270→              </Button>
+   271→            </DropdownMenuTrigger>
+   272→            <DropdownMenuContent align="end">
+   273→              <DropdownMenuItem onClick={exportCSV}>
+   274→                <FileDown className="h-4 w-4 mr-2 text-slate-500" />
+   275→                Exportar CSV
+   276→              </DropdownMenuItem>
+   277→              <DropdownMenuItem onClick={exportExcel}>
+   278→                <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
+   279→                Exportar Excel
+   280→              </DropdownMenuItem>
+   281→            </DropdownMenuContent>
+   282→          </DropdownMenu>
+   283→          {canCreate && (
+   284→            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={onNavigateToNew}>
+   285→              <Plus className="h-4 w-4 mr-1.5" /> Nuevo Empleado
+   286→            </Button>
+   287→          )}
+   288→        </div>
+   289→      </div>
+   290→
+   291→      {/* Summary Stats Row */}
+   292→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   293→        <Card className="shadow-sm border-0 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-900/20 dark:to-emerald-800/10">
+   294→          <CardContent className="p-3 flex items-center gap-3">
+   295→            <div className="p-2 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20">
+   296→              <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   297→            </div>
+   298→            <div>
+   299→              <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70 font-medium">Total Empleados</p>
+   300→              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 leading-tight">{stats.total}</p>
+   301→            </div>
+   302→          </CardContent>
+   303→        </Card>
+   304→        <Card className="shadow-sm border-0 bg-gradient-to-br from-teal-50 to-teal-100/50 dark:from-teal-900/20 dark:to-teal-800/10">
+   305→          <CardContent className="p-3 flex items-center gap-3">
+   306→            <div className="p-2 rounded-lg bg-teal-500/10 dark:bg-teal-500/20">
+   307→              <UserCheck className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+   308→            </div>
+   309→            <div>
+   310→              <p className="text-xs text-teal-700/70 dark:text-teal-400/70 font-medium">Activos</p>
+   311→              <p className="text-2xl font-bold text-teal-700 dark:text-teal-300 leading-tight">{stats.activos}</p>
+   312→            </div>
+   313→          </CardContent>
+   314→        </Card>
+   315→        <Card className="shadow-sm border-0 bg-gradient-to-br from-sky-50 to-sky-100/50 dark:from-sky-900/20 dark:to-sky-800/10">
+   316→          <CardContent className="p-3 flex items-center gap-3">
+   317→            <div className="p-2 rounded-lg bg-sky-500/10 dark:bg-sky-500/20">
+   318→              <DollarSign className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+   319→            </div>
+   320→            <div>
+   321→              <p className="text-xs text-sky-700/70 dark:text-sky-400/70 font-medium">Salario Promedio</p>
+   322→              <p className="text-2xl font-bold text-sky-700 dark:text-sky-300 leading-tight">${stats.avgSalary.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
+   323→            </div>
+   324→          </CardContent>
+   325→        </Card>
+   326→        <Card className="shadow-sm border-0 bg-gradient-to-br from-violet-50 to-violet-100/50 dark:from-violet-900/20 dark:to-violet-800/10">
+   327→          <CardContent className="p-3 flex items-center gap-3">
+   328→            <div className="p-2 rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+   329→              <Building2 className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+   330→            </div>
+   331→            <div>
+   332→              <p className="text-xs text-violet-700/70 dark:text-violet-400/70 font-medium">Áreas</p>
+   333→              <p className="text-2xl font-bold text-violet-700 dark:text-violet-300 leading-tight">{stats.uniqueAreas}</p>
+   334→            </div>
+   335→          </CardContent>
+   336→        </Card>
+   337→      </div>
+   338→
+   339→      {/* Search and Filters */}
+   340→      <Card className="shadow-sm">
+   341→        <CardContent className="p-4">
+   342→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+   343→            <div className="sm:col-span-2 lg:col-span-1 xl:col-span-1 relative">
+   344→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   345→              <Input
+   346→                placeholder="Buscar por nombre, DUI, código..."
+   347→                value={search}
+   348→                onChange={(e) => { setSearch(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+   349→                className="pl-9 h-9 border-slate-200 dark:border-slate-700 focus:border-emerald-400 focus:ring-emerald-400 bg-white dark:bg-slate-800"
+   350→              />
+   351→            </div>
+   352→            <Select value={areaFilter} onValueChange={(v) => { setAreaFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+   353→              <SelectTrigger className="h-9"><SelectValue placeholder="Área" /></SelectTrigger>
+   354→              <SelectContent>
+   355→                <SelectItem value="all">Todas las áreas</SelectItem>
+   356→                {areas.map(a => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
+   357→              </SelectContent>
+   358→            </Select>
+   359→            <Select value={estadoFilter} onValueChange={(v) => { setEstadoFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+   360→              <SelectTrigger className="h-9"><SelectValue placeholder="Estado" /></SelectTrigger>
+   361→              <SelectContent>
+   362→                <SelectItem value="all">Todos los estados</SelectItem>
+   363→                <SelectItem value="ACTIVO">Activo</SelectItem>
+   364→                <SelectItem value="INACTIVO">Inactivo</SelectItem>
+   365→              </SelectContent>
+   366→            </Select>
+   367→            <Select value={perfilFilter} onValueChange={(v) => { setPerfilFilter(v); setPagination(p => ({ ...p, page: 1 })); }}>
+   368→              <SelectTrigger className="h-9"><SelectValue placeholder="Puesto" /></SelectTrigger>
+   369→              <SelectContent>
+   370→                <SelectItem value="all">Todos los puestos</SelectItem>
+   371→                {perfiles.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre_puesto}</SelectItem>)}
+   372→              </SelectContent>
+   373→            </Select>
+   374→          </div>
+   375→        </CardContent>
+   376→      </Card>
+   377→
+   378→      {/* Desktop Table */}
+   379→      <Card className="shadow-sm hidden lg:block overflow-hidden">
+   380→        <CardContent className="p-0">
+   381→          <Table>
+   382→            <TableHeader>
+   383→              <TableRow className="bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-700/30">
+   384→                <TableHead className="w-[120px]">Código</TableHead>
+   385→                <TableHead>Nombre Completo</TableHead>
+   386→                <TableHead>Área</TableHead>
+   387→                <TableHead>Puesto</TableHead>
+   388→                <TableHead className="text-right">Salario</TableHead>
+   389→                <TableHead className="w-[110px]">Estado</TableHead>
+   390→                <TableHead className="w-[80px]">Acciones</TableHead>
+   391→              </TableRow>
+   392→            </TableHeader>
+   393→            <TableBody>
+   394→              {loading ? (
+   395→                Array.from({ length: 5 }).map((_, i) => (
+   396→                  <TableRow key={i}>
+   397→                    {Array.from({ length: 7 }).map((_, j) => (
+   398→                      <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
+   399→                    ))}
+   400→                  </TableRow>
+   401→                ))
+   402→              ) : employees.length === 0 ? (
+   403→                <TableRow>
+   404→                  <TableCell colSpan={7} className="border-b-0">
+   405→                    <EmptyState />
+   406→                  </TableCell>
+   407→                </TableRow>
+   408→              ) : (
+   409→                employees.map(emp => {
+   410→                  const fullName = getNombreCompleto(emp);
+   411→                  const avatarColor = getAvatarColor(fullName);
+   412→                  const salaryPercent = Math.min((emp.salario_base / SALARY_MAX) * 100, 100);
+   413→                  return (
+   414→                    <TableRow
+   415→                      key={emp.id}
+   416→                      className="cursor-pointer group border-l-4 border-l-transparent hover:border-l-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/20 transition-all duration-200 border-b border-slate-100 dark:border-slate-800"
+   417→                      onClick={() => onNavigateToDetail(emp.id)}
+   418→                    >
+   419→                      <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">{emp.codigo_empleado}</TableCell>
+   420→                      <TableCell>
+   421→                        <div className="flex items-center gap-2.5">
+   422→                          <Avatar className="h-8 w-8">
+   423→                            <AvatarFallback className={`${avatarColor} text-white text-xs font-semibold`}>
+   424→                              {getInitials(emp)}
+   425→                            </AvatarFallback>
+   426→                          </Avatar>
+   427→                          <span className="font-medium text-slate-900 dark:text-slate-100">{fullName}</span>
+   428→                        </div>
+   429→                      </TableCell>
+   430→                      <TableCell className="text-sm text-slate-600 dark:text-slate-400">{emp.area?.nombre || '—'}</TableCell>
+   431→                      <TableCell className="text-sm text-slate-600 dark:text-slate-400">{emp.perfil_puesto?.nombre_puesto || '—'}</TableCell>
+   432→                      <TableCell className="text-right">
+   433→                        <div className="flex flex-col items-end gap-1">
+   434→                          <div className="flex items-baseline gap-1">
+   435→                            <span className="font-mono text-sm font-semibold text-slate-900 dark:text-slate-100">{formatSalary(emp.salario_base)}</span>
+   436→                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">USD</span>
+   437→                          </div>
+   438→                          <Progress
+   439→                            value={salaryPercent}
+   440→                            className="h-1 w-16 bg-slate-100 dark:bg-slate-700 [&>[data-slot=progress-indicator]]:bg-emerald-500"
+   441→                          />
+   442→                        </div>
+   443→                      </TableCell>
+   444→                      <TableCell>
+   445→                        {emp.estado === 'ACTIVO' ? (
+   446→                          <Badge className="text-[10px] border bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800" variant="secondary">
+   447→                            <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 bg-emerald-500 animate-pulse" />
+   448→                            ACTIVO
+   449→                          </Badge>
+   450→                        ) : emp.estado === 'INACTIVO' ? (
+   451→                          <Badge className="text-[10px] border bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800 font-semibold" variant="secondary">
+   452→                            <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 bg-red-500" />
+   453→                            INACTIVO
+   454→                          </Badge>
+   455→                        ) : (
+   456→                          <Badge className={`text-[10px] border ${getEstadoBadge(emp.estado)}`} variant="secondary">
+   457→                            <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 bg-slate-400" />
+   458→                            {emp.estado}
+   459→                          </Badge>
+   460→                        )}
+   461→                      </TableCell>
+   462→                      <TableCell>
+   463→                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onNavigateToDetail(emp.id); }} className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30">
+   464→                          <User className="h-4 w-4" />
+   465→                        </Button>
+   466→                      </TableCell>
+   467→                    </TableRow>
+   468→                  );
+   469→                })
+   470→              )}
+   471→            </TableBody>
+   472→          </Table>
+   473→        </CardContent>
+   474→      </Card>
+   475→
+   476→      {/* Mobile Card Layout */}
+   477→      <div className="lg:hidden space-y-3">
+   478→        {loading ? (
+   479→          Array.from({ length: 3 }).map((_, i) => (
+   480→            <Card key={i}><CardContent className="p-4"><Skeleton className="h-20 w-full" /></CardContent></Card>
+   481→          ))
+   482→        ) : employees.length === 0 ? (
+   483→          <Card className="shadow-sm">
+   484→            <CardContent className="p-0">
+   485→              <EmptyState />
+   486→            </CardContent>
+   487→          </Card>
+   488→        ) : (
+   489→          employees.map(emp => {
+   490→            const fullName = getNombreCompleto(emp);
+   491→            const avatarColor = getAvatarColor(fullName);
+   492→            const salaryPercent = Math.min((emp.salario_base / SALARY_MAX) * 100, 100);
+   493→            return (
+   494→              <Card key={emp.id} className="shadow-sm cursor-pointer hover:shadow-md transition-all border-l-4 border-l-transparent hover:border-l-emerald-500 border border-slate-200 dark:border-slate-700 dark:bg-slate-800/50" onClick={() => onNavigateToDetail(emp.id)}>
+   495→                <CardContent className="p-4">
+   496→                  <div className="flex items-start justify-between">
+   497→                    <div className="flex items-center gap-2.5 min-w-0">
+   498→                      <Avatar className="h-9 w-9 shrink-0">
+   499→                        <AvatarFallback className={`${avatarColor} text-white text-xs font-semibold`}>
+   500→                          {getInitials(emp)}
+   501→                        </AvatarFallback>
+   502→                      </Avatar>
+   503→                      <div className="min-w-0">
+   504→                        <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">{fullName}</p>
+   505→                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{emp.codigo_empleado} · DUI: {emp.dui}</p>
+   506→                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1.5">{emp.area?.nombre || 'Sin área'} — {emp.perfil_puesto?.nombre_puesto || 'Sin puesto'}</p>
+   507→                      </div>
+   508→                    </div>
+   509→                    {emp.estado === 'ACTIVO' ? (
+   510→                      <Badge className="text-[10px] border shrink-0 ml-2 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800" variant="secondary">
+   511→                        <span className="inline-block w-1.5 h-1.5 rounded-full mr-1 bg-emerald-500 animate-pulse" />
+   512→                        ACTIVO
+   513→                      </Badge>
+   514→                    ) : (
+   515→                      <Badge className="text-[10px] border shrink-0 ml-2 bg-red-100 text-red-700 border-red-200 font-semibold dark:bg-red-900/30 dark:text-red-400 dark:border-red-800" variant="secondary">
+   516→                        <span className="inline-block w-1.5 h-1.5 rounded-full mr-1 bg-red-500" />
+   517→                        INACTIVO
+   518→                      </Badge>
+   519→                    )}
+   520→                  </div>
+   521→                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+   522→                    <div className="flex flex-col">
+   523→                      <div className="flex items-baseline gap-1">
+   524→                        <span className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">{formatSalary(emp.salario_base)}</span>
+   525→                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">USD</span>
+   526→                      </div>
+   527→                      <Progress
+   528→                        value={salaryPercent}
+   529→                        className="h-1 w-14 mt-1 bg-slate-100 dark:bg-slate-700 [&>[data-slot=progress-indicator]]:bg-emerald-500"
+   530→                      />
+   531→                    </div>
+   532→                    <Button variant="ghost" size="sm" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30">
+   533→                      Ver detalle →
+   534→                    </Button>
+   535→                  </div>
+   536→                </CardContent>
+   537→              </Card>
+   538→            );
+   539→          })
+   540→        )}
+   541→      </div>
+   542→
+   543→      {/* Pagination */}
+   544→      <div className="flex items-center justify-between px-1">
+   545→        {pagination.totalPages > 1 ? (
+   546→          <>
+   547→            <p className="text-sm text-slate-500 dark:text-slate-400">
+   548→              Mostrando {((pagination.page - 1) * pagination.pageSize) + 1}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} de {pagination.total}
+   549→            </p>
+   550→            <div className="flex items-center gap-1">
+   551→              <Button
+   552→                variant="outline" size="sm"
+   553→                disabled={pagination.page <= 1}
+   554→                onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
+   555→                className="h-8 w-8 p-0 dark:border-slate-700"
+   556→              >
+   557→                <ChevronLeft className="h-4 w-4" />
+   558→              </Button>
+   559→              <div className="flex items-center gap-1">
+   560→                {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
+   561→                  let pageNum: number;
+   562→                  if (pagination.totalPages <= 5) {
+   563→                    pageNum = i + 1;
+   564→                  } else if (pagination.page <= 3) {
+   565→                    pageNum = i + 1;
+   566→                  } else if (pagination.page >= pagination.totalPages - 2) {
+   567→                    pageNum = pagination.totalPages - 4 + i;
+   568→                  } else {
+   569→                    pageNum = pagination.page - 2 + i;
+   570→                  }
+   571→                  return (
+   572→                    <Button
+   573→                      key={pageNum}
+   574→                      variant={pagination.page === pageNum ? 'default' : 'outline'}
+   575→                      size="sm"
+   576→                      className={`h-8 w-8 p-0 ${pagination.page === pageNum ? 'bg-emerald-600 hover:bg-emerald-700' : 'dark:border-slate-700'}`}
+   577→                      onClick={() => setPagination(p => ({ ...p, page: pageNum }))}
+   578→                    >
+   579→                      {pageNum}
+   580→                    </Button>
+   581→                  );
+   582→                })}
+   583→              </div>
+   584→              <Button
+   585→                variant="outline" size="sm"
+   586→                disabled={pagination.page >= pagination.totalPages}
+   587→                onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+   588→                className="h-8 w-8 p-0 dark:border-slate-700"
+   589→              >
+   590→                <ChevronRight className="h-4 w-4" />
+   591→              </Button>
+   592→            </div>
+   593→          </>
+   594→        ) : (
+   595→          <p className="text-sm text-slate-400 dark:text-slate-500">
+   596→            {pagination.total > 0 && `${pagination.total} empleado${pagination.total !== 1 ? 's' : ''}`}
+   597→          </p>
+   598→        )}
+   599→      </div>
+   600→    </div>
+   601→  );
+   602→}
+   603→

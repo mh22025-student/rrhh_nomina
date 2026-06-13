@@ -321,7 +321,7 @@ export default function ProfileCatalog({ accessToken, userRole }: ProfileCatalog
               <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Filtrar por área" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas las áreas</SelectItem>
-                {areas.map((a) => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
+                {Array.isArray(areas) && areas.map((a) => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={filterEstado} onValueChange={setFilterEstado}>
@@ -479,7 +479,7 @@ export default function ProfileCatalog({ accessToken, userRole }: ProfileCatalog
               <Select value={form.area_id} onValueChange={(v) => setForm({ ...form, area_id: v })}>
                 <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Seleccionar área" /></SelectTrigger>
                 <SelectContent>
-                  {areas.map((a) => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
+                  {Array.isArray(areas) && areas.map((a) => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronRight, LogOut, Lock, Menu, X, LayoutDashboard,
   DollarSign, CheckCircle, Send, Gift, ClipboardList, ListChecks,
   BarChart3, BookOpen, GitBranch, Plug, ScrollText, Eye,
-  AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle, Clock,
+  AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle,
   Sun, Moon, TrendingUp, TrendingDown, Bell, Info, AlertTriangle,
   PieChart, CalendarDays, Megaphone
 } from 'lucide-react';
@@ -1053,20 +1053,59 @@ const MOCK_ANNOUNCEMENTS = [
   { id: '3', title: 'Mantenimiento programado', message: 'El sistema estará en mantenimiento el próximo sábado de 02:00 a 06:00 AM. Guarde sus cambios antes de esa hora.', severity: 'warning' as const, date: '2025-02-18', icon: AlertTriangle },
 ];
 
-// Sparkline dot component for KPI cards
-function SparklineDots({ trend, color }: { trend: 'up' | 'down' | 'neutral'; color: string }) {
-  const heights = trend === 'up' ? [3, 5, 4, 7, 6, 9] : trend === 'down' ? [9, 6, 7, 4, 5, 3] : [5, 6, 5, 6, 5, 6];
+// Enhanced sparkline bars component for KPI cards (3-5 small bars showing trend)
+function SparklineBars({ trend, color }: { trend: 'up' | 'down' | 'neutral'; color: string }) {
+  const heights = trend === 'up' ? [4, 6, 5, 8, 7, 10] : trend === 'down' ? [10, 7, 8, 5, 6, 4] : [6, 7, 6, 7, 6, 7];
   return (
-    <div className="flex items-end gap-0.5 h-3">
+    <div className="flex items-end gap-[3px] h-4">
       {heights.map((h, i) => (
         <div
           key={i}
-          className={`w-1 rounded-full ${color}`}
-          style={{ height: `${h}px`, opacity: 0.4 + (i / heights.length) * 0.6 }}
+          className={`w-1.5 rounded-sm ${color}`}
+          style={{ height: `${h}px`, opacity: 0.3 + (i / heights.length) * 0.7 }}
         />
       ))}
     </div>
   );
+}
+
+// Time-of-day greeting helper
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Buenos días';
+  if (hour < 18) return 'Buenas tardes';
+  return 'Buenas noches';
+}
+
+// Get Spanish formatted date
+function getSpanishDate(): string {
+  return new Date().toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+// Get motivational message based on compliance level
+function getMotivationalMessage(compliance: number | undefined): string {
+  if (!compliance || compliance >= 90) return 'Cumplimiento laboral excelente. Continúe manteniendo los estándares del Código de Trabajo.';
+  if (compliance >= 70) return 'Buen nivel de cumplimiento. Revise los elementos pendientes para alcanzar la conformidad total.';
+  if (compliance >= 50) return 'Atención: Hay obligaciones laborales pendientes. Priorice los vencimientos próximos.';
+  return 'Alerta: Cumplimiento por debajo del mínimo. Acción inmediata requerida según legislación salvadoreña.';
+}
+
+// Audit action-specific icons (create=plus, update=pencil, delete=trash, login=key)
+function getEnhancedAuditIcon(accion: string) {
+  const upper = accion.toUpperCase();
+  if (upper.includes('LOGIN') || upper.includes('AUTH')) return <KeyRound className="h-4 w-4" />;
+  if (upper.includes('CREATE') || upper.includes('INSERT')) return <Plus className="h-4 w-4" />;
+  if (upper.includes('UPDATE') || upper.includes('EDIT') || upper.includes('MODIFY')) return <FileText className="h-4 w-4" />;
+  if (upper.includes('DELETE') || upper.includes('REMOVE')) return <AlertCircle className="h-4 w-4" />;
+  if (upper.includes('APPROVE') || upper.includes('APROBAR')) return <CheckCircle className="h-4 w-4" />;
+  return <ScrollText className="h-4 w-4" />;
+}
+
+// Enhanced audit color-coding by severity level
+function getEnhancedAuditColor(nivel: string) {
+  if (nivel === 'ALTA') return 'text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-400 ring-1 ring-red-200 dark:ring-red-800';
+  if (nivel === 'MEDIA') return 'text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400 ring-1 ring-amber-200 dark:ring-amber-800';
+  return 'text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 ring-1 ring-teal-200 dark:ring-teal-800';
 }
 
 function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; accessToken: string | null; onNavigate: (view: ViewId) => void }) {
@@ -1090,12 +1129,14 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
   }>>([]);
   const [loading, setLoading] = useState(true);
 
-  // New state for system stats
+  // System stats state
   const [planillasCount, setPlanillasCount] = useState(0);
   const [incidenciasCount, setIncidenciasCount] = useState(0);
   const [usuariosActivos, setUsuariosActivos] = useState(0);
   const [areaDistribution, setAreaDistribution] = useState(AREA_DISTRIBUTION_DATA);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [lastPayrollDate, setLastPayrollDate] = useState<string>('');
+  const [nextDeadlineDate, setNextDeadlineDate] = useState<string>('');
 
   useEffect(() => {
     if (!accessToken) return;
@@ -1110,6 +1151,12 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
         if (dashRes.ok) {
           const dashData = await dashRes.json();
           setDashboardData(dashData.kpis);
+          // Extract next deadline from vencimientos
+          if (dashData.kpis?.vencimientos?.length > 0) {
+            const sorted = [...dashData.kpis.vencimientos].sort((a: { dias: number }, b: { dias: number }) => a.dias - b.dias);
+            const next = sorted.find((v: { dias: number }) => v.dias > 0);
+            if (next) setNextDeadlineDate(next.fecha);
+          }
         }
         if (perfilesRes.ok) {
           const perfData = await perfilesRes.json();
@@ -1154,6 +1201,16 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
               })
             : [];
           setPlanillasCount(thisMonth.length || (Array.isArray(planillas) ? planillas.length : 0));
+          // Get last payroll date
+          if (Array.isArray(planillas) && planillas.length > 0) {
+            const sorted = [...planillas].sort((a: { fecha_creacion?: string; fecha?: string }, b: { fecha_creacion?: string; fecha?: string }) => {
+              const da = new Date(a.fecha_creacion || a.fecha || '');
+              const db = new Date(b.fecha_creacion || b.fecha || '');
+              return db.getTime() - da.getTime();
+            });
+            const lastDate = sorted[0]?.fecha_creacion || sorted[0]?.fecha;
+            if (lastDate) setLastPayrollDate(lastDate);
+          }
         }
 
         if (incidenciasRes?.ok) {
@@ -1187,7 +1244,7 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
               const areaName = emp.area || emp.departamento || emp.seccion || 'Sin Área';
               areaMap[areaName] = (areaMap[areaName] || 0) + 1;
             });
-            const colors = ['bg-teal-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-amber-500', 'bg-violet-500', 'bg-rose-500', 'bg-indigo-500', 'bg-orange-500'];
+            const colors = ['bg-teal-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-amber-500', 'bg-violet-500', 'bg-rose-500', 'bg-lime-500', 'bg-orange-500'];
             const distEntries = Object.entries(areaMap)
               .sort(([, a], [, b]) => b - a)
               .slice(0, 8)
@@ -1210,7 +1267,7 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
     fetchStats();
   }, [accessToken]);
 
-  // Enhanced KPI data with gradients, sparklines and change indicators
+  // Enhanced KPI data with gradient borders, sparklines and change indicators
   const kpis = [
     {
       label: 'Empleados Activos',
@@ -1219,6 +1276,7 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
       color: 'text-teal-600 dark:text-teal-400',
       bg: 'bg-teal-50 dark:bg-teal-900/30',
       gradient: 'from-teal-50/80 to-white dark:from-teal-950/40 dark:to-slate-900',
+      borderAccent: 'border-l-teal-500',
       sparkColor: 'bg-teal-500',
       trend: 'up' as const,
       change: '+3.2%',
@@ -1228,10 +1286,11 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
       label: 'Perfiles de Puesto',
       value: totalPerfiles,
       icon: Briefcase,
-      color: 'text-violet-600 dark:text-violet-400',
-      bg: 'bg-violet-50 dark:bg-violet-900/30',
-      gradient: 'from-violet-50/80 to-white dark:from-violet-950/40 dark:to-slate-900',
-      sparkColor: 'bg-violet-500',
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bg: 'bg-emerald-50 dark:bg-emerald-900/30',
+      gradient: 'from-emerald-50/80 to-white dark:from-emerald-950/40 dark:to-slate-900',
+      borderAccent: 'border-l-emerald-500',
+      sparkColor: 'bg-emerald-500',
       trend: 'up' as const,
       change: '+1.5%',
       changeLabel: 'vs mes anterior',
@@ -1240,10 +1299,11 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
       label: 'Nómina del Mes',
       value: dashboardData?.nomina_mes ? `$${dashboardData.nomina_mes.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00',
       icon: Calculator,
-      color: 'text-emerald-600 dark:text-emerald-400',
-      bg: 'bg-emerald-50 dark:bg-emerald-900/30',
-      gradient: 'from-emerald-50/80 to-white dark:from-emerald-950/40 dark:to-slate-900',
-      sparkColor: 'bg-emerald-500',
+      color: 'text-cyan-600 dark:text-cyan-400',
+      bg: 'bg-cyan-50 dark:bg-cyan-900/30',
+      gradient: 'from-cyan-50/80 to-white dark:from-cyan-950/40 dark:to-slate-900',
+      borderAccent: 'border-l-cyan-500',
+      sparkColor: 'bg-cyan-500',
       trend: 'up' as const,
       change: '+2.5%',
       changeLabel: 'vs mes anterior',
@@ -1251,10 +1311,11 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
     {
       label: 'Cumplimiento',
       value: dashboardData ? `${dashboardData.cumplimiento_previsional}%` : '0%',
-      icon: FileText,
+      icon: Shield,
       color: 'text-amber-600 dark:text-amber-400',
       bg: 'bg-amber-50 dark:bg-amber-900/30',
       gradient: 'from-amber-50/80 to-white dark:from-amber-950/40 dark:to-slate-900',
+      borderAccent: 'border-l-amber-500',
       sparkColor: 'bg-amber-500',
       trend: (dashboardData?.cumplimiento_previsional ?? 0) >= 80 ? 'up' as const : 'down' as const,
       change: dashboardData && dashboardData.cumplimiento_previsional >= 80 ? '+5.0%' : '-2.3%',
@@ -1262,31 +1323,54 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
     },
   ];
 
-  const quickActions: Array<{ label: string; desc: string; icon: React.ElementType; color: string; bg: string; viewId: ViewId; roles: UserRole[] }> = [
-    { label: 'Directorio Empleados', desc: 'Buscar y gestionar empleados', icon: Users, color: 'text-teal-600', bg: 'bg-teal-50', viewId: '02-01', roles: ['ADMIN', 'ANALISTA', 'AUDITOR'] },
-    { label: 'Dashboard Nómina', desc: 'Ver resumen de nómina', icon: LayoutDashboard, color: 'text-emerald-600', bg: 'bg-emerald-50', viewId: '04-01', roles: ['ADMIN', 'ANALISTA', 'GERENCIA', 'AUDITOR'] },
-    { label: 'Calcular Nómina', desc: 'Iniciar cálculo del período', icon: Calculator, color: 'text-sky-600', bg: 'bg-sky-50', viewId: '04-03', roles: ['ADMIN', 'ANALISTA'] },
-    { label: 'Aprobar Nómina', desc: 'Revisar y aprobar nóminas', icon: CheckCircle, color: 'text-violet-600', bg: 'bg-violet-50', viewId: '04-04', roles: ['ADMIN', 'APROBADOR'] },
-    { label: 'Gestionar Usuarios', desc: 'Crear, editar y desactivar', icon: Users, color: 'text-rose-600', bg: 'bg-rose-50', viewId: '01-03', roles: ['ADMIN'] },
-    { label: 'Reportes', desc: 'Planillas ISSS, AFP, ISR', icon: BarChart3, color: 'text-amber-600', bg: 'bg-amber-50', viewId: '05-01', roles: ['ADMIN', 'GERENCIA', 'AUDITOR'] },
-    { label: 'Mi Portal', desc: 'Vacaciones, recibos, solicitudes', icon: Eye, color: 'text-emerald-600', bg: 'bg-emerald-50', viewId: '06-05', roles: ['EMPLEADO'] },
+  // Enhanced quick actions with gradient icon backgrounds and count summaries
+  const quickActions: Array<{ label: string; desc: string; icon: React.ElementType; color: string; bg: string; gradientBg: string; viewId: ViewId; roles: UserRole[]; count?: string }> = [
+    { label: 'Directorio Empleados', desc: 'Buscar y gestionar empleados', icon: Users, color: 'text-teal-700 dark:text-teal-300', bg: 'bg-teal-50', gradientBg: 'bg-gradient-to-br from-teal-400 to-teal-600', viewId: '02-01', roles: ['ADMIN', 'ANALISTA', 'AUDITOR'], count: `${dashboardData?.total_empleados_activos ?? 0} activos` },
+    { label: 'Dashboard Nómina', desc: 'Ver resumen de nómina', icon: LayoutDashboard, color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50', gradientBg: 'bg-gradient-to-br from-emerald-400 to-emerald-600', viewId: '04-01', roles: ['ADMIN', 'ANALISTA', 'GERENCIA', 'AUDITOR'], count: `${planillasCount} planillas` },
+    { label: 'Calcular Nómina', desc: 'Iniciar cálculo del período', icon: Calculator, color: 'text-cyan-700 dark:text-cyan-300', bg: 'bg-cyan-50', gradientBg: 'bg-gradient-to-br from-cyan-400 to-cyan-600', viewId: '04-03', roles: ['ADMIN', 'ANALISTA'] },
+    { label: 'Aprobar Nómina', desc: 'Revisar y aprobar nóminas', icon: CheckCircle, color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-50', gradientBg: 'bg-gradient-to-br from-amber-400 to-amber-600', viewId: '04-04', roles: ['ADMIN', 'APROBADOR'], count: incidenciasCount > 0 ? `${incidenciasCount} pendientes` : undefined },
+    { label: 'Gestionar Usuarios', desc: 'Crear, editar y desactivar', icon: Users, color: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50', gradientBg: 'bg-gradient-to-br from-rose-400 to-rose-600', viewId: '01-03', roles: ['ADMIN'], count: `${usuariosActivos} activos` },
+    { label: 'Reportes', desc: 'Planillas ISSS, AFP, ISR', icon: BarChart3, color: 'text-violet-700 dark:text-violet-300', bg: 'bg-violet-50', gradientBg: 'bg-gradient-to-br from-violet-400 to-violet-600', viewId: '05-01', roles: ['ADMIN', 'GERENCIA', 'AUDITOR'] },
+    { label: 'Mi Portal', desc: 'Vacaciones, recibos, solicitudes', icon: Eye, color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50', gradientBg: 'bg-gradient-to-br from-emerald-400 to-emerald-600', viewId: '06-05', roles: ['EMPLEADO'] },
   ];
 
   const visibleActions = quickActions.filter(a => a.roles.includes(user.rol));
 
-  const getAuditIcon = (accion: string) => {
-    if (accion.includes('LOGIN')) return <Shield className="h-3.5 w-3.5" />;
-    if (accion.includes('CREATE')) return <Plus className="h-3.5 w-3.5" />;
-    if (accion.includes('UPDATE')) return <FileText className="h-3.5 w-3.5" />;
-    if (accion.includes('DELETE')) return <AlertCircle className="h-3.5 w-3.5" />;
-    return <ScrollText className="h-3.5 w-3.5" />;
-  };
-
-  const getAuditColor = (nivel: string) => {
-    if (nivel === 'ALTA') return 'text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-400';
-    if (nivel === 'MEDIA') return 'text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400';
-    return 'text-slate-600 bg-slate-50 dark:bg-slate-800/50 dark:text-slate-400';
-  };
+  // System health status items
+  const systemHealthItems = [
+    {
+      label: 'Estado del Sistema',
+      value: 'Operativo',
+      statusColor: 'bg-emerald-500',
+      statusGlow: 'shadow-emerald-500/50',
+      icon: <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+      iconBg: 'bg-emerald-100 dark:bg-emerald-900/40',
+    },
+    {
+      label: 'Usuarios Activos',
+      value: statsLoading ? '...' : `${usuariosActivos}`,
+      statusColor: 'bg-emerald-500',
+      statusGlow: 'shadow-emerald-500/50',
+      icon: <Users className="h-4 w-4 text-teal-600 dark:text-teal-400" />,
+      iconBg: 'bg-teal-100 dark:bg-teal-900/40',
+    },
+    {
+      label: 'Última Nómina',
+      value: lastPayrollDate ? new Date(lastPayrollDate).toLocaleDateString('es-SV', { day: '2-digit', month: 'short' }) : 'N/A',
+      statusColor: lastPayrollDate ? 'bg-emerald-500' : 'bg-amber-500',
+      statusGlow: lastPayrollDate ? 'shadow-emerald-500/50' : 'shadow-amber-500/50',
+      icon: <CalendarDays className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />,
+      iconBg: 'bg-cyan-100 dark:bg-cyan-900/40',
+    },
+    {
+      label: 'Próximo Vencimiento',
+      value: nextDeadlineDate ? new Date(nextDeadlineDate).toLocaleDateString('es-SV', { day: '2-digit', month: 'short' }) : 'N/A',
+      statusColor: dashboardData?.vencimientos?.some((v: { dias: number }) => v.dias <= 5) ? 'bg-red-500' : 'bg-emerald-500',
+      statusGlow: dashboardData?.vencimientos?.some((v: { dias: number }) => v.dias <= 5) ? 'shadow-red-500/50' : 'shadow-emerald-500/50',
+      icon: <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
+      iconBg: 'bg-amber-100 dark:bg-amber-900/40',
+    },
+  ];
 
   // Compute bar chart values
   const maxValue = Math.max(...PAYROLL_TREND_DATA.map(d => d.value));
@@ -1322,121 +1406,156 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
     }
   };
 
+  // Urgency color for vencimientos countdown
+  const getUrgencyClasses = (dias: number) => {
+    if (dias <= 3) return { bg: 'bg-gradient-to-r from-red-50 to-red-100/50 dark:from-red-950/30 dark:to-red-900/20', border: 'border-red-200 dark:border-red-800', text: 'text-red-600 dark:text-red-400', countdown: 'text-red-600 dark:text-red-400', dot: 'bg-red-500' };
+    if (dias <= 7) return { bg: 'bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20', border: 'border-amber-200 dark:border-amber-800', text: 'text-amber-600 dark:text-amber-400', countdown: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-500' };
+    return { bg: 'bg-gradient-to-r from-emerald-50 to-emerald-100/50 dark:from-emerald-950/30 dark:to-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800', text: 'text-emerald-600 dark:text-emerald-400', countdown: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' };
+  };
+
+  // Greeting and date
+  const greeting = getGreeting();
+  const todayFormatted = getSpanishDate();
+  const motivationalMsg = getMotivationalMessage(dashboardData?.cumplimiento_previsional);
+
   return (
     <div className="space-y-6 stagger-children">
-      {/* Welcome banner - Animated gradient with decorative shapes */}
-      <div className="bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg relative overflow-hidden animate-fade-in">
-        {/* Animated floating shapes */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3 animate-float" />
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" style={{ animationDelay: '1s' }} />
-        <div className="absolute top-1/2 right-1/4 w-16 h-16 bg-white/[0.03] rounded-lg rotate-12 animate-float" style={{ animationDelay: '2s' }} />
-        <div className="absolute top-1/4 left-1/3 w-8 h-8 bg-white/[0.04] rounded-full animate-float" style={{ animationDelay: '0.5s' }} />
+      {/* ═══════════════════════════════════════════════════════════
+          1. ENHANCED WELCOME BANNER - Time-based greeting, Spanish date, motivational message, gradient
+          ═══════════════════════════════════════════════════════════ */}
+      <div className="relative rounded-xl overflow-hidden shadow-lg animate-fade-in">
+        {/* Gradient background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-700 via-teal-600 to-emerald-800" />
+        {/* Decorative shapes */}
+        <div className="absolute top-0 right-0 w-72 h-72 bg-white/5 rounded-full -translate-y-1/3 translate-x-1/3 animate-float" />
+        <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+        <div className="absolute top-1/2 right-1/4 w-20 h-20 bg-white/[0.03] rounded-lg rotate-12 animate-float" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/4 left-1/3 w-10 h-10 bg-white/[0.04] rounded-full animate-float" style={{ animationDelay: '0.5s' }} />
         {/* Shimmer overlay */}
-        <div className="absolute inset-0 animate-shimmer opacity-30" />
-        <div className="relative z-10">
-          <h1 className="text-2xl font-bold">
-            Bienvenido, {user.nombre}
-          </h1>
-          <p className="text-emerald-100 mt-1">
-            Sistema de Nómina y Perfiles de Puestos — República de El Salvador
-          </p>
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            <Badge variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30">
-              {user.rol}
-          </Badge>
-          <Badge variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30">
-            {new Date().toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </Badge>
-        </div>
+        <div className="absolute inset-0 animate-shimmer opacity-20" />
+        {/* Content */}
+        <div className="relative z-10 p-6 sm:p-8">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div>
+              <p className="text-emerald-200 text-sm font-medium mb-1">{greeting}</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white">
+                {user.nombre} {user.apellido}
+              </h1>
+              <p className="text-emerald-100/80 mt-1 text-sm">
+                Sistema de Nómina y Perfiles de Puestos — República de El Salvador
+              </p>
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                <Badge variant="secondary" className="bg-white/15 text-white border-white/20 hover:bg-white/25 backdrop-blur-sm">
+                  <Shield className="h-3 w-3 mr-1" />
+                  {user.rol}
+                </Badge>
+                <Badge variant="secondary" className="bg-white/15 text-white border-white/20 hover:bg-white/25 backdrop-blur-sm">
+                  <CalendarDays className="h-3 w-3 mr-1" />
+                  {todayFormatted}
+                </Badge>
+              </div>
+            </div>
+            {/* Compliance indicator in banner */}
+            {dashboardData && (
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2.5 border border-white/10">
+                <div className={`w-3 h-3 rounded-full animate-pulse ${dashboardData.semaforo === 'verde' ? 'bg-emerald-400 shadow-lg shadow-emerald-400/50' : dashboardData.semaforo === 'amarillo' ? 'bg-amber-400 shadow-lg shadow-amber-400/50' : 'bg-red-400 shadow-lg shadow-red-400/50'}`} />
+                <div>
+                  <p className="text-xs text-white/70">Cumplimiento</p>
+                  <p className="text-lg font-bold text-white">{dashboardData.cumplimiento_previsional}%</p>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Motivational / legal compliance message */}
+          <div className="mt-4 p-3 rounded-lg bg-white/[0.08] backdrop-blur-sm border border-white/10">
+            <div className="flex items-start gap-2">
+              <Info className="h-4 w-4 text-emerald-200 shrink-0 mt-0.5" />
+              <p className="text-xs text-emerald-100/90 leading-relaxed">{motivationalMsg}</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* System Status / Stats Row */}
+      {/* ═══════════════════════════════════════════════════════════
+          3. SYSTEM STATUS WIDGET - Health indicators with colored dots
+          ═══════════════════════════════════════════════════════════ */}
       <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-800/80">
-        <CardContent className="p-4">
-          <div className="grid grid-cols-3 gap-3 sm:gap-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 shrink-0">
-                <CalendarDays className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div className="min-w-0">
-                {statsLoading ? (
-                  <div className="h-5 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                ) : (
-                  <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">{planillasCount}</p>
-                )}
-                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">Planillas este mes</p>
-              </div>
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="p-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/40">
+              <Shield className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40 shrink-0">
-                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Estado del Sistema</h3>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            {systemHealthItems.map((item) => (
+              <div key={item.label} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/60 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/50">
+                <div className={`p-2 rounded-lg ${item.iconBg} shrink-0`}>
+                  {item.icon}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <div className={`w-2 h-2 rounded-full ${item.statusColor} shadow-sm ${item.statusGlow} animate-pulse`} />
+                    {statsLoading && item.label !== 'Estado del Sistema' ? (
+                      <div className="h-4 w-12 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                    ) : (
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{item.value}</p>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{item.label}</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                {statsLoading ? (
-                  <div className="h-5 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                ) : (
-                  <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">{incidenciasCount}</p>
-                )}
-                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">Incidencias pendientes</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-900/40 shrink-0">
-                <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-              </div>
-              <div className="min-w-0">
-                {statsLoading ? (
-                  <div className="h-5 w-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-                ) : (
-                  <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">{usuariosActivos}</p>
-                )}
-                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">Usuarios activos</p>
-              </div>
-            </div>
+            ))}
           </div>
         </CardContent>
       </Card>
 
-      {/* Enhanced KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* ═══════════════════════════════════════════════════════════
+          2. ENHANCED KPI CARDS - Gradient left border, sparkline bars, skeleton, change indicators
+          ═══════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="shadow-sm">
-              <CardContent className="p-4 sm:p-5">
-                <div className="animate-pulse">
-                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24 mb-2" />
-                  <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-16" />
+            <Card key={i} className="shadow-sm border-l-4 border-l-slate-200 dark:border-l-slate-700">
+              <CardContent className="p-4 sm:p-6">
+                <div className="animate-pulse space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-20" />
+                    <div className="h-8 w-8 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+                  </div>
+                  <div className="h-7 bg-slate-200 dark:bg-slate-700 rounded w-24" />
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-10" />
+                    <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-16" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
           ))
         ) : (
           kpis.map(kpi => (
-            <Card key={kpi.label} className={`shadow-sm card-hover-lift bg-gradient-to-br ${kpi.gradient} border-slate-200/60 dark:border-slate-700/40`}>
-              <CardContent className="p-4 sm:p-5">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{kpi.label}</p>
-                      <SparklineDots trend={kpi.trend} color={kpi.sparkColor} />
-                    </div>
-                    <p className="text-xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1 truncate">{kpi.value}</p>
-                    <div className="flex items-center gap-1 mt-1.5">
-                      {kpi.trend === 'up' ? (
-                        <TrendingUp className="h-3 w-3 text-emerald-500" />
-                      ) : kpi.trend === 'down' ? (
-                        <TrendingDown className="h-3 w-3 text-red-500" />
-                      ) : null}
-                      <span className={`text-[10px] sm:text-xs font-medium ${kpi.trend === 'up' ? 'text-emerald-600 dark:text-emerald-400' : kpi.trend === 'down' ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
-                        {kpi.change}
-                      </span>
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 hidden sm:inline">{kpi.changeLabel}</span>
-                    </div>
+            <Card key={kpi.label} className={`shadow-sm card-hover-lift bg-gradient-to-br ${kpi.gradient} border-slate-200/60 dark:border-slate-700/40 border-l-4 ${kpi.borderAccent} transition-all duration-200 hover:shadow-md`}>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">{kpi.label}</p>
+                    <SparklineBars trend={kpi.trend} color={kpi.sparkColor} />
                   </div>
-                  <div className={`p-2 sm:p-3 rounded-xl ${kpi.bg} shrink-0`}>
-                    <kpi.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${kpi.color}`} />
+                  <div className={`p-2 sm:p-2.5 rounded-xl ${kpi.bg} shrink-0 transition-transform duration-200 group-hover:scale-110`}>
+                    <kpi.icon className={`h-5 w-5 sm:h-5 sm:w-5 ${kpi.color}`} />
                   </div>
+                </div>
+                <p className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 truncate">{kpi.value}</p>
+                <div className="flex items-center gap-1.5 mt-2">
+                  {kpi.trend === 'up' ? (
+                    <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                  ) : kpi.trend === 'down' ? (
+                    <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+                  ) : null}
+                  <span className={`text-xs font-semibold ${kpi.trend === 'up' ? 'text-emerald-600 dark:text-emerald-400' : kpi.trend === 'down' ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
+                    {kpi.change}
+                  </span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">{kpi.changeLabel}</span>
                 </div>
               </CardContent>
             </Card>
@@ -1444,8 +1563,10 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
         )}
       </div>
 
-      {/* Payroll Trend Chart + Area Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* ═══════════════════════════════════════════════════════════
+          8. PAYROLL TREND CHART + AREA DISTRIBUTION MINI-CHART
+          ═══════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Mini Payroll Trend Chart */}
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
@@ -1469,7 +1590,7 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
               </div>
               {/* Bars */}
               <div className="absolute inset-0 flex items-end gap-1 sm:gap-1.5 pl-10 sm:pl-12 pb-5 pt-1">
-                {PAYROLL_TREND_DATA.map((item, idx) => {
+                {PAYROLL_TREND_DATA.map((item) => {
                   const heightPct = (item.value / maxValue) * 100;
                   return (
                     <div key={item.month} className="flex-1 flex flex-col items-center justify-end h-full group">
@@ -1537,9 +1658,9 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
                         <span className="text-xs text-slate-600 dark:text-slate-300 truncate">{area.name}</span>
                         <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 ml-1">{area.count}</span>
                       </div>
-                      <div className="h-1 bg-slate-100 dark:bg-slate-800 rounded-full mt-0.5">
+                      <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-0.5">
                         <div
-                          className={`h-1 rounded-full ${area.color} opacity-60`}
+                          className={`h-1.5 rounded-full ${area.color} opacity-70 transition-all duration-300`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -1552,7 +1673,9 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
         </Card>
       </div>
 
-      {/* Announcements / Alerts Section */}
+      {/* ═══════════════════════════════════════════════════════════
+          ANNOUNCEMENTS / ALERTS SECTION
+          ═══════════════════════════════════════════════════════════ */}
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1565,7 +1688,7 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
             {MOCK_ANNOUNCEMENTS.map((announcement) => (
               <div
                 key={announcement.id}
-                className={`flex items-start gap-3 p-3 rounded-lg border-l-4 ${getSeverityStyle(announcement.severity)}`}
+                className={`flex items-start gap-3 p-3 rounded-lg border-l-4 ${getSeverityStyle(announcement.severity)} transition-all duration-200 hover:shadow-sm`}
               >
                 <div className="shrink-0 mt-0.5">
                   {getSeverityIcon(announcement.severity)}
@@ -1586,100 +1709,177 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
         </CardContent>
       </Card>
 
-      {/* Compliance Semaphore & Deadlines */}
+      {/* ═══════════════════════════════════════════════════════════
+          5. ENHANCED COMPLIANCE SEMAPHORE & 7. ENHANCED VENCIMIENTOS
+          ═══════════════════════════════════════════════════════════ */}
       {dashboardData && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card className="shadow-sm">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          {/* Enhanced Compliance Semaphore */}
+          <Card className="shadow-sm overflow-hidden">
+            {/* Colored top bar based on semaphore */}
+            <div className={`h-1.5 ${
+              dashboardData.semaforo === 'verde' ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' :
+              dashboardData.semaforo === 'amarillo' ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+              'bg-gradient-to-r from-red-400 to-red-600'
+            }`} />
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Shield className="h-4 w-4 text-slate-500" />
+                <Shield className="h-4 w-4 text-emerald-500" />
                 Semáforo de Cumplimiento
-                {/* Traffic light dots */}
-                <div className="flex items-center gap-1 ml-auto p-1 bg-slate-900 dark:bg-slate-700 rounded-full">
-                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'rojo' ? 'bg-red-500 shadow-sm shadow-red-500/50' : 'bg-red-900/40'}`} />
-                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
-                  <div className={`w-2.5 h-2.5 rounded-full ${dashboardData.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
+                {/* Prominent animated traffic light */}
+                <div className="flex items-center gap-1.5 ml-auto p-1.5 bg-slate-900 dark:bg-slate-700 rounded-full shadow-inner">
+                  <div className={`w-3 h-3 rounded-full transition-all duration-500 ${dashboardData.semaforo === 'rojo' ? 'bg-red-500 shadow-md shadow-red-500/60 animate-pulse' : 'bg-red-900/40'}`} />
+                  <div className={`w-3 h-3 rounded-full transition-all duration-500 ${dashboardData.semaforo === 'amarillo' ? 'bg-amber-400 shadow-md shadow-amber-400/60 animate-pulse' : 'bg-amber-900/40'}`} />
+                  <div className={`w-3 h-3 rounded-full transition-all duration-500 ${dashboardData.semaforo === 'verde' ? 'bg-emerald-400 shadow-md shadow-emerald-400/60 animate-pulse' : 'bg-emerald-900/40'}`} />
                 </div>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2.5">
-              {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => (
-                <div key={c.nombre} className="flex items-center justify-between p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
-                  <div className="flex items-center gap-2">
-                    {c.presentado ? (
-                      <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-500 shrink-0" />
-                    )}
-                    <span className="text-sm text-slate-700 dark:text-slate-300">{c.nombre}</span>
-                  </div>
-                  <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
-                    {c.presentado ? 'Presentado' : 'Pendiente'}
-                  </Badge>
+            <CardContent className="space-y-3">
+              {/* Overall compliance progress bar */}
+              <div className="p-3 rounded-lg bg-slate-50/80 dark:bg-slate-800/50">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Cumplimiento General</span>
+                  <span className={`text-sm font-bold ${dashboardData.cumplimiento_previsional >= 80 ? 'text-emerald-600 dark:text-emerald-400' : dashboardData.cumplimiento_previsional >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {dashboardData.cumplimiento_previsional}%
+                  </span>
                 </div>
-              ))}
+                <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-2 rounded-full transition-all duration-700 ${
+                      dashboardData.cumplimiento_previsional >= 80 ? 'bg-gradient-to-r from-emerald-400 to-emerald-600' :
+                      dashboardData.cumplimiento_previsional >= 50 ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+                      'bg-gradient-to-r from-red-400 to-red-600'
+                    }`}
+                    style={{ width: `${dashboardData.cumplimiento_previsional}%` }}
+                  />
+                </div>
+              </div>
+              {/* Compliance items grid with progress bars */}
+              <div className="grid grid-cols-1 gap-2">
+                {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => (
+                  <div key={c.nombre} className="p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        {c.presentado ? (
+                          <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                        )}
+                        <span className="text-sm text-slate-700 dark:text-slate-300">{c.nombre}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500">Peso: {c.peso}%</span>
+                        <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+                          {c.presentado ? 'Presentado' : 'Pendiente'}
+                        </Badge>
+                      </div>
+                    </div>
+                    {/* Progress bar for each compliance item */}
+                    <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-1.5 rounded-full transition-all duration-500 ${c.presentado ? 'bg-emerald-500' : 'bg-red-400'}`}
+                        style={{ width: c.presentado ? '100%' : `${Math.max(c.peso * 0.3, 5)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm">
+          {/* Enhanced Vencimientos with countdown display and urgency gradient */}
+          <Card className="shadow-sm overflow-hidden">
+            <div className="h-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-emerald-500" />
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Clock className="h-4 w-4 text-slate-500" />
+                <CalendarDays className="h-4 w-4 text-amber-500" />
                 Próximos Vencimientos
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2.5">
+            <CardContent className="space-y-3">
               {dashboardData.vencimientos?.length === 0 ? (
-                <div className="flex items-center justify-center py-6 text-emerald-600">
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                  <span className="text-sm font-medium">Todos los pagos al día</span>
+                <div className="flex flex-col items-center justify-center py-8">
+                  <CheckCircle className="h-10 w-10 text-emerald-500 mb-2" />
+                  <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Todos los pagos al día</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">No hay vencimientos próximos</p>
                 </div>
               ) : (
-                dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => (
-                  <div key={v.nombre} className={`flex items-center justify-between p-2.5 rounded-lg border ${
-                    v.dias <= 5 ? 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20' : 'border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50'
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${v.dias <= 5 ? 'bg-red-500' : v.dias <= 10 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{v.nombre}</span>
+                dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => {
+                  const urgency = getUrgencyClasses(v.dias);
+                  return (
+                    <div key={v.nombre} className={`p-3 rounded-lg border ${urgency.bg} ${urgency.border} transition-all duration-200 hover:shadow-sm`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${urgency.dot === 'bg-red-500' ? 'bg-red-100 dark:bg-red-900/30' : urgency.dot === 'bg-amber-500' ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-emerald-100 dark:bg-emerald-900/30'}`}>
+                            <CalendarDays className={`h-4 w-4 ${urgency.countdown}`} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{v.nombre}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(v.fecha).toLocaleDateString('es-SV', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                          </div>
+                        </div>
+                        <div className="text-center shrink-0 ml-2">
+                          {v.dias > 0 ? (
+                            <>
+                              <p className={`text-2xl sm:text-3xl font-bold ${urgency.countdown}`}>{v.dias}</p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 -mt-0.5">días</p>
+                            </>
+                          ) : (
+                            <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs">Vencido</Badge>
+                          )}
+                        </div>
+                      </div>
+                      {/* Urgency progress bar */}
+                      {v.dias > 0 && (
+                        <div className="mt-2 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-1 rounded-full transition-all duration-500 ${
+                              v.dias <= 3 ? 'bg-gradient-to-r from-red-400 to-red-600' :
+                              v.dias <= 7 ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+                              'bg-gradient-to-r from-emerald-400 to-emerald-600'
+                            }`}
+                            style={{ width: `${Math.min((1 - v.dias / 30) * 100, 100)}%` }}
+                          />
+                        </div>
+                      )}
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{new Date(v.fecha).toLocaleDateString('es-SV')}</p>
-                      <p className={`text-xs ${v.dias <= 5 ? 'text-red-500 font-semibold' : 'text-slate-400 dark:text-slate-500'}`}>
-                        {v.dias > 0 ? `${v.dias} días` : 'Vencido'}
-                      </p>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Quick actions and recent activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* ═══════════════════════════════════════════════════════════
+          4. ENHANCED QUICK ACTIONS + 6. ENHANCED AUDIT TIMELINE
+          ═══════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        {/* Enhanced Quick Actions */}
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <ListChecks className="h-4 w-4 text-slate-500" />
+              <ListChecks className="h-4 w-4 text-emerald-500" />
               Acciones Rápidas
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {visibleActions.map(action => (
                 <button
                   key={action.viewId + action.label}
                   onClick={() => onNavigate(action.viewId)}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-all cursor-pointer text-left border border-transparent hover:border-slate-200 dark:hover:border-slate-600 group card-hover-lift"
+                  className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-all duration-200 cursor-pointer text-left border border-slate-100 dark:border-slate-700/50 hover:border-emerald-200 dark:hover:border-emerald-700/50 hover:shadow-md hover:scale-[1.02] active:scale-[0.98] group"
                 >
-                  <div className={`p-2.5 rounded-lg ${action.bg} dark:opacity-80 group-hover:scale-110 transition-transform`}>
-                    <action.icon className={`h-5 w-5 ${action.color}`} />
+                  <div className={`p-2.5 rounded-xl ${action.gradientBg} shrink-0 shadow-sm group-hover:shadow-md transition-all duration-200`}>
+                    <action.icon className="h-5 w-5 text-white" />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{action.label}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{action.desc}</p>
+                    {action.count && (
+                      <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">{action.count}</p>
+                    )}
                   </div>
                 </button>
               ))}
@@ -1687,10 +1887,11 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
           </CardContent>
         </Card>
 
+        {/* Enhanced Audit Timeline */}
         <Card className="shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <ScrollText className="h-4 w-4 text-slate-500" />
+              <ScrollText className="h-4 w-4 text-emerald-500" />
               Actividad Reciente
             </CardTitle>
           </CardHeader>
@@ -1701,27 +1902,40 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
                 <p className="text-sm">Sin actividad reciente</p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {auditEntries.map((entry) => (
-                  <div key={entry.id} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
-                    <div className={`p-1.5 rounded-md shrink-0 mt-0.5 ${getAuditColor(entry.nivel_criticidad)}`}>
-                      {getAuditIcon(entry.accion)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
-                        {entry.accion.replace(/_/g, ' ')}
+              <div className="relative max-h-80 overflow-y-auto pr-1">
+                {/* Timeline connecting line */}
+                <div className="absolute left-5 top-3 bottom-3 w-px bg-slate-200 dark:bg-slate-700" />
+                <div className="space-y-1">
+                  {auditEntries.map((entry, idx) => (
+                    <div key={entry.id} className="relative flex items-start gap-3 p-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-150 group">
+                      {/* Timeline node */}
+                      <div className={`relative z-10 p-2 rounded-full shrink-0 mt-0.5 ${getEnhancedAuditColor(entry.nivel_criticidad)} shadow-sm group-hover:shadow-md transition-shadow duration-200`}>
+                        {getEnhancedAuditIcon(entry.accion)}
+                      </div>
+                      {/* Content */}
+                      <div className="min-w-0 flex-1 pt-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            {entry.accion.replace(/_/g, ' ')}
+                          </p>
+                          {entry.nivel_criticidad === 'ALTA' && (
+                            <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-[9px] py-0 px-1.5">Alta</Badge>
+                          )}
+                        </div>
                         {entry.tabla_afectada && (
-                          <span className="text-slate-400 dark:text-slate-500 font-normal"> · {entry.tabla_afectada}</span>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                            Tabla: <span className="font-mono text-slate-500 dark:text-slate-400">{entry.tabla_afectada}</span>
+                          </p>
                         )}
-                      </p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        {entry.usuario?.nombre ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : entry.usuario_email || 'Sistema'}
-                        <span className="mx-1">·</span>
-                        {new Date(entry.fecha_accion).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          {entry.usuario?.nombre ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : entry.usuario_email || 'Sistema'}
+                          <span className="mx-1">·</span>
+                          {new Date(entry.fecha_accion).toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
@@ -1784,7 +1998,7 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
       case '01-03':
         return <UserManagement accessToken={accessToken} />;
       case '04-01':
-        return <PayrollDashboard accessToken={accessToken || ''} userRole={user.rol} />;
+        return <PayrollDashboard accessToken={accessToken || ''} userRole={user.rol} onNavigate={setCurrentView} />;
       case '04-02':
         return <PayrollPeriods accessToken={accessToken || ''} userRole={user.rol} />;
       case '04-03':
