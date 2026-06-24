@@ -2766,3 +2766,65 @@ Handles multiple data formats from seed/DB:
 2. Consider adding "Export PDF" button using pdf skill for printable profile documents
 3. Consider adding comparison view between two profiles (side-by-side)
 4. Add "Copy link" or "Share" functionality
+
+---
+
+## Task 8-b: Fix Accessibility Error in ProfileDetailDialog (2026-06-24)
+
+**Task ID**: 8-b  
+**Agent**: Code Agent  
+**Task**: Fix `DialogContent requires a DialogTitle for the component to be accessible for screen reader users` console error
+
+### Problem
+The newly created `ProfileDetailDialog.tsx` component (Task 8) used a custom hero header with the job title visually displayed, but did not include the required `DialogTitle` component from Radix UI. This triggered a console error:
+
+```
+DialogContent requires a DialogTitle for the component to be accessible for screen reader users.
+If you want to hide the DialogTitle, you can wrap it with our VisuallyHidden component.
+```
+
+This is a Radix UI accessibility requirement — every `DialogContent` must contain a `DialogTitle` so screen readers can announce the dialog's purpose.
+
+### Fix Applied
+Added a visually-hidden `DialogTitle` and `DialogDescription` directly inside `DialogContent`, before the hero header. Used Tailwind's `sr-only` class to hide them visually while keeping them accessible to screen readers:
+
+```tsx
+<DialogContent ...>
+  {/* Accessible title/description for screen readers (visually hidden, but required by Radix Dialog) */}
+  <DialogTitle className="sr-only">
+    {perfil.codigo} - {perfil.nombre_puesto}
+  </DialogTitle>
+  <DialogDescription className="sr-only">
+    Detalle del perfil de puesto {perfil.nombre_puesto} en el área de {perfil.area?.nombre || 'sin área'},
+    estado {perfil.estado}, versión {perfil.version}, con {perfil._count?.empleados_perfil ?? 0} empleado(s) asignado(s).
+  </DialogDescription>
+
+  {/* Hero Header with gradient */}
+  ...
+```
+
+Also removed the now-unused `DialogHeader` import (since the title/description are placed directly, not wrapped in a `DialogHeader` div which has layout styles like `flex flex-col gap-2 text-center sm:text-left`).
+
+### Why This Approach
+- Used `sr-only` (Tailwind) instead of `VisuallyHidden` (Radix component) to avoid an extra import — both produce equivalent visually-hidden output.
+- Placed `DialogTitle` and `DialogDescription` directly as siblings of the hero header, rather than wrapping them in `DialogHeader`, to avoid any unintended layout side-effects from the header's flex styles.
+- Provided meaningful text in both: the title is `{codigo} - {nombre_puesto}` and the description summarizes key profile attributes (area, estado, versión, empleado count) so screen reader users get useful context on dialog open.
+
+### Verification
+- ✅ `bun run lint` passes with 0 errors
+- ✅ Dialog opens correctly via agent-browser (`document.querySelector('[role=dialog]')` returns truthy)
+- ✅ Title slot present in DOM (`document.querySelector('[role=dialog] [data-slot=dialog-title]')` returns truthy)
+- ✅ VLM analysis confirms "dialog is open... layout appears intact with no visual regression"
+- ✅ No accessibility errors in dev log
+- ✅ All API calls returning 200
+
+### Files Modified
+- `/src/components/modules/ProfileDetailDialog.tsx`:
+  - Added `DialogTitle` (sr-only) and `DialogDescription` (sr-only) inside `DialogContent`
+  - Removed unused `DialogHeader` from imports
+
+### Stage Summary
+- Accessibility console error resolved
+- Dialog now meets Radix UI's a11y requirements
+- Visual layout unchanged
+- All functionality preserved

@@ -9,7 +9,7 @@ import {
   ArrowUpRight, Quote, ScrollText,
 } from 'lucide-react';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog, DialogContent, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -290,6 +290,15 @@ export default function ProfileDetailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-5xl max-h-[95vh] p-0 overflow-hidden gap-0 dark:bg-slate-900 dark:border-slate-800">
+        {/* Accessible title/description for screen readers (visually hidden, but required by Radix Dialog) */}
+        <DialogTitle className="sr-only">
+          {perfil.codigo} - {perfil.nombre_puesto}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          Detalle del perfil de puesto {perfil.nombre_puesto} en el área de {perfil.area?.nombre || 'sin área'},
+          estado {perfil.estado}, versión {perfil.version}, con {perfil._count?.empleados_perfil ?? 0} empleado(s) asignado(s).
+        </DialogDescription>
+
         {/* Hero Header with gradient */}
         <div className={`relative bg-gradient-to-br ${getAreaGradient(perfil.area?.nombre || '')} text-white overflow-hidden`}>
           {/* Decorative circles */}
