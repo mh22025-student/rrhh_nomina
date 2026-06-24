@@ -3105,3 +3105,37 @@ Se usó agent-browser para navegar como ADMIN (admin@nomina.gob.sv) y VLM (glm-4
 - El dashboard de inicio del administrador ahora muestra datos reales y correctos en todos sus gráficos
 - El dashboard detallado de nómina (04-01) también mejorado con colores distintos, datos reales y alineación correcta
 - Todos los gráficos verificados visualmente con VLM
+
+---
+Task ID: dash-compliance-fix-1
+Agent: main (Z.ai Code)
+Task: Revisar en el dashboard principal (admin) las secciones "Semáforo de Cumplimiento" y "Próximos Vencimientos" y verificar que funcionen.
+
+Work Log:
+- Inspeccioné WelcomeDashboard en /src/app/page.tsx y la API /api/nomina/dashboard/route.ts
+- Detecté bug de mapeo de datos: la API devuelve `cumplimientos` y `vencimientos` en el top-level del response, PERO el frontend hace `setDashboardData(dashData.kpis)` (solo asigna `kpis`, que no contiene esas dos listas)
+- Verifiqué visualmente con agent-browser (login admin@nomina.gob.sv): confirmé que la card "Semáforo de Cumplimiento" solo mostraba "Cumplimiento General 0%" sin listar ISSS/AFP/ISR, y la card "Próximos Vencimientos" estaba completamente vacía
+- Detecté 2 bugs adicionales:
+  1) `getMotivationalMessage(0)` retornaba "Cumplimiento laboral excelente" por la condición `!compliance` (0 es falsy)
+  2) `complianceStatus` mostraba "Todo al día" aunque hubiera vencidos, porque filtraba primero `dias > 0` antes de detectar overdue
+  3) `nextDeadlineDate` nunca se seteaba porque accedía a `dashData.kpis.vencimientos` (inexistente) en vez de `dashData.vencimientos`
+- Apliqué fixes en /src/app/page.tsx:
+  * Línea ~1733: Cambié `setDashboardData(dashData.kpis)` por spread-merge `{...dashData.kpis, cumplimientos: dashData.cumplimientos, vencimientos: dashData.vencimientos}` con validación Array.isArray
+  * Línea ~1744: Cambié `dashData.kpis?.vencimientos?.length > 0` por `Array.isArray(dashData.vencimientos) && dashData.vencimientos.length > 0`
+  * Línea ~1593: `getMotivationalMessage` ahora valida explícitamente `=== undefined || === null` antes del check `>= 90`, evitando que 0% active el mensaje "excelente"; agregado mensaje "Cargando..." para undefined
+  * Línea ~1701: `complianceStatus` ahora PRIMERO detecta items con `dias <= 0` y retorna `{level: 'red', label: 'N Vencido(s)'}` antes de filtrar upcoming. Solo si no hay vencidos procede con la lógica original.
+- Verifiqué post-fix con agent-browser:
+  * Semáforo de Cumplimiento ahora muestra "Cumplimiento General 0%" + ISSS (Pendiente, Peso 33%) + AFP (Pendiente, Peso 33%) + ISR (Pendiente, Peso 34%)
+  * Próximos Vencimientos ahora muestra ISSS (lun 15 jun 2026, Vencido) + AFP (sáb 20 jun 2026, Vencido) + ISR F-910 (vie 10 jul 2026, 16 días)
+  * Estado del Día ahora muestra "2 Vencidos" (antes "Todo al día")
+  * Mensaje motivacional ahora muestra "Alerta: Cumplimiento por debajo del mínimo..." (antes "Cumplimiento laboral excelente...")
+  * Indicador "Próximo Vencimiento: 10-jul" ahora se setea correctamente (antes N/A)
+- `bun run lint` pasa con 0 errores
+- Dev server corriendo limpio en :3000, sin errores runtime ni en consola del navegador
+
+Stage Summary:
+- Tipo de bug: Frontend-API contract mismatch en WelcomeDashboard (page.tsx). El PayrollDashboard.tsx ya leía correctamente desde el top-level, por lo que el impacto era exclusivamente en el home/bienvenida del admin.
+- Root cause: `setDashboardData(dashData.kpis)` descartaba `cumplimientos` y `vencimientos` del payload.
+- Artefactos: /src/app/page.tsx editado (3 funciones/bloques), no se tocaron APIs.
+- Evidencia visual: /home/z/my-project/qa-bug-compliance-1-before.png (vacío) y /home/z/my-project/qa-bug-compliance-2-after.png + qa-bug-compliance-3-cards.png (con datos).
+- Impacto usuario: las obligaciones legales mensuales (ISSS día 15, AFP día 20, ISR F-910 día 10 mes siguiente) ahora son visibles en el dashboard del admin, permitiendo acción correctiva.

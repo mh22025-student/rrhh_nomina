@@ -1592,7 +1592,8 @@ function getSpanishDate(): string {
 
 // Get motivational message based on compliance level
 function getMotivationalMessage(compliance: number | undefined): string {
-  if (!compliance || compliance >= 90) return 'Cumplimiento laboral excelente. Continúe manteniendo los estándares del Código de Trabajo.';
+  if (compliance === undefined || compliance === null) return 'Cargando información de cumplimiento laboral...';
+  if (compliance >= 90) return 'Cumplimiento laboral excelente. Continúe manteniendo los estándares del Código de Trabajo.';
   if (compliance >= 70) return 'Buen nivel de cumplimiento. Revise los elementos pendientes para alcanzar la conformidad total.';
   if (compliance >= 50) return 'Atención: Hay obligaciones laborales pendientes. Priorice los vencimientos próximos.';
   return 'Alerta: Cumplimiento por debajo del mínimo. Acción inmediata requerida según legislación salvadoreña.';
@@ -1702,11 +1703,22 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
     if (!dashboardData?.vencimientos || dashboardData.vencimientos.length === 0) {
       return { level: 'green' as const, label: 'Todo al día', daysUntil: null, nextName: '' };
     }
+    // First check for any overdue items (dias === 0 means already past deadline)
+    const overdue = dashboardData.vencimientos.filter(v => v.dias <= 0);
+    if (overdue.length > 0) {
+      return {
+        level: 'red' as const,
+        label: `${overdue.length} Vencido${overdue.length > 1 ? 's' : ''}`,
+        daysUntil: 0,
+        nextName: overdue[0]?.nombre || '',
+      };
+    }
+    // Then sort upcoming deadlines to find the closest one
     const upcoming = dashboardData.vencimientos
       .filter(v => v.dias > 0)
       .sort((a, b) => a.dias - b.dias);
     if (upcoming.length === 0) {
-      return { level: 'red' as const, label: 'Vencidos', daysUntil: 0, nextName: dashboardData.vencimientos[0]?.nombre || '' };
+      return { level: 'green' as const, label: 'Todo al día', daysUntil: null, nextName: '' };
     }
     const next = upcoming[0];
     if (next.dias <= 3) {
@@ -1730,13 +1742,20 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
         ]);
         if (dashRes.ok) {
           const dashData = await dashRes.json();
-          setDashboardData(dashData.kpis);
+          // Merge kpis with cumplimientos and vencimientos (which are returned at
+          // top-level by the API, not inside kpis) so the WelcomeDashboard can
+          // access them all from a single state object.
+          setDashboardData({
+            ...(dashData.kpis ?? {}),
+            cumplimientos: Array.isArray(dashData.cumplimientos) ? dashData.cumplimientos : [],
+            vencimientos: Array.isArray(dashData.vencimientos) ? dashData.vencimientos : [],
+          });
           if (Array.isArray(dashData.tendencia_mensual)) {
             setTendenciaMensual(dashData.tendencia_mensual);
           }
-          // Extract next deadline from vencimientos
-          if (dashData.kpis?.vencimientos?.length > 0) {
-            const sorted = [...dashData.kpis.vencimientos].sort((a: { dias: number }, b: { dias: number }) => a.dias - b.dias);
+          // Extract next deadline from vencimientos (top-level on API response)
+          if (Array.isArray(dashData.vencimientos) && dashData.vencimientos.length > 0) {
+            const sorted = [...dashData.vencimientos].sort((a: { dias: number }, b: { dias: number }) => a.dias - b.dias);
             const next = sorted.find((v: { dias: number }) => v.dias > 0);
             if (next) setNextDeadlineDate(next.fecha);
           }
