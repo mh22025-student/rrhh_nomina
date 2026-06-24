@@ -1332,7 +1332,17 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
                     return (
                       <Collapsible key={recibo.id} open={isExpanded} onOpenChange={(open) => setExpandedRecibo(open ? recibo.id : null)}>
                         <CollapsibleTrigger asChild>
-                          <button className="w-full flex items-center justify-between p-3.5 bg-slate-50/80 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors text-left">
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setExpandedRecibo(isExpanded ? null : recibo.id);
+                              }
+                            }}
+                            className="w-full flex items-center justify-between p-3.5 bg-slate-50/80 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-700 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+                          >
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
@@ -1355,7 +1365,7 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
                                 variant="outline"
                                 size="sm"
                                 className="h-8 text-xs gap-1.5 min-h-[44px] border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                                onClick={(e) => { e.stopPropagation(); handleDownloadBoleta(recibo.id); }}
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDownloadBoleta(recibo.id); }}
                                 disabled={downloadingId === recibo.id}
                               >
                                 {downloadingId === recibo.id ? (
@@ -1371,7 +1381,7 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
                                 <ChevronDown className="h-4 w-4 text-slate-400" />
                               )}
                             </div>
-                          </button>
+                          </div>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                           <div className="mt-1 p-4 bg-white dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3">

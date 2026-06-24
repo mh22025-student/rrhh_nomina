@@ -2828,3 +2828,110 @@ Also removed the now-unused `DialogHeader` import (since the title/description a
 - Dialog now meets Radix UI's a11y requirements
 - Visual layout unchanged
 - All functionality preserved
+
+---
+
+## Task 8-c: Fix Nested Button HTML Validation Error in SelfServicePortal (2026-06-24)
+
+**Task ID**: 8-c  
+**Agent**: Code Agent  
+**Task**: Fix `<button> cannot be a descendant of <button>` hydration error in SelfServicePortal's Recibos de Pago section
+
+### Problem
+The Recibos de Pago (Pay Slips) section in `SelfServicePortal.tsx` used a `CollapsibleTrigger asChild` wrapping a native `<button>` element, and inside that button was a shadcn `<Button>` (which renders another `<button>`) for the PDF download. This created invalid HTML:
+
+```html
+<button>  <!-- outer trigger button -->
+  ...
+  <button>PDF</button>  <!-- inner PDF download button -->
+</button>
+```
+
+This caused two console errors:
+1. `In HTML, <button> cannot be a descendant of <button>. This will cause a hydration error.`
+2. `<button> cannot contain a nested <button>.`
+
+### Fix Applied
+Replaced the outer `<button>` element with a `<div role="button">` that has full keyboard accessibility support. Since `CollapsibleTrigger asChild` merges its props (onClick, aria-controls, aria-expanded, data-state) onto the child element, the `<div>` becomes the toggle trigger without needing to be a native `<button>`.
+
+**Before (invalid HTML):**
+```tsx
+<CollapsibleTrigger asChild>
+  <button className="w-full flex items-center justify-between p-3.5 ...">
+    {/* content */}
+    <Button onClick={(e) => { e.stopPropagation(); handleDownloadBoleta(recibo.id); }}>
+      PDF
+    </Button>
+  </button>
+</CollapsibleTrigger>
+```
+
+**After (valid HTML, accessible):**
+```tsx
+<CollapsibleTrigger asChild>
+  <div
+    role="button"
+    tabIndex={0}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setExpandedRecibo(isExpanded ? null : recibo.id);
+      }
+    }}
+    className="w-full flex items-center justify-between p-3.5 ... cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
+  >
+    {/* content */}
+    <Button onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDownloadBoleta(recibo.id); }}>
+      PDF
+    </Button>
+  </div>
+</CollapsibleTrigger>
+```
+
+### Key Changes
+1. **Outer `<button>` → `<div role="button">`**: Eliminates the nested button validation error. The `role="button"` tells screen readers this is an interactive button.
+2. **`tabIndex={0}`**: Makes the div keyboard-focusable (native buttons are focusable by default; divs are not).
+3. **`onKeyDown` handler**: Since divs don't natively respond to Enter/Space like buttons do, manually handles these keys to toggle the collapsible via the controlled state (`setExpandedRecibo`). Initially tried `e.currentTarget.click()` to delegate to Radix's onClick, but that was unreliable — directly updating the controlled state is more robust.
+4. **`cursor-pointer`**: Visual cue that the div is clickable (buttons have this by default; divs don't).
+5. **`focus-visible:ring-2`**: Visible focus indicator for keyboard users (buttons have focus styles by default; divs don't).
+6. **PDF button `onClick`**: Added `e.preventDefault()` alongside existing `e.stopPropagation()` to ensure the download click doesn't trigger the trigger's toggle or any default behavior.
+
+### Accessibility Verification
+- **role="button"**: Screen readers announce "button" ✓
+- **aria-expanded**: Radix automatically adds this (true/false based on open state) ✓
+- **aria-controls**: Radix automatically adds this (links to collapsible content) ✓
+- **tabIndex={0}**: Keyboard focusable ✓
+- **Enter key**: Toggles expand/collapse ✓ (verified: closed → open)
+- **Space key**: Toggles expand/collapse ✓ (verified: open → closed)
+- **Focus ring**: Visible emerald ring on keyboard focus ✓
+
+### QA Testing Results (agent-browser)
+- ✅ Logged in as empleado@nomina.gob.sv (Laura Peña, EMPLEADO role)
+- ✅ Navigated to "Mi Portal" (Self Service Portal)
+- ✅ Recibos de Pago section renders with 2 pay slip rows (julio 2026, junio 2026)
+- ✅ Each row shows: month, MENSUAL badge, Transferencia badge, Bruto/Neto amounts, PDF button, chevron icon
+- ✅ Click on row toggles expand/collapse (verified: row expands to show Devengado/Descuentos details)
+- ✅ PDF button click does NOT toggle expand/collapse (verified: state remained "open, closed" after clicking PDF)
+- ✅ Enter key on focused trigger toggles expand (verified: closed → open)
+- ✅ Space key on focused trigger toggles expand (verified: open → closed)
+- ✅ No nested button errors in dev log
+- ✅ No hydration errors in dev log
+- ✅ `bun run lint` passes with 0 errors
+- ✅ All API calls return 200 (`/api/selfservice`)
+
+### Files Modified
+- `/src/components/modules/SelfServicePortal.tsx` (lines ~1334-1384):
+  - Replaced outer `<button>` with `<div role="button">` + keyboard handler
+  - Added `cursor-pointer` and `focus-visible` ring styles
+  - Added `e.preventDefault()` to PDF button's onClick
+
+### Note on Other CollapsibleTrigger Usages
+Also reviewed `ProfileDescriptiveForm.tsx` which uses `CollapsibleTrigger asChild` with `<CardHeader>` (a `<div>`). Those do NOT contain nested `<Button>` elements inside the trigger, so they don't have the validation error. No changes needed there. (Minor note: those divs lack `role="button"` and `tabIndex` for full keyboard a11y, but that's a pre-existing pattern and not the reported error — left unchanged to avoid regressions.)
+
+### Stage Summary
+- HTML validation error (nested buttons) resolved
+- Hydration error resolved
+- Full keyboard accessibility maintained (Enter/Space toggle, focus ring, ARIA)
+- Mouse click and PDF download both work independently
+- Visual layout unchanged
+- Lint clean, no runtime errors
