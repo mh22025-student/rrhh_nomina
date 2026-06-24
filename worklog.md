@@ -3031,3 +3031,77 @@ All document generation endpoints tested with curl + VLM verification:
 - 3 document generation bugs fixed (1 critical 404, 1 critical calculation error, 1 moderate UX issue)
 - All document downloads now functional: boleta PDF, boletas (all) PDF, aguinaldo PDF, liquidación PDF, constancia PDF, ISR constancia PDF, ISSS/AFP/ISR CSV, audit log CSV
 - Boleta PDF content verified accurate by VLM (earnings, deductions, net pay, patronal charges all correct)
+
+---
+
+## Task 10: Revisión y corrección de gráficos del dashboard de inicio (admin) (2026-06-25)
+
+**Task ID**: 10
+**Agent**: Code Agent
+**Task**: Revisar el dashboard de inicio del administrador y cómo se dibujan los gráficos; corregir los problemas encontrados.
+
+### Análisis realizado
+Se identificaron DOS dashboards con gráficos:
+1. **WelcomeDashboard** (`src/app/page.tsx`, view='dashboard') — el "dashboard de inicio" que ve el admin al entrar
+2. **PayrollDashboard** (`src/components/modules/PayrollDashboard.tsx`, view='04-01') — dashboard detallado de nómina
+
+Se usó agent-browser para navegar como ADMIN (admin@nomina.gob.sv) y VLM (glm-4.6v) para verificar visualmente cada gráfico.
+
+### Issues encontrados y corregidos
+
+#### Issue 1: Distribución por Área mostraba "[object Object]" al 100% (CRÍTICO — WelcomeDashboard)
+**Root cause**: En `WelcomeDashboard`, el cálculo de distribución por área leía `emp.area || emp.departamento` pero la API `/api/empleados` devuelve `area` como un OBJETO `{ id, nombre, codigo }`, no un string. JS coercionaba el objeto a `"[object Object]"`, agrupando todos los empleados en una sola entrada.
+**Fix**: Acceder correctamente a `emp.area?.nombre` (manejando ambos casos objeto/string).
+**Verificación VLM**: Antes → 1 barra "[object Object]" 100%. Después → 6 áreas reales (Recursos Humanos, Tecnología, Gerencia General, Ventas, Contabilidad, Operaciones) con colores distintos.
+
+#### Issue 2: Tendencia de Nómina usaba datos mock hardcodeados (WelcomeDashboard)
+**Root cause**: El gráfico usaba `PAYROLL_TREND_DATA` (12 meses, valores fijos $45200-$55400) ignorando los datos reales `tendencia_mensual` que ya devuelve la API.
+**Fix**: 
+- Añadido estado `tendenciaMensual` y se almacena desde `dashData.tendencia_mensual`.
+- El gráfico usa `trendData` (datos reales de 6 meses) con fallback al mock.
+- Destacar el mes actual (último) en verde esmeralda, los demás en gris.
+- Mostrar el valor siempre sobre la barra del mes actual; hover en las demás.
+- Corregida etiqueta faltante del eje Y superior (antes `i===0 ? '' : ...` dejaba la línea superior sin etiqueta).
+**Verificación VLM**: Antes → 12 barras todas verdes iguales, sin valor visible, eje Y superior vacío. Después → 6 barras reales, mes jun destacado en verde con "$12,780", eje Y completo ($0 a $12,780).
+
+#### Issue 3: Distribución por Área — todas las barras mismo color (CRÍTICO — PayrollDashboard)
+**Root cause**: Bug de precedencia de operadores: `const hue = 150 + (i * 20) % 40;` se evalúa como `150 + ((i*20) % 40)`. Como `i*20 % 40` solo puede ser 0 o 20, el hue siempre era 150 o 170 (ambos teal-verde casi idénticos). Todas las áreas aparecían del mismo color.
+**Fix**: Reemplazado por una paleta curada `AREA_BAR_COLORS` de 10 colores distintos (emerald, sky, amber, violet, pink, teal, orange, indigo, lime, cyan) con gradientes. Añadido porcentaje de participación (% del total) y swatch de color por área.
+**Verificación VLM**: Antes → todas las barras verde idéntico. Después → 6 áreas con colores distintos (esmeralda, azul, ámbar, violeta, rosa, teal) + porcentajes y montos.
+
+#### Issue 4: Tendencia Mensual — barras casi del mismo color + desalineación de grilla (PayrollDashboard)
+**Root cause**: Las barras no-actuales usaban `from-emerald-400/80 to-teal-300/80` y la actual `from-emerald-600 to-teal-400` — verdes casi indistinguibles. Además, el contenedor de barras tenía `pt-2` (8px padding superior) que no se reflejaba en las líneas de grilla ni etiquetas del eje Y, causando desalineación.
+**Fix**: Reestructurado el plot area para que gridlines y barras compartan el mismo box `h-48`. Las barras no-actuales ahora usan gris (`from-slate-300 to-slate-200`), la actual verde esmeralda con sombra. Valor visible siempre en el mes actual.
+**Verificación VLM**: 6 barras, jun destacada en verde con "$12.8K", eje Y ($0-$12.8K) alineado con grilla punteada.
+
+#### Issue 5: Distribución Salarial usaba datos estimados/falsos (PayrollDashboard)
+**Root cause**: Los conteos por rango salarial se calculaban con proporciones fijas (10%/27%/43%/13%/7%) del total de empleados, no con datos reales de contratos.
+**Fix**: 
+- API `/api/nomina/dashboard`: añadida consulta real de empleados activos con su contrato activo, bucketizando `salario_base_contrato` en 5 rangos.
+- Frontend: usa `data.distribucion_salarial` (real) con fallback al mock. Colores distinguibles (rose/amber/emerald/teal/sky) con texto coordinado.
+**Verificación VLM**: Antes → datos estimados. Después → 2+1+2+0+2 = 7 empleados (29%+14%+29%+0%+29% = 100%), colores distintos por rango.
+
+#### Issue 6: Evolución de Empleados usaba datos mock hardcodeados (PayrollDashboard)
+**Root cause**: `EMPLOYEE_COUNT_HISTORY` era estático (Oct-Mar, 72→82 empleados), sin relación con datos reales.
+**Fix**:
+- API: añadido `empleados_por_mes` — conteo de empleados activos por mes (headcount al cierre de cada mes, basado en `fecha_creacion`).
+- Frontend: usa `data.empleados_por_mes` con fallback al mock.
+**Verificación VLM**: Antes → siempre 72→82 (mock). Después → datos reales (0,0,0,0,0,7 reflejando que los empleados se crearon en junio).
+
+### Archivos modificados
+- `src/app/api/nomina/dashboard/route.ts` — Añadidos `empleados_por_mes` (headcount real por mes) y `distribucion_salarial` (buckets reales por salario de contrato)
+- `src/app/page.tsx` (WelcomeDashboard) — Estado `tendenciaMensual`; fix bug `[object Object]` en áreas; gráfico Tendencia usa datos reales con mes actual destacado y eje Y completo
+- `src/components/modules/PayrollDashboard.tsx` — Paleta `AREA_BAR_COLORS` (fix bug precedencia `%`); paleta `SALARY_COLORS`; reestructurado plot area de Tendencia Mensual (alineación grilla/eje Y + mes actual destacado); Evolución de Empleados usa datos reales; Distribución Salarial usa datos reales con colores coordinados
+
+### Verificación
+- ✅ `bun run lint` pasa con 0 errores
+- ✅ Dev log sin errores de runtime
+- ✅ `GET /api/nomina/dashboard` 200 OK
+- ✅ VLM confirma todos los gráficos corregidos (Tendencia, Áreas, Salarial, Evolución, Composición)
+- ✅ Verificado como ADMIN (Carlos Hernández) tanto en dashboard de inicio (WelcomeDashboard) como en dashboard de nómina (PayrollDashboard view 04-01)
+
+### Stage Summary
+- 6 bugs de visualización corregidos (2 críticos de datos rotos, 2 de datos mock, 2 de colores/alineación)
+- El dashboard de inicio del administrador ahora muestra datos reales y correctos en todos sus gráficos
+- El dashboard detallado de nómina (04-01) también mejorado con colores distintos, datos reales y alineación correcta
+- Todos los gráficos verificados visualmente con VLM

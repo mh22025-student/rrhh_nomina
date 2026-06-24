@@ -1,0 +1,452 @@
+   849→
+   850→  /* ── Build conic-gradient for expense donut chart ── */
+   851→  let conicStops: string[] = [];
+   852→  let cumPct = 0;
+   853→  EXPENSE_SLICES.forEach((s) => {
+   854→    const start = cumPct;
+   855→    cumPct += s.pct;
+   856→    conicStops.push(`${s.conicColor} ${start}% ${cumPct}%`);
+   857→  });
+   858→  const conicGradient = `conic-gradient(${conicStops.join(', ')})`;
+   859→
+   860→  /* ── Compute actual dollar amounts from planillas_recientes for donut legend ── */
+   861→  const baseAmount = data.kpis.nomina_mes || (data.planillas_recientes[0]?.total_bruto ?? 50000);
+   862→  const expenseAmounts = EXPENSE_SLICES.map(s => Math.round(baseAmount * (s.pct / 100) * 100) / 100);
+   863→
+   864→  /* ── Find the "current month" index in tendencia_mensual (last non-zero) ── */
+   865→  const currentMonthIdx = data.tendencia_mensual.length - 1;
+   866→
+   867→  /* ── Timeline state from planilla_actual ── */
+   868→  const timelineActiveStep = data.kpis.planilla_actual
+   869→    ? getTimelineStepIndex(data.kpis.planilla_actual.estado)
+   870→    : -1;
+   871→
+   872→  /* ── Pipeline state from planilla_actual ── */
+   873→  const pipelineActiveIdx = data.kpis.planilla_actual
+   874→    ? getPipelineStepIndex(data.kpis.planilla_actual.estado)
+   875→    : -1;
+   876→
+   877→  /* ── Salary histogram max ── */
+   878→  const maxSalaryCount = Math.max(...salaryDistribution.map(s => s.count), 1);
+   879→
+   880→  return (
+   881→    <div className="space-y-5 bg-pattern-dots min-h-full">
+   882→      {/* ══════════════════════════════════════════════════════
+   883→          SECTION: Gradient Header with Clock + Quick Actions
+   884→          ══════════════════════════════════════════════════════ */}
+   885→      <div className="bg-gradient-to-r from-emerald-700 via-teal-600 to-emerald-700 rounded-xl p-5 text-white shadow-lg relative overflow-hidden">
+   886→        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(255,255,255,0.08),transparent_50%)]" />
+   887→        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.06),transparent_40%)]" />
+   888→        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
+   889→        <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4" />
+   890→        <div className="relative z-10">
+   891→          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+   892→            <div>
+   893→              <h2 className="text-xl font-bold flex items-center gap-2">
+   894→                <DollarSign className="h-6 w-6" />
+   895→                Dashboard de Nómina
+   896→              </h2>
+   897→              <p className="text-emerald-100 text-sm mt-1">Resumen ejecutivo del sistema de planillas — El Salvador</p>
+   898→            </div>
+   899→            <div className="flex items-center gap-3 flex-wrap">
+   900→              {/* El Salvador Live Clock */}
+   901→              <ElSalvadorClock svTime={svTime} />
+   902→
+   903→              {/* Traffic light */}
+   904→              <div className="flex items-center gap-1.5 p-2 bg-white/10 rounded-full backdrop-blur-sm">
+   905→                <div className={`w-3.5 h-3.5 rounded-full transition-all duration-500 ${data.kpis.semaforo === 'rojo' ? 'bg-red-400 shadow-sm shadow-red-400/50' : 'bg-red-900/40'}`} />
+   906→                <div className={`w-3.5 h-3.5 rounded-full transition-all duration-500 ${data.kpis.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
+   907→                <div className={`w-3.5 h-3.5 rounded-full transition-all duration-500 ${data.kpis.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
+   908→              </div>
+   909→              <Badge className="bg-white/20 text-white border-0 text-xs font-medium">{semaforoLabel}</Badge>
+   910→            </div>
+   911→          </div>
+   912→
+   913→          {/* Quick Action Buttons - Enhanced */}
+   914→          <div className="flex items-center gap-2.5 mt-4 flex-wrap">
+   915→            <Button
+   916→              size="sm"
+   917→              className="bg-emerald-500 hover:bg-emerald-400 text-white border border-emerald-400/50 shadow-md hover:shadow-lg transition-all duration-200 hover:scale-[1.03] active:scale-[0.97]"
+   918→              onClick={() => onNavigate?.('04-03')}
+   919→            >
+   920→              <div className="flex items-center gap-2">
+   921→                <div className="p-1 rounded bg-white/20">
+   922→                  <Calculator className="h-3.5 w-3.5" />
+   923→                </div>
+   924→                <span>Calcular Nómina</span>
+   925→              </div>
+   926→            </Button>
+   927→            <Button
+   928→              size="sm"
+   929→              className="bg-teal-500 hover:bg-teal-400 text-white border border-teal-400/50 shadow-md hover:shadow-lg transition-all duration-200 hover:scale-[1.03] active:scale-[0.97]"
+   930→              onClick={() => onNavigate?.('04-04')}
+   931→            >
+   932→              <div className="flex items-center gap-2">
+   933→                <div className="p-1 rounded bg-white/20">
+   934→                  <FileCheck className="h-3.5 w-3.5" />
+   935→                </div>
+   936→                <span>Aprobar Planilla</span>
+   937→              </div>
+   938→            </Button>
+   939→            <Button
+   940→              size="sm"
+   941→              className="bg-cyan-600 hover:bg-cyan-500 text-white border border-cyan-500/50 shadow-md hover:shadow-lg transition-all duration-200 hover:scale-[1.03] active:scale-[0.97]"
+   942→              onClick={() => onNavigate?.('05-01')}
+   943→            >
+   944→              <div className="flex items-center gap-2">
+   945→                <div className="p-1 rounded bg-white/20">
+   946→                  <BarChart3 className="h-3.5 w-3.5" />
+   947→                </div>
+   948→                <span>Ver Reportes</span>
+   949→              </div>
+   950→            </Button>
+   951→          </div>
+   952→        </div>
+   953→      </div>
+   954→
+   955→      {/* ══════════════════════════════════════════════════════
+   956→          SECTION: Live Payroll Status Indicator
+   957→          ══════════════════════════════════════════════════════ */}
+   958→      {data.kpis.planilla_actual && (data.kpis.planilla_actual.estado === 'CALCULADA' || data.kpis.planilla_actual.estado === 'EN_CORRECCION') && (
+   959→        <div className="relative rounded-xl overflow-hidden shadow-md border border-amber-200 dark:border-amber-800">
+   960→          <div className="absolute inset-0 bg-gradient-to-r from-amber-50 via-amber-100/80 to-amber-50 dark:from-amber-950/40 dark:via-amber-900/30 dark:to-amber-950/40" />
+   961→          <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-amber-200/20 via-amber-300/10 to-amber-200/20 dark:from-amber-800/10 dark:via-amber-700/5 dark:to-amber-800/10" />
+   962→          <div className="relative z-10 px-4 py-3 sm:px-6 sm:py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+   963→            <div className="flex items-center gap-3">
+   964→              <div className="relative">
+   965→                <div className="w-3 h-3 rounded-full bg-amber-500 animate-ping absolute inset-0" />
+   966→                <div className="w-3 h-3 rounded-full bg-amber-500 relative z-10 shadow-lg shadow-amber-500/50" />
+   967→              </div>
+   968→              <div>
+   969→                <div className="flex items-center gap-2">
+   970→                  <p className="text-sm font-bold text-amber-800 dark:text-amber-200">En Proceso</p>
+   971→                  <Badge className="bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200 text-[10px] border-0">
+   972→                    {data.kpis.planilla_actual.estado}
+   973→                  </Badge>
+   974→                </div>
+   975→                <p className="text-xs text-amber-700/80 dark:text-amber-300/80 mt-0.5">
+   976→                  Planilla <span className="font-mono font-semibold">{data.kpis.planilla_actual.codigo}</span> — {data.kpis.planilla_actual.tipo}
+   977→                </p>
+   978→              </div>
+   979→            </div>
+   980→            <div className="flex items-center gap-4">
+   981→              {/* Workflow step indicator */}
+   982→              <div className="flex items-center gap-1.5">
+   983→                {TIMELINE_STEPS.map((step, idx) => {
+   984→                  const isActive = idx === timelineActiveStep;
+   985→                  const isCompleted = idx < timelineActiveStep;
+   986→                  const stepLabels = ['Cálculo', 'Aprobación', 'Pago'];
+   987→                  return (
+   988→                    <React.Fragment key={step}>
+   989→                      {idx > 0 && <ChevronRight className="h-3 w-3 text-amber-400/50 dark:text-amber-600/50" />}
+   990→                      <div className="flex items-center gap-1">
+   991→                        <div className={`w-2 h-2 rounded-full transition-all ${
+   992→                          isCompleted ? 'bg-emerald-500' :
+   993→                          isActive ? 'bg-amber-500 animate-pulse shadow-sm shadow-amber-500/50' :
+   994→                          'bg-amber-300/40 dark:bg-amber-700/40'
+   995→                        }`} />
+   996→                        <span className={`text-[10px] font-medium ${
+   997→                          isCompleted ? 'text-emerald-700 dark:text-emerald-400' :
+   998→                          isActive ? 'text-amber-800 dark:text-amber-200 font-bold' :
+   999→                          'text-amber-500/60 dark:text-amber-500/40'
+  1000→                        }`}>{stepLabels[idx]}</span>
+  1001→                      </div>
+  1002→                    </React.Fragment>
+  1003→                  );
+  1004→                })}
+  1005→              </div>
+  1006→              {/* Estimated time */}
+  1007→              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/50 dark:bg-slate-900/30">
+  1008→                <Timer className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+  1009→                <span className="text-[10px] font-medium text-amber-700 dark:text-amber-300">
+  1010→                  {svTime.toLocaleTimeString('es-SV', { timeZone: 'America/El_Salvador', hour: '2-digit', minute: '2-digit' })} SV
+  1011→                </span>
+  1012→              </div>
+  1013→            </div>
+  1014→          </div>
+  1015→        </div>
+  1016→      )}
+  1017→
+  1018→      {/* ══════════════════════════════════════════════════════
+  1019→          SECTION DIVIDER: Indicadores Clave
+  1020→          ══════════════════════════════════════════════════════ */}
+  1021→      <div className="flex items-center gap-3 px-1">
+  1022→        <div className="h-px flex-1 bg-gradient-to-r from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+  1023→        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600/70 dark:text-emerald-400/70">Indicadores Clave</span>
+  1024→        <div className="h-px flex-1 bg-gradient-to-l from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+  1025→      </div>
+  1026→
+  1027→      {/* ── KPI Summary Cards with Sparklines ── */}
+  1028→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  1029→        {/* KPI 1: Total Nómina del Mes */}
+  1030→        <Card className="shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+  1031→          <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-transparent dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-transparent pointer-events-none" />
+  1032→          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-emerald-500 to-teal-500" />
+  1033→          <CardContent className="p-5 relative">
+  1034→            <div className="flex items-center justify-between mb-3">
+  1035→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Nómina del Mes</span>
+  1036→              <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 group-hover:scale-110 transition-transform duration-300">
+  1037→                <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+  1038→              </div>
+  1039→            </div>
+  1040→            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono tracking-tight">{fmt(data.kpis.nomina_mes)}</p>
+  1041→            {/* SVG Sparkline */}
+  1042→            <div className="mt-3 mb-1.5">
+  1043→              <Sparkline data={nominaSparkline.length > 0 ? nominaSparkline : [30, 45, 55, 40, 60, 70, 85]} color="#10b981" width={120} height={28} />
+  1044→            </div>
+  1045→            <div className="flex items-center gap-1.5">
+  1046→              {nominaTrend.direction === 'up' ? (
+  1047→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30">
+  1048→                  <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+  1049→                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">+{nominaTrend.value.toFixed(1)}%</span>
+  1050→                </div>
+  1051→              ) : (
+  1052→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30">
+  1053→                  <ArrowDownRight className="h-3 w-3 text-red-500" />
+  1054→                  <span className="text-xs font-semibold text-red-600 dark:text-red-400">-{nominaTrend.value.toFixed(1)}%</span>
+  1055→                </div>
+  1056→              )}
+  1057→              <span className="text-xs text-slate-400 dark:text-slate-500">vs mes anterior</span>
+  1058→            </div>
+  1059→          </CardContent>
+  1060→        </Card>
+  1061→
+  1062→        {/* KPI 2: Empleados Pagados */}
+  1063→        <Card className="shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-teal-200/50 dark:ring-teal-800/30">
+  1064→          <div className="absolute inset-0 bg-gradient-to-br from-teal-50 via-cyan-50/50 to-transparent dark:from-teal-950/30 dark:via-cyan-950/20 dark:to-transparent pointer-events-none" />
+  1065→          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-500 to-cyan-500" />
+  1066→          <CardContent className="p-5 relative">
+  1067→            <div className="flex items-center justify-between mb-3">
+  1068→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Empleados Pagados</span>
+  1069→              <div className="p-2.5 rounded-xl bg-teal-100 dark:bg-teal-900/40 group-hover:scale-110 transition-transform duration-300">
+  1070→                <Users className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+  1071→              </div>
+  1072→            </div>
+  1073→            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+  1074→              {empleadosPagados}
+  1075→              <span className="text-sm font-normal text-slate-400 dark:text-slate-500 ml-1.5">de {data.kpis.total_empleados_activos}</span>
+  1076→            </p>
+  1077→            {/* SVG Sparkline */}
+  1078→            <div className="mt-3 mb-1.5">
+  1079→              <Sparkline data={empleadosSparkline} color="#14b8a6" width={120} height={28} />
+  1080→            </div>
+  1081→            <div className="flex items-center gap-1.5">
+  1082→              {data.kpis.tendencia_empleados.startsWith('-') ? (
+  1083→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30">
+  1084→                  <ArrowDownRight className="h-3 w-3 text-red-500" />
+  1085→                  <span className="text-xs font-semibold text-red-600 dark:text-red-400">{data.kpis.tendencia_empleados}%</span>
+  1086→                </div>
+  1087→              ) : (
+  1088→                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/30">
+  1089→                  <ArrowUpRight className="h-3 w-3 text-teal-500" />
+  1090→                  <span className="text-xs font-semibold text-teal-600 dark:text-teal-400">+{data.kpis.tendencia_empleados}%</span>
+  1091→                </div>
+  1092→              )}
+  1093→              <span className="text-xs text-slate-400 dark:text-slate-500">vs mes anterior</span>
+  1094→            </div>
+  1095→          </CardContent>
+  1096→        </Card>
+  1097→
+  1098→        {/* KPI 3: Planillas Activas */}
+  1099→        <Card className="shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-amber-200/50 dark:ring-amber-800/30">
+  1100→          <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-transparent dark:from-amber-950/30 dark:via-orange-950/20 dark:to-transparent pointer-events-none" />
+  1101→          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-500 to-orange-500" />
+  1102→          <CardContent className="p-5 relative">
+  1103→            <div className="flex items-center justify-between mb-3">
+  1104→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Planillas Activas</span>
+  1105→              <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 group-hover:scale-110 transition-transform duration-300">
+  1106→                <Activity className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+  1107→              </div>
+  1108→            </div>
+  1109→            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+  1110→              {planillasActivas}
+  1111→              <span className="text-sm font-normal text-slate-400 dark:text-slate-500 ml-1.5">en proceso</span>
+  1112→            </p>
+  1113→            {/* SVG Sparkline */}
+  1114→            <div className="mt-3 mb-1.5">
+  1115→              <Sparkline data={planillasSparkline} color="#f59e0b" width={120} height={28} />
+  1116→            </div>
+  1117→            <div className="flex items-center gap-1.5">
+  1118→              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/30">
+  1119→                <Zap className="h-3 w-3 text-amber-500" />
+  1120→                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{data.planillas_recientes.length} total</span>
+  1121→              </div>
+  1122→            </div>
+  1123→          </CardContent>
+  1124→        </Card>
+  1125→
+  1126→        {/* KPI 4: Cumplimiento % */}
+  1127→        <Card className="shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+  1128→          <div className={`absolute inset-0 pointer-events-none ${
+  1129→            data.kpis.semaforo === 'verde'
+  1130→              ? 'bg-gradient-to-br from-emerald-50 via-green-50/50 to-transparent dark:from-emerald-950/30 dark:via-green-950/20 dark:to-transparent'
+  1131→              : data.kpis.semaforo === 'amarillo'
+  1132→                ? 'bg-gradient-to-br from-amber-50 via-yellow-50/50 to-transparent dark:from-amber-950/30 dark:via-yellow-950/20 dark:to-transparent'
+  1133→                : 'bg-gradient-to-br from-red-50 via-rose-50/50 to-transparent dark:from-red-950/30 dark:via-rose-950/20 dark:to-transparent'
+  1134→          }`} />
+  1135→          <div className={`absolute top-0 left-0 w-1.5 h-full ${
+  1136→            data.kpis.semaforo === 'verde' ? 'bg-gradient-to-b from-emerald-500 to-green-500' :
+  1137→            data.kpis.semaforo === 'amarillo' ? 'bg-gradient-to-b from-amber-500 to-yellow-500' :
+  1138→            'bg-gradient-to-b from-red-500 to-rose-500'
+  1139→          }`} />
+  1140→          <CardContent className="p-5 relative">
+  1141→            <div className="flex items-center justify-between mb-3">
+  1142→              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Cumplimiento</span>
+  1143→              <div className="flex items-center gap-1 p-1 bg-slate-900 dark:bg-slate-800 rounded-full">
+  1144→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'rojo' ? 'bg-red-500 shadow-sm shadow-red-500/50' : 'bg-red-900/40'}`} />
+  1145→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
+  1146→                <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'verde' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-emerald-900/40'}`} />
+  1147→              </div>
+  1148→            </div>
+  1149→            <div className="flex items-center gap-4">
+  1150→              <ComplianceRing percentage={data.kpis.cumplimiento_previsional} size={96} />
+  1151→              <div className="flex-1 space-y-2">
+  1152→                <Badge variant="outline" className={`text-[10px] px-2 border ${
+  1153→                  data.kpis.semaforo === 'verde' ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-700' :
+  1154→                  data.kpis.semaforo === 'amarillo' ? 'border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700' :
+  1155→                  'border-red-300 text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700'
+  1156→                }`}>
+  1157→                  {semaforoLabel}
+  1158→                </Badge>
+  1159→                {/* SVG Sparkline */}
+  1160→                <Sparkline data={cumplimientoSparkline} color={data.kpis.semaforo === 'verde' ? '#10b981' : data.kpis.semaforo === 'amarillo' ? '#f59e0b' : '#ef4444'} width={80} height={24} />
+  1161→              </div>
+  1162→            </div>
+  1163→          </CardContent>
+  1164→        </Card>
+  1165→      </div>
+  1166→
+  1167→      {/* ══════════════════════════════════════════════════════
+  1168→          SECTION: Planilla Status Pipeline
+  1169→          ══════════════════════════════════════════════════════ */}
+  1170→      <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30 overflow-hidden">
+  1171→        <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/50 via-teal-50/30 to-transparent dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-transparent pointer-events-none" />
+  1172→        <CardHeader className="pb-3 relative">
+  1173→          <CardTitle className="text-base flex items-center gap-2">
+  1174→            <Play className="h-4 w-4 text-emerald-500" /> Pipeline de Planilla
+  1175→          </CardTitle>
+  1176→          <CardDescription>Flujo de estado de la planilla actual</CardDescription>
+  1177→        </CardHeader>
+  1178→        <CardContent className="relative">
+  1179→          <div className="flex items-center justify-between relative px-2 sm:px-4">
+  1180→            {/* Background connecting line */}
+  1181→            <div className="absolute top-8 left-[8%] right-[8%] h-1 rounded-full bg-slate-200 dark:bg-slate-700" />
+  1182→            {/* Active progress line */}
+  1183→            <div
+  1184→              className="absolute top-8 left-[8%] h-1 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-700 ease-out"
+  1185→              style={{ width: pipelineActiveIdx >= 0 ? `${(pipelineActiveIdx / (PIPELINE_STEPS.length - 1)) * 84}%` : '0%' }}
+  1186→            />
+  1187→
+  1188→            {PIPELINE_STEPS.map((step, idx) => {
+  1189→              const isCompleted = idx < pipelineActiveIdx;
+  1190→              const isActive = idx === pipelineActiveIdx;
+  1191→              const isPending = idx > pipelineActiveIdx;
+  1192→
+  1193→              return (
+  1194→                <div key={step} className="flex flex-col items-center relative z-10" style={{ width: '25%' }}>
+  1195→                  {/* Step circle */}
+  1196→                  <div className={`
+  1197→                    w-16 h-16 rounded-2xl flex items-center justify-center border-2 transition-all duration-500
+  1198→                    ${isCompleted
+  1199→                      ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+  1200→                      : isActive
+  1201→                        ? 'bg-white dark:bg-slate-900 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-lg shadow-emerald-500/20 ring-4 ring-emerald-100 dark:ring-emerald-900/50'
+  1202→                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-400 dark:text-slate-500'
+  1203→                    }
+  1204→                  `}>
+  1205→                    {isCompleted ? (
+  1206→                      <CheckCircle className="h-6 w-6" />
+  1207→                    ) : (
+  1208→                      <div className="transform transition-transform duration-300" style={{ transform: isActive ? 'scale(1.1)' : 'scale(1)' }}>
+  1209→                        {PIPELINE_ICONS[step]}
+  1210→                      </div>
+  1211→                    )}
+  1212→                  </div>
+  1213→                  {/* Step label */}
+  1214→                  <span className={`text-xs mt-2.5 font-bold uppercase tracking-wider transition-colors duration-300 ${
+  1215→                    isCompleted ? 'text-emerald-600 dark:text-emerald-400' :
+  1216→                    isActive ? 'text-emerald-700 dark:text-emerald-300' :
+  1217→                    'text-slate-400 dark:text-slate-500'
+  1218→                  }`}>
+  1219→                    {PIPELINE_LABELS[step]}
+  1220→                  </span>
+  1221→                  {/* Active pulse indicator */}
+  1222→                  {isActive && (
+  1223→                    <div className="flex items-center gap-1 mt-1">
+  1224→                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+  1225→                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">Actual</span>
+  1226→                    </div>
+  1227→                  )}
+  1228→                </div>
+  1229→              );
+  1230→            })}
+  1231→          </div>
+  1232→
+  1233→          {/* Current planilla info */}
+  1234→          {data.kpis.planilla_actual && (
+  1235→            <div className="mt-4 pt-4 border-t border-emerald-200/50 dark:border-emerald-800/30 flex items-center justify-between">
+  1236→              <div className="flex items-center gap-2">
+  1237→                <span className="text-xs text-slate-500 dark:text-slate-400">Planilla:</span>
+  1238→                <span className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.codigo}</span>
+  1239→                <span className="text-slate-300 dark:text-slate-600">·</span>
+  1240→                <span className="text-xs text-slate-600 dark:text-slate-400">{data.kpis.planilla_actual.tipo}</span>
+  1241→              </div>
+  1242→              <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium`}>
+  1243→                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${estadoDot[data.kpis.planilla_actual.estado] || 'bg-slate-400'}`} />
+  1244→                {data.kpis.planilla_actual.estado}
+  1245→              </Badge>
+  1246→            </div>
+  1247→          )}
+  1248→        </CardContent>
+  1249→      </Card>
+  1250→
+  1251→      {/* ══════════════════════════════════════════════════════
+  1252→          SECTION: Compliance Progress Tracker
+  1253→          ══════════════════════════════════════════════════════ */}
+  1254→      <div className="flex items-center gap-3 px-1">
+  1255→        <div className="h-px flex-1 bg-gradient-to-r from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+  1256→        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600/70 dark:text-emerald-400/70">Cumplimiento y Vencimientos</span>
+  1257→        <div className="h-px flex-1 bg-gradient-to-l from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+  1258→      </div>
+  1259→
+  1260→      <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30 overflow-hidden">
+  1261→        <div className="absolute inset-0 bg-gradient-to-r from-slate-50/50 via-emerald-50/20 to-slate-50/50 dark:from-slate-900/50 dark:via-emerald-950/10 dark:to-slate-900/50 pointer-events-none rounded-xl" />
+  1262→        <CardHeader className="pb-3 relative">
+  1263→          <CardTitle className="text-base flex items-center gap-2">
+  1264→            <Gauge className="h-4 w-4 text-emerald-500" /> Seguimiento de Cumplimiento
+  1265→          </CardTitle>
+  1266→          <CardDescription>Progreso de obligaciones previsionales y plazos</CardDescription>
+  1267→        </CardHeader>
+  1268→        <CardContent className="relative">
+  1269→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  1270→            {complianceTrackerData.map(item => {
+  1271→              const IconComp = item.icon;
+  1272→              const colorClasses = {
+  1273→                emerald: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', ring: 'ring-emerald-200 dark:ring-emerald-800', progress: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400' },
+  1274→                teal: { bg: 'bg-teal-50 dark:bg-teal-950/30', ring: 'ring-teal-200 dark:ring-teal-800', progress: 'bg-teal-500', text: 'text-teal-600 dark:text-teal-400', iconBg: 'bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400' },
+  1275→                amber: { bg: 'bg-amber-50 dark:bg-amber-950/30', ring: 'ring-amber-200 dark:ring-amber-800', progress: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400' },
+  1276→                sky: { bg: 'bg-sky-50 dark:bg-sky-950/30', ring: 'ring-sky-200 dark:ring-sky-800', progress: 'bg-sky-500', text: 'text-sky-600 dark:text-sky-400', iconBg: 'bg-sky-100 dark:bg-sky-900/40 text-sky-600 dark:text-sky-400' },
+  1277→              }[item.color];
+  1278→
+  1279→              return (
+  1280→                <div key={item.name} className={`p-4 rounded-xl ${colorClasses.bg} ring-1 ${colorClasses.ring} transition-all duration-300 hover:shadow-md`}>
+  1281→                  <div className="flex items-center justify-between mb-3">
+  1282→                    <div className="flex items-center gap-2">
+  1283→                      <div className={`p-2 rounded-lg ${colorClasses.iconBg}`}>
+  1284→                        <IconComp className="h-4 w-4" />
+  1285→                      </div>
+  1286→                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">{item.name}</span>
+  1287→                    </div>
+  1288→                    {item.isCompliant ? (
+  1289→                      <CheckCircle className="h-5 w-5 text-emerald-500" />
+  1290→                    ) : (
+  1291→                      <XCircle className="h-5 w-5 text-red-400" />
+  1292→                    )}
+  1293→                  </div>
+  1294→                  {/* Progress bar */}
+  1295→                  <div className="mb-2">
+  1296→                    <Progress
+  1297→                      value={item.isCompliant ? 100 : item.progress}
+  1298→                      className={`h-2.5 ${colorClasses.bg}`}
+
+[showing lines 849-1298 of 2197; use offset=1299 with limit to continue reading]

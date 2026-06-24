@@ -52,7 +52,9 @@ interface DashboardData {
     fecha_creacion: string;
   }>;
   tendencia_mensual: Array<{ mes: string; total: number }>;
+  empleados_por_mes: Array<{ mes: string; count: number }>;
   distribucion_areas: Array<{ nombre: string; total: number }>;
+  distribucion_salarial: Array<{ label: string; count: number }>;
   alertas: Array<{ tipo: string; mensaje: string; severidad: string }>;
 }
 
@@ -193,6 +195,30 @@ const SALARY_RANGES = [
   { label: '$1K-$2K', min: 1000, max: 2000, count: 35, color: 'bg-emerald-400' },
   { label: '$2K-$3K', min: 2000, max: 3000, count: 12, color: 'bg-teal-400' },
   { label: '$3K+', min: 3000, max: Infinity, count: 5, color: 'bg-sky-400' },
+];
+
+/* ── Distinct color palette for Department/Área distribution bars ── */
+interface AreaBarColor { solid: string; gradient: string; }
+const AREA_BAR_COLORS: AreaBarColor[] = [
+  { solid: '#10b981', gradient: 'linear-gradient(to right, #059669, #34d399)' }, // emerald
+  { solid: '#0ea5e9', gradient: 'linear-gradient(to right, #0284c7, #38bdf8)' }, // sky
+  { solid: '#f59e0b', gradient: 'linear-gradient(to right, #d97706, #fbbf24)' }, // amber
+  { solid: '#8b5cf6', gradient: 'linear-gradient(to right, #7c3aed, #a78bfa)' }, // violet
+  { solid: '#ec4899', gradient: 'linear-gradient(to right, #db2777, #f472b6)' }, // pink
+  { solid: '#14b8a6', gradient: 'linear-gradient(to right, #0d9488, #2dd4bf)' }, // teal
+  { solid: '#f97316', gradient: 'linear-gradient(to right, #ea580c, #fb923c)' }, // orange
+  { solid: '#6366f1', gradient: 'linear-gradient(to right, #4f46e5, #818cf8)' }, // indigo
+  { solid: '#84cc16', gradient: 'linear-gradient(to right, #65a30d, #a3e635)' }, // lime
+  { solid: '#06b6d4', gradient: 'linear-gradient(to right, #0891b2, #22d3ee)' }, // cyan
+];
+
+/* ── Color palette for Salary Distribution histogram ── */
+const SALARY_COLORS = [
+  { bar: 'bg-rose-500', text: 'text-rose-600 dark:text-rose-400' },
+  { bar: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400' },
+  { bar: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
+  { bar: 'bg-teal-500', text: 'text-teal-600 dark:text-teal-400' },
+  { bar: 'bg-sky-500', text: 'text-sky-600 dark:text-sky-400' },
 ];
 
 /* ── Compliance Tracker Items ── */
@@ -604,8 +630,19 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
   }, [data]);
 
   const empleadosSparkline = useMemo(() => {
-    return EMPLOYEE_COUNT_HISTORY.map(e => e.count);
-  }, []);
+    if (!data || data.empleados_por_mes.length === 0) {
+      return EMPLOYEE_COUNT_HISTORY.map(e => e.count);
+    }
+    return data.empleados_por_mes.map(e => e.count);
+  }, [data]);
+
+  /* ── Employee count history for the area chart (real data with mock fallback) ── */
+  const employeeCountHistory = useMemo(() => {
+    if (!data || data.empleados_por_mes.length === 0) {
+      return EMPLOYEE_COUNT_HISTORY;
+    }
+    return data.empleados_por_mes.map(e => ({ month: e.mes.slice(0, 3), count: e.count }));
+  }, [data]);
 
   const planillasSparkline = useMemo(() => {
     if (!data) return [0, 0, 0, 0, 0, 0, 0];
@@ -747,27 +784,18 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
     });
   }, [data]);
 
-  /* ── Salary Distribution Derived Data ── */
+  /* ── Salary Distribution Derived Data (real data from API, mock fallback) ── */
   const salaryDistribution = useMemo(() => {
-    if (!data || data.distribucion_areas.length === 0) {
-      return SALARY_RANGES;
+    if (!data || !data.distribucion_salarial || data.distribucion_salarial.length === 0) {
+      return SALARY_RANGES.map((r, i) => ({ ...r, color: SALARY_COLORS[i].bar, textColor: SALARY_COLORS[i].text }));
     }
-    // Calculate from distribucion_areas - use proportional estimates
-    const total = data.distribucion_areas.reduce((s, a) => s + a.total, 0);
-    const numAreas = data.distribucion_areas.length;
-    const avgPerArea = total / (numAreas || 1);
-
-    // Distribute the total employees across salary ranges based on typical SV distribution
-    const totalEmployees = data.kpis.total_empleados_activos;
-    return SALARY_RANGES.map(range => {
-      let estimatedCount: number;
-      if (range.max <= 500) estimatedCount = Math.round(totalEmployees * 0.1);
-      else if (range.max <= 1000) estimatedCount = Math.round(totalEmployees * 0.27);
-      else if (range.max <= 2000) estimatedCount = Math.round(totalEmployees * 0.43);
-      else if (range.max <= 3000) estimatedCount = Math.round(totalEmployees * 0.13);
-      else estimatedCount = Math.round(totalEmployees * 0.07);
-      return { ...range, count: estimatedCount };
-    });
+    return data.distribucion_salarial.map((s, i) => ({
+      label: s.label,
+      min: 0, max: Infinity,
+      count: s.count,
+      color: SALARY_COLORS[i % SALARY_COLORS.length].bar,
+      textColor: SALARY_COLORS[i % SALARY_COLORS.length].text,
+    }));
   }, [data]);
 
   /* ── Enhanced Loading Skeleton ── */
@@ -1422,13 +1450,15 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {salaryDistribution.map((range, idx) => (
+              {salaryDistribution.map((range, idx) => {
+                const textColor = range.textColor || 'text-slate-600 dark:text-slate-300';
+                return (
                 <div key={range.label} className="group">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{range.label}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{range.count}</span>
-                      <span className="text-[9px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                      <span className={`text-[9px] font-semibold bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded ${textColor}`}>
                         {data.kpis.total_empleados_activos > 0 ? Math.round((range.count / data.kpis.total_empleados_activos) * 100) : 0}%
                       </span>
                     </div>
@@ -1436,18 +1466,19 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-7 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden relative">
                       <div
-                        className={`h-7 rounded-lg transition-all duration-700 ease-out ${range.color} opacity-80 group-hover:opacity-100`}
+                        className={`h-7 rounded-lg transition-all duration-700 ease-out ${range.color} opacity-85 group-hover:opacity-100`}
                         style={{ width: `${(range.count / maxSalaryCount) * 100}%` }}
                       />
                       {range.count > 0 && (range.count / maxSalaryCount) > 0.15 && (
                         <span className="absolute inset-0 flex items-center pl-3 text-[10px] font-bold text-white/90">
-                          {range.count} empleados
+                          {range.count} {range.count === 1 ? 'empleado' : 'empleados'}
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {/* Total indicator */}
               <div className="pt-3 mt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Empleados</span>
@@ -1625,11 +1656,12 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             <div className="relative">
               <div className="relative h-40">
                 {(() => {
-                  const maxCount = Math.max(...EMPLOYEE_COUNT_HISTORY.map(e => e.count), 1);
-                  const minCount = Math.min(...EMPLOYEE_COUNT_HISTORY.map(e => e.count));
+                  const history = employeeCountHistory;
+                  const maxCount = Math.max(...history.map(e => e.count), 1);
+                  const minCount = Math.min(...history.map(e => e.count));
                   const range = maxCount - minCount || 1;
-                  const points = EMPLOYEE_COUNT_HISTORY.map((e, i) => {
-                    const x = (i / (EMPLOYEE_COUNT_HISTORY.length - 1)) * 100;
+                  const points = history.map((e, i) => {
+                    const x = (i / (history.length - 1)) * 100;
                     const y = 100 - ((e.count - minCount) / range) * 80 - 10;
                     return `${x},${y}`;
                   });
@@ -1655,8 +1687,8 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                         strokeLinejoin="round"
                         strokeLinecap="round"
                       />
-                      {EMPLOYEE_COUNT_HISTORY.map((e, i) => {
-                        const x = (i / (EMPLOYEE_COUNT_HISTORY.length - 1)) * 100;
+                      {history.map((e, i) => {
+                        const x = (i / (history.length - 1)) * 100;
                         const y = 100 - ((e.count - minCount) / range) * 80 - 10;
                         return (
                           <circle key={i} cx={x} cy={y} r="1.5" fill="#14b8a6" stroke="white" strokeWidth="0.5" />
@@ -1667,7 +1699,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                 })()}
               </div>
               <div className="flex justify-between mt-2 px-1">
-                {EMPLOYEE_COUNT_HISTORY.map((e, i) => (
+                {employeeCountHistory.map((e, i) => (
                   <div key={i} className="flex flex-col items-center gap-0.5">
                     <span className="text-[10px] font-mono font-bold text-teal-600 dark:text-teal-400">{e.count}</span>
                     <span className="text-[9px] text-slate-400 dark:text-slate-500">{e.month}</span>
@@ -1698,48 +1730,52 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
               </div>
             ) : (
               <div className="relative">
-                <div className="absolute left-0 top-0 bottom-6 w-14 flex flex-col justify-between text-[9px] text-slate-400 dark:text-slate-500 font-mono pr-1">
-                  <span>{fmtShort(maxTendencia)}</span>
-                  <span>{fmtShort(maxTendencia * 0.75)}</span>
-                  <span>{fmtShort(maxTendencia * 0.5)}</span>
-                  <span>{fmtShort(maxTendencia * 0.25)}</span>
-                  <span>$0</span>
+                {/* Y-axis labels - aligned to the plot area (h-48) */}
+                <div className="absolute left-0 top-0 w-14 h-48 flex flex-col justify-between text-[9px] text-slate-400 dark:text-slate-500 font-mono pr-1 pt-0">
+                  <span className="leading-none">{fmtShort(maxTendencia)}</span>
+                  <span className="leading-none">{fmtShort(maxTendencia * 0.75)}</span>
+                  <span className="leading-none">{fmtShort(maxTendencia * 0.5)}</span>
+                  <span className="leading-none">{fmtShort(maxTendencia * 0.25)}</span>
+                  <span className="leading-none">$0</span>
                 </div>
                 <div className="ml-14 relative">
-                  <div className="absolute inset-0 bottom-6 flex flex-col justify-between pointer-events-none">
-                    {[0, 1, 2, 3, 4].map(i => (
-                      <div key={i} className="border-t border-dashed border-slate-200 dark:border-slate-700/50" />
-                    ))}
-                  </div>
-                  <div className="relative flex items-end gap-2 h-48 pt-2 pb-0">
-                    {data.tendencia_mensual.map((m, i) => {
-                      const barPct = maxTendencia > 0 ? (m.total / maxTendencia) * 100 : 0;
-                      const isLast = i === currentMonthIdx;
-                      return (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-                          <div className="w-full flex justify-center">
-                            <div className="relative w-full max-w-[36px]">
-                              {/* Tooltip on hover */}
-                              <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[9px] font-mono px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                                {fmt(m.total)}
-                              </div>
+                  {/* Plot area: gridlines + bars share the exact same h-48 box */}
+                  <div className="relative h-48">
+                    {/* Horizontal gridlines - 5 lines evenly spaced */}
+                    <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                      {[0, 1, 2, 3, 4].map(i => (
+                        <div key={i} className="border-t border-dashed border-slate-200 dark:border-slate-700/50" />
+                      ))}
+                    </div>
+                    {/* Bars */}
+                    <div className="absolute inset-0 flex items-end gap-2">
+                      {data.tendencia_mensual.map((m, i) => {
+                        const barPct = maxTendencia > 0 ? (m.total / maxTendencia) * 100 : 0;
+                        const isLast = i === currentMonthIdx;
+                        return (
+                          <div key={i} className="flex-1 h-full flex flex-col items-center justify-end gap-1 group">
+                            {/* Value label - always visible on current month, hover on others */}
+                            <div className={`text-[9px] font-mono font-bold transition-opacity duration-200 ${isLast ? 'opacity-100 text-emerald-600 dark:text-emerald-400' : 'opacity-0 group-hover:opacity-100 text-slate-600 dark:text-slate-300'}`}>
+                              {fmtShort(m.total)}
+                            </div>
+                            <div className="w-full flex justify-center px-0.5">
                               <div
-                                className={`w-full rounded-t-md transition-all duration-700 ease-out cursor-pointer ${
+                                className={`w-full max-w-[40px] rounded-t-md transition-all duration-700 ease-out cursor-pointer ${
                                   isLast
                                     ? 'bg-gradient-to-t from-emerald-600 to-teal-400 shadow-md shadow-emerald-500/30'
-                                    : 'bg-gradient-to-t from-emerald-400/80 to-teal-300/80 hover:from-emerald-500 hover:to-teal-400'
+                                    : 'bg-gradient-to-t from-slate-300 to-slate-200 dark:from-slate-600 dark:to-slate-500 hover:from-emerald-400 hover:to-teal-300'
                                 }`}
                                 style={{
                                   height: `${barPct}%`,
                                   minHeight: m.total > 0 ? '4px' : '2px',
-                                  animationDelay: `${i * 100}ms`,
+                                  animationDelay: `${i * 80}ms`,
                                 }}
                               />
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                   {/* X-axis labels */}
                   <div className="flex gap-2 mt-2">
@@ -1769,19 +1805,27 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             <div className="space-y-3 max-h-72 overflow-y-auto custom-scrollbar pr-1">
               {data.distribucion_areas.map((area, i) => {
                 const pct = maxArea > 0 ? (area.total / maxArea) * 100 : 0;
-                const hue = 150 + (i * 20) % 40;
+                const totalAreas = data.distribucion_areas.reduce((s, a) => s + a.total, 0);
+                const sharePct = totalAreas > 0 ? (area.total / totalAreas) * 100 : 0;
+                const palette = AREA_BAR_COLORS[i % AREA_BAR_COLORS.length];
                 return (
                   <div key={area.nombre} className="group">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{area.nombre}</span>
-                      <span className="text-xs font-bold font-mono text-slate-900 dark:text-slate-100">{fmt(area.total)}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: palette.solid }} />
+                        <span className="text-xs font-medium text-slate-600 dark:text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">{area.nombre}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">{sharePct.toFixed(1)}%</span>
+                        <span className="text-xs font-bold font-mono text-slate-900 dark:text-slate-100">{fmt(area.total)}</span>
+                      </div>
                     </div>
                     <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                       <div
-                        className="h-3 rounded-full transition-all duration-700 ease-out group-hover:opacity-100 opacity-80"
+                        className="h-3 rounded-full transition-all duration-700 ease-out group-hover:brightness-110"
                         style={{
                           width: `${pct}%`,
-                          background: `linear-gradient(to right, hsl(${hue}, 60%, 45%), hsl(${hue + 20}, 55%, 55%))`,
+                          background: palette.gradient,
                         }}
                       />
                     </div>

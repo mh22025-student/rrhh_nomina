@@ -1625,6 +1625,7 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
     cumplimientos: { nombre: string; presentado: boolean; peso: number }[];
     vencimientos: { nombre: string; fecha: string; dias: number }[];
   } | null>(null);
+  const [tendenciaMensual, setTendenciaMensual] = useState<Array<{ mes: string; total: number }>>([]);
   const [totalPerfiles, setTotalPerfiles] = useState(0);
   const [auditEntries, setAuditEntries] = useState<Array<{
     id: string;
@@ -1730,6 +1731,9 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
         if (dashRes.ok) {
           const dashData = await dashRes.json();
           setDashboardData(dashData.kpis);
+          if (Array.isArray(dashData.tendencia_mensual)) {
+            setTendenciaMensual(dashData.tendencia_mensual);
+          }
           // Extract next deadline from vencimientos
           if (dashData.kpis?.vencimientos?.length > 0) {
             const sorted = [...dashData.kpis.vencimientos].sort((a: { dias: number }, b: { dias: number }) => a.dias - b.dias);
@@ -1819,8 +1823,14 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
           const empleados = data.data || data.empleados || data || [];
           if (Array.isArray(empleados) && empleados.length > 0) {
             const areaMap: Record<string, number> = {};
-            empleados.forEach((emp: { area?: string; departamento?: string; seccion?: string }) => {
-              const areaName = emp.area || emp.departamento || emp.seccion || 'Sin Área';
+            empleados.forEach((emp: { area?: { nombre?: string } | string; departamento?: { nombre?: string } | string; seccion?: string }) => {
+              const areaName =
+                (typeof emp.area === 'object' && emp.area?.nombre) ||
+                (typeof emp.area === 'string' && emp.area) ||
+                (typeof emp.departamento === 'object' && emp.departamento?.nombre) ||
+                (typeof emp.departamento === 'string' && emp.departamento) ||
+                emp.seccion ||
+                'Sin Área';
               areaMap[areaName] = (areaMap[areaName] || 0) + 1;
             });
             const colors = ['bg-teal-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-amber-500', 'bg-violet-500', 'bg-rose-500', 'bg-lime-500', 'bg-orange-500'];
@@ -1951,8 +1961,12 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
     },
   ];
 
-  // Compute bar chart values
-  const maxValue = Math.max(...PAYROLL_TREND_DATA.map(d => d.value));
+  // Compute bar chart values - use real data when available, fall back to mock
+  const trendData = tendenciaMensual.length > 0
+    ? tendenciaMensual.map(m => ({ month: m.mes.slice(0, 3), value: m.total }))
+    : PAYROLL_TREND_DATA;
+  const maxValue = Math.max(...trendData.map(d => d.value), 1);
+  const currentTrendIdx = trendData.length - 1;
 
   // Compute area total
   const areaTotal = areaDistribution.reduce((sum, a) => sum + a.count, 0);
@@ -2230,39 +2244,50 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
               <BarChart3 className="h-4 w-4 text-emerald-500" />
               Tendencia de Nómina
             </CardTitle>
-            <CardDescription className="text-xs">Totales mensuales (últimos 12 meses)</CardDescription>
+            <CardDescription className="text-xs">
+              {tendenciaMensual.length > 0
+                ? 'Total salarios brutos (últimos 6 meses)'
+                : 'Totales mensuales (últimos 12 meses)'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="relative h-44 sm:h-52">
-              {/* Grid lines */}
+              {/* Grid lines + Y-axis labels */}
               <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
                 {[...Array(5)].map((_, i) => (
                   <div key={i} className="border-b border-slate-100 dark:border-slate-800 relative">
-                    <span className="absolute -left-0 -top-2.5 text-[9px] text-slate-400 dark:text-slate-500">
-                      {i === 0 ? '' : `$${Math.round(maxValue - (i * maxValue / 4)).toLocaleString()}`}
+                    <span className="absolute -left-0 -top-2.5 text-[9px] text-slate-400 dark:text-slate-500 font-mono">
+                      ${Math.round(maxValue - (i * maxValue / 4)).toLocaleString()}
                     </span>
                   </div>
                 ))}
               </div>
               {/* Bars */}
               <div className="absolute inset-0 flex items-end gap-1 sm:gap-1.5 pl-10 sm:pl-12 pb-5 pt-1">
-                {PAYROLL_TREND_DATA.map((item) => {
-                  const heightPct = (item.value / maxValue) * 100;
+                {trendData.map((item, idx) => {
+                  const heightPct = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+                  const isCurrent = idx === currentTrendIdx;
                   return (
-                    <div key={item.month} className="flex-1 flex flex-col items-center justify-end h-full group">
-                      {/* Tooltip on hover */}
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity mb-1 text-[9px] font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded shadow-sm border border-slate-100 dark:border-slate-700 whitespace-nowrap z-10">
+                    <div key={item.month + idx} className="flex-1 flex flex-col items-center justify-end h-full group">
+                      {/* Value label - always visible on current month, hover otherwise */}
+                      <div className={`text-[9px] font-mono font-bold transition-opacity mb-1 px-1 py-0.5 rounded shadow-sm border whitespace-nowrap z-10 ${
+                        isCurrent
+                          ? 'opacity-100 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 border-emerald-200 dark:border-emerald-800'
+                          : 'opacity-0 group-hover:opacity-100 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700'
+                      }`}>
                         ${item.value.toLocaleString()}
                       </div>
                       <div
-                        className="w-full rounded-t-sm sm:rounded-t transition-all duration-200 group-hover:opacity-90"
+                        className={`w-full rounded-t-sm sm:rounded-t transition-all duration-200 ${isCurrent ? 'shadow-md shadow-emerald-500/30' : ''}`}
                         style={{
                           height: `${heightPct}%`,
-                          background: `linear-gradient(to top, oklch(0.6 0.15 160), oklch(0.55 0.12 180))`,
+                          background: isCurrent
+                            ? 'linear-gradient(to top, #059669, #2dd4bf)'
+                            : 'linear-gradient(to top, #cbd5e1, #e2e8f0)',
                           minHeight: '4px',
                         }}
                       />
-                      <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">{item.month}</span>
+                      <span className={`text-[9px] sm:text-[10px] mt-1.5 ${isCurrent ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-400 dark:text-slate-500'}`}>{item.month}</span>
                     </div>
                   );
                 })}

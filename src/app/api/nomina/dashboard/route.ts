@@ -112,6 +112,7 @@ export async function GET(request: NextRequest) {
 
     // Monthly payroll trend (last 6 months)
     const meses = [];
+    const empleadosPorMes: Array<{ mes: string; count: number }> = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
@@ -128,6 +129,16 @@ export async function GET(request: NextRequest) {
       });
       const total = pMes.reduce((sum, p) => sum + p.total_salarios_brutos, 0);
       meses.push({ mes: mNombre, total: Math.round(total * 100) / 100 });
+
+      // Active employees whose creation date is on or before month end
+      // (approximates headcount at end of that month)
+      const headcount = await db.empleado.count({
+        where: {
+          estado: 'ACTIVO',
+          fecha_creacion: { lte: mEnd },
+        },
+      });
+      empleadosPorMes.push({ mes: mNombre, count: headcount });
     }
 
     // Department cost distribution
@@ -149,6 +160,28 @@ export async function GET(request: NextRequest) {
     const distribucionAreas = Array.from(areaCosts.entries())
       .map(([nombre, total]) => ({ nombre, total: Math.round(total * 100) / 100 }))
       .sort((a, b) => b.total - a.total);
+
+    // Salary distribution (real data from active employees' current contract)
+    const empleadosConSalario = await db.empleado.findMany({
+      where: { estado: 'ACTIVO' },
+      include: {
+        contratos: { where: { activo: true }, take: 1, select: { salario_base_contrato: true } },
+      },
+    });
+    const salaryBuckets = [
+      { label: '<$500', min: 0, max: 500 },
+      { label: '$500-$1K', min: 500, max: 1000 },
+      { label: '$1K-$2K', min: 1000, max: 2000 },
+      { label: '$2K-$3K', min: 2000, max: 3000 },
+      { label: '$3K+', min: 3000, max: Infinity },
+    ];
+    const distribucionSalarial = salaryBuckets.map(b => ({
+      label: b.label,
+      count: empleadosConSalario.filter(e => {
+        const sal = e.contratos[0]?.salario_base_contrato ?? 0;
+        return sal >= b.min && sal < b.max;
+      }).length,
+    }));
 
     // Alerts
     const alertas: Array<{ tipo: string; mensaje: string; severidad: string }> = [];
@@ -206,7 +239,9 @@ export async function GET(request: NextRequest) {
         fecha_creacion: p.fecha_creacion,
       })),
       tendencia_mensual: meses,
+      empleados_por_mes: empleadosPorMes,
       distribucion_areas: distribucionAreas,
+      distribucion_salarial: distribucionSalarial,
       alertas,
     });
   } catch (error) {
