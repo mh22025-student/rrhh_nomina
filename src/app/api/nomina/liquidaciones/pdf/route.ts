@@ -21,18 +21,21 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const empleadoId = searchParams.get('empleado_id');
+    const liquidacionId = searchParams.get('liquidacion_id');
 
-    if (!empleadoId) {
+    if (!empleadoId && !liquidacionId) {
       return NextResponse.json(
-        { error: 'Parámetro empleado_id es requerido' },
+        { error: 'Parámetro empleado_id o liquidacion_id es requerido' },
         { status: 400 }
       );
     }
 
-    // 2. Fetch the most recent liquidacion for this employee
+    // 2. Fetch the liquidacion record (by id if provided, otherwise most recent for the employee)
     const liquidacionRecord = await db.liquidacion.findFirst({
-      where: { empleado_id: empleadoId },
-      orderBy: { fecha_creacion: 'desc' },
+      where: liquidacionId
+        ? { id: liquidacionId }
+        : { empleado_id: empleadoId! },
+      orderBy: liquidacionId ? undefined : { fecha_creacion: 'desc' },
       include: {
         empleado: {
           select: {
@@ -58,7 +61,7 @@ export async function GET(request: NextRequest) {
 
     if (!liquidacionRecord) {
       return NextResponse.json(
-        { error: 'No se encontró liquidación para este empleado' },
+        { error: liquidacionId ? 'No se encontró la liquidación especificada' : 'No se encontró liquidación para este empleado' },
         { status: 404 }
       );
     }

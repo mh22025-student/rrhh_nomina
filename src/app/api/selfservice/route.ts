@@ -140,9 +140,12 @@ export async function GET(request: NextRequest) {
       vacaciones,
       recibos: detalles.map((d) => ({
         id: d.id,
+        planilla_id: d.planilla_id,
+        codigo_planilla: d.planilla.codigo_planilla,
         periodo_inicio: d.planilla.fecha_inicio_periodo,
         periodo_fin: d.planilla.fecha_fin_periodo,
         tipo: d.planilla.tipo,
+        estado: d.planilla.estado,
         salario_bruto: d.salario_bruto,
         total_descuentos: d.total_descuentos,
         salario_neto: d.salario_neto,

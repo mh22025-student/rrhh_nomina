@@ -334,13 +334,12 @@ function generateBoletaPage(doc: PDFDocument, data: BoletaData) {
     ['AFP Patronal (8.75%)', fmt(detalle.afp_patronal)],
   ];
 
-  // INSAFORP estimate
-  const knownPatronal = detalle.isss_patronal + detalle.afp_patronal;
-  if (planilla.total_cargas_patronales > 0 && knownPatronal > 0) {
-    const insaforp = Math.max(0, planilla.total_cargas_patronales - knownPatronal);
-    if (insaforp > 0) {
-      patronal.push(['INSAFORP (1%)', fmt(insaforp)]);
-    }
+  // INSAFORP estimate — 1% of employee's base salary (per-employee estimate of the planilla-wide charge)
+  // INSAFORP applies when the company has >= 10 employees (Ley INSAFORP). We show the per-employee
+  // proportional estimate as 1% of salario_base, which matches the planilla calculation formula.
+  const insaforp = Math.round(detalle.salario_base * 0.01 * 100) / 100;
+  if (insaforp > 0) {
+    patronal.push(['INSAFORP (1%)', fmt(insaforp)]);
   }
 
   for (let i = 0; i < patronal.length; i++) {

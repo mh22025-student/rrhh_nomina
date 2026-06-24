@@ -412,10 +412,16 @@ export default function LiquidationView({ accessToken }: LiquidationViewProps) {
     }
   }, [detailResult, activeTab, fetchComparison]);
 
-  const handleGeneratePdf = async (empleadoId: string, codigoEmpleado: string) => {
-    setGeneratingPdf(empleadoId);
+  const handleGeneratePdf = async (empleadoId: string, codigoEmpleado: string, liquidacionId?: string) => {
+    setGeneratingPdf(liquidacionId || empleadoId);
     try {
-      const res = await fetch(`/api/nomina/liquidaciones/pdf?empleado_id=${empleadoId}`, {
+      const params = new URLSearchParams();
+      if (liquidacionId) {
+        params.set('liquidacion_id', liquidacionId);
+      } else {
+        params.set('empleado_id', empleadoId);
+      }
+      const res = await fetch(`/api/nomina/liquidaciones/pdf?${params}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!res.ok) {
@@ -1523,11 +1529,11 @@ export default function LiquidationView({ accessToken }: LiquidationViewProps) {
                               variant="ghost"
                               size="sm"
                               className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                              onClick={() => handleGeneratePdf(l.empleado_id, l.empleado_codigo)}
-                              disabled={generatingPdf === l.empleado_id}
+                              onClick={() => handleGeneratePdf(l.empleado_id, l.empleado_codigo, l.id)}
+                              disabled={generatingPdf === l.id}
                               title="Generar PDF"
                             >
-                              {generatingPdf === l.empleado_id ? (
+                              {generatingPdf === l.id ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                               ) : (
                                 <FileText className="h-3.5 w-3.5" />

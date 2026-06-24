@@ -2935,3 +2935,99 @@ Also reviewed `ProfileDescriptiveForm.tsx` which uses `CollapsibleTrigger asChil
 - Mouse click and PDF download both work independently
 - Visual layout unchanged
 - Lint clean, no runtime errors
+
+---
+
+## Task 9: Fix Document Generation & Download Issues (2026-06-24)
+
+**Task ID**: 9  
+**Agent**: Code Agent  
+**Task**: Review document generation for downloads; fix issues found (one example reported: Recibo de Pago in employee portal)
+
+### Issues Found & Fixed
+
+#### Issue 1: Boleta de Pago download fails with 404 in SelfServicePortal (CRITICAL)
+
+**Root cause**: The `/api/selfservice` endpoint mapped `recibos` from `detallePlanilla` records but set `id: d.id` (the detalle_planilla ID). The frontend `handleDownloadBoleta` then used this `id` as the `planilla_id` in the URL: `/api/nomina/planillas/${recibo.id}/boleta`. Since no planilla has that ID, the boleta API's `db.planilla.findUnique({ where: { id: detallePlanillaId } })` returned null → 404 "Planilla no encontrada".
+
+**Fix**: 
+- **API** (`/api/selfservice/route.ts`): Added `planilla_id: d.planilla_id` and `codigo_planilla: d.planilla.codigo_planilla` to each recibo object.
+- **Frontend** (`SelfServicePortal.tsx`): Changed `handleDownloadBoleta` to accept the full recibo object and use `recibo.planilla_id` in the URL. Updated both call sites (quick action button + per-row PDF button). Also improved error handling to surface the API error message.
+
+**Verification**: 
+- Before fix: `GET /api/nomina/planillas/{detallePlanillaId}/boleta` → 404
+- After fix: `GET /api/nomina/planillas/{planillaId}/boleta` → 200, valid 3218-byte PDF
+- Tested both the per-row PDF button and the "Descargar Recibo" quick action button via agent-browser — both show success toast "Boleta descargada"
+
+#### Issue 2: INSAFORP calculation completely wrong in boleta PDF (CRITICAL)
+
+**Root cause**: In `/lib/pdf-boleta.ts`, the INSAFORP estimate was calculated as:
+```js
+const insaforp = Math.max(0, planilla.total_cargas_patronales - knownPatronal);
+```
+Where `planilla.total_cargas_patronales` is the SUM of all employees' patronal charges in the planilla, and `knownPatronal` is only THIS employee's ISSS+AFP patronal. So the result was `(all_employees_patronal) - (this_employee_isss_afp)` = the sum of all OTHER employees' patronal charges plus this employee's INSAFORP — a wildly inflated number.
+
+**Example**: For Laura (salario $480), INSAFORP showed **$1,494.38** instead of the correct **$4.80**.
+
+**Fix**: Calculate INSAFORP correctly as 1% of the employee's base salary (matching the planilla calculation formula in `/api/nomina/calcular/route.ts`: `totalBrutos * tasa_insaforp`):
+```js
+const insaforp = Math.round(detalle.salario_base * 0.01 * 100) / 100;
+```
+
+**Verification**: VLM analysis of regenerated PDF confirms:
+- INSAFORP (1%): $4.80 ✓ (was $1,494.38)
+- ISSS Patronal (7.5%): $36.00 ✓
+- AFP Patronal (8.75%): $42.00 ✓
+
+#### Issue 3: Liquidación PDF only supported most-recent record (MODERATE)
+
+**Root cause**: The `/api/nomina/liquidaciones/pdf` endpoint only accepted `empleado_id` and used `findFirst` with `orderBy: fecha_creacion desc`, always returning the most recent liquidación. The history table in `LiquidationView.tsx` called `handleGeneratePdf(l.empleado_id, l.empleado_codigo)` without passing the specific `l.id`, so clicking PDF on an older liquidación would download the most recent one instead.
+
+**Fix**:
+- **API** (`/api/nomina/liquidaciones/pdf/route.ts`): Added optional `liquidacion_id` query parameter. When provided, fetches by ID; otherwise falls back to most-recent for the employee. Updated error messages to be context-specific.
+- **Frontend** (`LiquidationView.tsx`): Updated `handleGeneratePdf` to accept optional `liquidacionId` parameter and pass it via URLSearchParams. Updated history table call site to pass `l.id`. Updated `generatingPdf` state tracking to use `l.id` for accurate loading state.
+
+**Verification**: 
+- `GET /api/nomina/liquidaciones/pdf?liquidacion_id={id}` → 200, valid PDF ✓
+- `GET /api/nomina/liquidaciones/pdf?empleado_id={id}` → 200, valid PDF (most recent) ✓
+- Both paths produce correct 3192-byte PDFs
+
+### Comprehensive Download Testing Results
+
+All document generation endpoints tested with curl + VLM verification:
+
+| Endpoint | Status | Size | Type | Result |
+|----------|--------|------|------|--------|
+| `/api/nomina/planillas/[id]/boleta?empleado_id=X` | 200 | 3210 B | PDF | ✅ Fixed (was 404 with wrong ID) |
+| `/api/nomina/planillas/[id]/boletas` (all) | 200 | 16434 B | PDF (7 pages) | ✅ Working |
+| `/api/nomina/aguinaldo/pdf?empleado_id=X&anio=2026` | 200 | 3173 B | PDF | ✅ Working |
+| `/api/nomina/liquidaciones/pdf?liquidacion_id=X` | 200 | 3192 B | PDF | ✅ Fixed (new param) |
+| `/api/nomina/liquidaciones/pdf?empleado_id=X` | 200 | 3192 B | PDF | ✅ Working |
+| `/api/reportes/isss/download?mes=7&anio=2026` | 200 | 909 B | CSV (UTF-8 BOM) | ✅ Working |
+| `/api/reportes/afp/download?mes=7&anio=2026` | 200 | 1399 B | CSV (UTF-8 BOM) | ✅ Working |
+| `/api/reportes/isr/download?mes=7&anio=2026` | 200 | 1174 B | CSV (UTF-8 BOM) | ✅ Working |
+| `/api/reportes/isr/constancia?empleado_id=X&mes=7&anio=2026` | 200 | 4078 B | PDF | ✅ Working |
+| `/api/empleados/[id]/constancia` | 200 | 3031 B | PDF | ✅ Working |
+| `/api/admin/bitacora?export=csv` | 200 | 5507 B | CSV | ✅ Working |
+
+### Files Modified
+- `/src/app/api/selfservice/route.ts` — Added `planilla_id` and `codigo_planilla` to recibos response
+- `/src/components/modules/SelfServicePortal.tsx` — Updated recibo type, `handleDownloadBoleta` signature, and both call sites
+- `/src/lib/pdf-boleta.ts` — Fixed INSAFORP calculation (1% of salario_base)
+- `/src/app/api/nomina/liquidaciones/pdf/route.ts` — Added `liquidacion_id` parameter support
+- `/src/components/modules/LiquidationView.tsx` — Updated `handleGeneratePdf` to pass `liquidacion_id`, updated call site and loading state
+
+### Verification Summary
+- ✅ `bun run lint` passes with 0 errors
+- ✅ Boleta download works end-to-end (tested with agent-browser as EMPLEADO)
+- ✅ Success toast "Boleta descargada" appears after download
+- ✅ Dev log shows HTTP 200 with correct planilla_id
+- ✅ INSAFORP now correctly shows $4.80 (was $1,494.38)
+- ✅ All 11 document download endpoints tested and working
+- ✅ Liquidación PDF supports both `liquidacion_id` and `empleado_id` parameters
+- ✅ No runtime errors
+
+### Stage Summary
+- 3 document generation bugs fixed (1 critical 404, 1 critical calculation error, 1 moderate UX issue)
+- All document downloads now functional: boleta PDF, boletas (all) PDF, aguinaldo PDF, liquidación PDF, constancia PDF, ISR constancia PDF, ISSS/AFP/ISR CSV, audit log CSV
+- Boleta PDF content verified accurate by VLM (earnings, deductions, net pay, patronal charges all correct)

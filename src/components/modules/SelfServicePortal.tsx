@@ -40,7 +40,7 @@ interface SelfServiceData {
   area: { id: string; nombre: string; codigo: string } | null;
   perfil_puesto: { id: string; nombre_puesto: string; banda_salarial: { nombre: string; grado: number } | null } | null;
   vacaciones: { id: string; anio: number; dias_derecho: number; dias_tomados: number; dias_pendientes: number; estado: string }[];
-  recibos: { id: string; periodo_inicio: string; periodo_fin: string; tipo: string; salario_bruto: number; total_descuentos: number; salario_neto: number; isss_laboral: number; afp_laboral: number; isr_retenido: number }[];
+  recibos: { id: string; planilla_id: string; codigo_planilla?: string; periodo_inicio: string; periodo_fin: string; tipo: string; estado?: string; salario_bruto: number; total_descuentos: number; salario_neto: number; isss_laboral: number; afp_laboral: number; isr_retenido: number }[];
   documentos: { id: string; tipo_documento: string; nombre_archivo: string; descripcion: string | null; fecha_creacion: string }[];
   solicitudes: { id: string; tipo: string; estado: string; detalle: string | null; fecha_solicitud: string; fecha_resolucion: string | null }[];
   notificaciones?: { id: string; titulo: string; mensaje: string; prioridad: string; fecha: string; leida: boolean }[];
@@ -660,23 +660,26 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
     }
   };
 
-  const handleDownloadBoleta = async (planillaId: string) => {
+  const handleDownloadBoleta = async (recibo: { planilla_id: string; codigo_planilla?: string; id: string }) => {
     try {
-      setDownloadingId(planillaId);
-      const res = await fetch(`/api/nomina/planillas/${planillaId}/boleta?empleado_id=${data!.empleado.id}`, {
+      setDownloadingId(recibo.id);
+      const res = await fetch(`/api/nomina/planillas/${recibo.planilla_id}/boleta?empleado_id=${data!.empleado.id}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!res.ok) throw new Error('Error al generar boleta');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error((errData as { error?: string }).error || 'Error al generar boleta');
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Boleta_${data!.empleado.codigo_empleado}_${planillaId}.pdf`;
+      a.download = `Boleta_${data!.empleado.codigo_empleado}_${recibo.codigo_planilla || recibo.planilla_id}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       toast({ title: 'Boleta descargada', description: 'El PDF de su recibo ha sido descargado' });
-    } catch {
-      toast({ title: 'Error', description: 'No se pudo generar la boleta', variant: 'destructive' });
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'No se pudo generar la boleta', variant: 'destructive' });
     } finally {
       setDownloadingId(null);
     }
@@ -789,7 +792,7 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
           </button>
           <button
             onClick={() => {
-              if (data.recibos.length > 0) handleDownloadBoleta(data.recibos[0].id);
+              if (data.recibos.length > 0) handleDownloadBoleta(data.recibos[0]);
             }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 hover:border-teal-300 dark:hover:border-teal-700 hover:bg-teal-50/50 dark:hover:bg-teal-900/20 transition-all shrink-0 min-h-[44px] group"
           >
@@ -1365,7 +1368,7 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
                                 variant="outline"
                                 size="sm"
                                 className="h-8 text-xs gap-1.5 min-h-[44px] border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDownloadBoleta(recibo.id); }}
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); handleDownloadBoleta(recibo); }}
                                 disabled={downloadingId === recibo.id}
                               >
                                 {downloadingId === recibo.id ? (
