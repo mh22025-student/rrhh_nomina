@@ -1,0 +1,626 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import {
+     5→  Search, Plus, Eye, Trash2, BookOpen, MapPin, DollarSign, Star, Clock, Loader2,
+     6→  Users, TrendingUp, Layers, Award,
+     7→} from 'lucide-react';
+     8→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     9→import { Button } from '@/components/ui/button';
+    10→import { Input } from '@/components/ui/input';
+    11→import { Label } from '@/components/ui/label';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+    14→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    15→import { Textarea } from '@/components/ui/textarea';
+    16→import { Skeleton } from '@/components/ui/skeleton';
+    17→import { useToast } from '@/hooks/use-toast';
+    18→
+    19→interface ProfileCatalogProps {
+    20→  accessToken: string;
+    21→  userRole: string;
+    22→}
+    23→
+    24→interface Area { id: string; nombre: string; codigo: string; }
+    25→interface Banda { id: string; nombre: string; grado: number; salario_minimo: number; salario_maximo: number; }
+    26→interface Perfil {
+    27→  id: string; codigo: string; nombre_puesto: string; estado: string; version: number;
+    28→  puntos_total: number; proposito: string | null; funciones_esenciales: string | null;
+    29→  requisitos_educacion: string | null; requisitos_experiencia: string | null;
+    30→  requisitos_habilidades: string | null; responsabilidades: string | null;
+    31→  condiciones_trabajo: string | null; sector_laboral: string;
+    32→  area: Area; banda_salarial: Banda | null;
+    33→  _count: { empleados_perfil: number };
+    34→  versiones?: { id: string; version: number; cambio_descripcion: string; fecha_creacion: string; creado_por: { nombre: string; apellido: string } | null }[];
+    35→}
+    36→
+    37→const estadoColors: Record<string, string> = {
+    38→  BORRADOR: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+    39→  ACTIVO: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+    40→  OBSOLETO: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+    41→  VIGENTE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+    42→};
+    43→
+    44→const estadoDotColors: Record<string, string> = {
+    45→  BORRADOR: 'bg-yellow-500',
+    46→  ACTIVO: 'bg-emerald-500',
+    47→  OBSOLETO: 'bg-red-500',
+    48→  VIGENTE: 'bg-emerald-500',
+    49→};
+    50→
+    51→const areaColors = [
+    52→  'bg-emerald-500', 'bg-sky-500', 'bg-violet-500', 'bg-amber-500', 'bg-rose-500',
+    53→  'bg-teal-500', 'bg-orange-500', 'bg-cyan-500', 'bg-pink-500', 'bg-lime-500',
+    54→];
+    55→
+    56→function getAreaColor(areaName: string): string {
+    57→  let hash = 0;
+    58→  for (let i = 0; i < areaName.length; i++) {
+    59→    hash = areaName.charCodeAt(i) + ((hash << 5) - hash);
+    60→  }
+    61→  return areaColors[Math.abs(hash) % areaColors.length];
+    62→}
+    63→
+    64→function PointsIndicator({ points }: { points: number }) {
+    65→  const maxPoints = 1000;
+    66→  const pct = Math.min((points / maxPoints) * 100, 100);
+    67→  let color = 'bg-slate-400';
+    68→  if (points >= 700) color = 'bg-emerald-500';
+    69→  else if (points >= 400) color = 'bg-sky-500';
+    70→  else if (points >= 200) color = 'bg-amber-500';
+    71→
+    72→  return (
+    73→    <div className="flex items-center gap-2">
+    74→      <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+    75→        <div className={`h-full rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
+    76→      </div>
+    77→      <span className="text-xs font-medium text-slate-600 dark:text-slate-400 tabular-nums">{points}</span>
+    78→    </div>
+    79→  );
+    80→}
+    81→
+    82→function SalaryRangeBar({ min, max }: { min: number; max: number }) {
+    83→  const globalMin = 200;
+    84→  const globalMax = 8000;
+    85→  const leftPct = Math.max(((min - globalMin) / (globalMax - globalMin)) * 100, 0);
+    86→  const rightPct = Math.min(((max - globalMin) / (globalMax - globalMin)) * 100, 100);
+    87→
+    88→  return (
+    89→    <div className="space-y-1">
+    90→      <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden relative">
+    91→        <div
+    92→          className="absolute top-0 h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full"
+    93→          style={{ left: `${leftPct}%`, width: `${rightPct - leftPct}%` }}
+    94→        />
+    95→      </div>
+    96→      <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400">
+    97→        <span>${min.toLocaleString()}</span>
+    98→        <span>${max.toLocaleString()}</span>
+    99→      </div>
+   100→    </div>
+   101→  );
+   102→}
+   103→
+   104→export default function ProfileCatalog({ accessToken, userRole }: ProfileCatalogProps) {
+   105→  const { toast } = useToast();
+   106→  const [perfiles, setPerfiles] = useState<Perfil[]>([]);
+   107→  const [areas, setAreas] = useState<Area[]>([]);
+   108→  const [bandas, setBandas] = useState<Banda[]>([]);
+   109→  const [loading, setLoading] = useState(true);
+   110→  const [search, setSearch] = useState('');
+   111→  const [filterArea, setFilterArea] = useState('all');
+   112→  const [filterEstado, setFilterEstado] = useState('all');
+   113→  const [filterBanda, setFilterBanda] = useState('all');
+   114→  const [selectedPerfil, setSelectedPerfil] = useState<Perfil | null>(null);
+   115→  const [showCreateDialog, setShowCreateDialog] = useState(false);
+   116→  const [showDetailDialog, setShowDetailDialog] = useState(false);
+   117→  const [creating, setCreating] = useState(false);
+   118→
+   119→  // New profile form
+   120→  const [form, setForm] = useState({
+   121→    codigo: '', nombre_puesto: '', area_id: '', banda_salarial_id: '',
+   122→    sector_laboral: 'COMERCIO', proposito: '', funciones_esenciales: '',
+   123→    requisitos_educacion: '', requisitos_experiencia: '', requisitos_habilidades: '',
+   124→    responsabilidades: '', condiciones_trabajo: '', puntos_total: 0,
+   125→  });
+   126→
+   127→  const fetchPerfiles = useCallback(async () => {
+   128→    setLoading(true);
+   129→    try {
+   130→      const params = new URLSearchParams();
+   131→      if (search) params.set('search', search);
+   132→      if (filterArea !== 'all') params.set('area_id', filterArea);
+   133→      if (filterEstado !== 'all') params.set('estado', filterEstado);
+   134→      if (filterBanda !== 'all') params.set('banda_salarial_id', filterBanda);
+   135→
+   136→      const res = await fetch(`/api/perfiles?${params}`, {
+   137→        headers: { Authorization: `Bearer ${accessToken}` },
+   138→      });
+   139→      if (res.ok) {
+   140→        const data = await res.json();
+   141→        setPerfiles(data);
+   142→      }
+   143→    } catch (err) {
+   144→      console.error(err);
+   145→    } finally {
+   146→      setLoading(false);
+   147→    }
+   148→  }, [accessToken, search, filterArea, filterEstado, filterBanda]);
+   149→
+   150→  const fetchFilters = useCallback(async () => {
+   151→    try {
+   152→      const [areasRes, bandasRes] = await Promise.all([
+   153→        fetch('/api/areas', { headers: { Authorization: `Bearer ${accessToken}` } }),
+   154→        fetch('/api/bandas', { headers: { Authorization: `Bearer ${accessToken}` } }),
+   155→      ]);
+   156→      if (areasRes.ok) {
+   157→        const areasData = await areasRes.json();
+   158→        setAreas(Array.isArray(areasData) ? areasData : areasData.data || []);
+   159→      }
+   160→      if (bandasRes.ok) {
+   161→        const bandasData = await bandasRes.json();
+   162→        setBandas(Array.isArray(bandasData) ? bandasData : bandasData.data || []);
+   163→      }
+   164→    } catch (err) {
+   165→      console.error(err);
+   166→    }
+   167→  }, [accessToken]);
+   168→
+   169→  useEffect(() => { fetchPerfiles(); }, [fetchPerfiles]);
+   170→  useEffect(() => { fetchFilters(); }, [fetchFilters]);
+   171→
+   172→  // Summary stats
+   173→  const stats = useMemo(() => {
+   174→    const totalPerfiles = perfiles.length;
+   175→    const vigentes = perfiles.filter(p => p.estado === 'VIGENTE' || p.estado === 'ACTIVO').length;
+   176→    const avgPuntos = totalPerfiles > 0
+   177→      ? Math.round(perfiles.reduce((sum, p) => sum + p.puntos_total, 0) / totalPerfiles)
+   178→      : 0;
+   179→    const uniqueBandas = new Set(perfiles.filter(p => p.banda_salarial).map(p => p.banda_salarial!.id)).size;
+   180→    return { totalPerfiles, vigentes, avgPuntos, uniqueBandas };
+   181→  }, [perfiles]);
+   182→
+   183→  const handleCreate = async () => {
+   184→    if (!form.codigo || !form.nombre_puesto || !form.area_id) {
+   185→      toast({ title: 'Error', description: 'Código, nombre y área son requeridos', variant: 'destructive' });
+   186→      return;
+   187→    }
+   188→    setCreating(true);
+   189→    try {
+   190→      const res = await fetch('/api/perfiles', {
+   191→        method: 'POST',
+   192→        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+   193→        body: JSON.stringify(form),
+   194→      });
+   195→      if (res.ok) {
+   196→        toast({ title: 'Perfil creado', description: 'El perfil se ha creado exitosamente' });
+   197→        setShowCreateDialog(false);
+   198→        setForm({ codigo: '', nombre_puesto: '', area_id: '', banda_salarial_id: '', sector_laboral: 'COMERCIO', proposito: '', funciones_esenciales: '', requisitos_educacion: '', requisitos_experiencia: '', requisitos_habilidades: '', responsabilidades: '', condiciones_trabajo: '', puntos_total: 0 });
+   199→        fetchPerfiles();
+   200→      } else {
+   201→        const data = await res.json();
+   202→        toast({ title: 'Error', description: data.error || 'Error al crear perfil', variant: 'destructive' });
+   203→      }
+   204→    } catch {
+   205→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   206→    } finally {
+   207→      setCreating(false);
+   208→    }
+   209→  };
+   210→
+   211→  const handleViewDetail = async (id: string) => {
+   212→    try {
+   213→      const res = await fetch(`/api/perfiles/${id}`, {
+   214→        headers: { Authorization: `Bearer ${accessToken}` },
+   215→      });
+   216→      if (res.ok) {
+   217→        const data = await res.json();
+   218→        setSelectedPerfil(data);
+   219→        setShowDetailDialog(true);
+   220→      }
+   221→    } catch (err) {
+   222→      console.error(err);
+   223→    }
+   224→  };
+   225→
+   226→  const handleDeactivate = async (id: string) => {
+   227→    try {
+   228→      const res = await fetch(`/api/perfiles/${id}`, {
+   229→        method: 'DELETE',
+   230→        headers: { Authorization: `Bearer ${accessToken}` },
+   231→      });
+   232→      if (res.ok) {
+   233→        toast({ title: 'Perfil desactivado', description: 'El perfil ha sido marcado como obsoleto' });
+   234→        fetchPerfiles();
+   235→      }
+   236→    } catch {
+   237→      toast({ title: 'Error', description: 'Error al desactivar', variant: 'destructive' });
+   238→    }
+   239→  };
+   240→
+   241→  const canCreate = userRole === 'ADMIN' || userRole === 'ANALISTA';
+   242→  const canDelete = userRole === 'ADMIN';
+   243→
+   244→  return (
+   245→    <div className="space-y-4">
+   246→      {/* Header */}
+   247→      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+   248→        <div>
+   249→          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Catálogo de Perfiles de Puesto</h2>
+   250→          <p className="text-sm text-slate-500 dark:text-slate-400">Gestión de descripciones y valoraciones de puestos</p>
+   251→        </div>
+   252→        {canCreate && (
+   253→          <Button onClick={() => setShowCreateDialog(true)} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800">
+   254→            <Plus className="h-4 w-4 mr-2" /> Nuevo Perfil
+   255→          </Button>
+   256→        )}
+   257→      </div>
+   258→
+   259→      {/* Summary Stats */}
+   260→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   261→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   262→          <CardContent className="p-4 flex items-center gap-3">
+   263→            <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800">
+   264→              <Layers className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+   265→            </div>
+   266→            <div>
+   267→              <p className="text-xs text-slate-500 dark:text-slate-400">Total Perfiles</p>
+   268→              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{stats.totalPerfiles}</p>
+   269→            </div>
+   270→          </CardContent>
+   271→        </Card>
+   272→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   273→          <CardContent className="p-4 flex items-center gap-3">
+   274→            <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/30">
+   275→              <Award className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   276→            </div>
+   277→            <div>
+   278→              <p className="text-xs text-slate-500 dark:text-slate-400">Perfiles Vigentes</p>
+   279→              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{stats.vigentes}</p>
+   280→            </div>
+   281→          </CardContent>
+   282→        </Card>
+   283→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   284→          <CardContent className="p-4 flex items-center gap-3">
+   285→            <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-sky-900/30">
+   286→              <TrendingUp className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+   287→            </div>
+   288→            <div>
+   289→              <p className="text-xs text-slate-500 dark:text-slate-400">Promedio Valuación</p>
+   290→              <p className="text-2xl font-bold text-sky-600 dark:text-sky-400">{stats.avgPuntos}<span className="text-sm font-normal text-slate-400 ml-1">pts</span></p>
+   291→            </div>
+   292→          </CardContent>
+   293→        </Card>
+   294→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   295→          <CardContent className="p-4 flex items-center gap-3">
+   296→            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/30">
+   297→              <DollarSign className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+   298→            </div>
+   299→            <div>
+   300→              <p className="text-xs text-slate-500 dark:text-slate-400">Bandas Salariales</p>
+   301→              <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{stats.uniqueBandas}</p>
+   302→            </div>
+   303→          </CardContent>
+   304→        </Card>
+   305→      </div>
+   306→
+   307→      {/* Filters */}
+   308→      <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   309→        <CardContent className="p-4">
+   310→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+   311→            <div className="relative">
+   312→              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+   313→              <Input
+   314→                placeholder="Buscar por código o nombre..."
+   315→                value={search}
+   316→                onChange={(e) => setSearch(e.target.value)}
+   317→                className="pl-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+   318→              />
+   319→            </div>
+   320→            <Select value={filterArea} onValueChange={setFilterArea}>
+   321→              <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Filtrar por área" /></SelectTrigger>
+   322→              <SelectContent>
+   323→                <SelectItem value="all">Todas las áreas</SelectItem>
+   324→                {Array.isArray(areas) && areas.map((a) => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
+   325→              </SelectContent>
+   326→            </Select>
+   327→            <Select value={filterEstado} onValueChange={setFilterEstado}>
+   328→              <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Filtrar por estado" /></SelectTrigger>
+   329→              <SelectContent>
+   330→                <SelectItem value="all">Todos los estados</SelectItem>
+   331→                <SelectItem value="BORRADOR">Borrador</SelectItem>
+   332→                <SelectItem value="ACTIVO">Activo</SelectItem>
+   333→                <SelectItem value="VIGENTE">Vigente</SelectItem>
+   334→                <SelectItem value="OBSOLETO">Obsoleto</SelectItem>
+   335→              </SelectContent>
+   336→            </Select>
+   337→            <Select value={filterBanda} onValueChange={setFilterBanda}>
+   338→              <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Filtrar por banda" /></SelectTrigger>
+   339→              <SelectContent>
+   340→                <SelectItem value="all">Todas las bandas</SelectItem>
+   341→                {bandas.map((b) => <SelectItem key={b.id} value={b.id}>{b.nombre} (G{b.grado})</SelectItem>)}
+   342→              </SelectContent>
+   343→            </Select>
+   344→          </div>
+   345→        </CardContent>
+   346→      </Card>
+   347→
+   348→      {/* Results */}
+   349→      {loading ? (
+   350→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   351→          {[1, 2, 3, 4, 5, 6].map((i) => (
+   352→            <Card key={i} className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   353→              <CardContent className="p-4 space-y-3">
+   354→                <Skeleton className="h-5 w-3/4 dark:bg-slate-700" />
+   355→                <Skeleton className="h-4 w-1/2 dark:bg-slate-700" />
+   356→                <Skeleton className="h-4 w-2/3 dark:bg-slate-700" />
+   357→                <div className="flex gap-2"><Skeleton className="h-6 w-16 dark:bg-slate-700" /><Skeleton className="h-6 w-20 dark:bg-slate-700" /></div>
+   358→              </CardContent>
+   359→            </Card>
+   360→          ))}
+   361→        </div>
+   362→      ) : perfiles.length === 0 ? (
+   363→        <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   364→          <CardContent className="p-12 text-center">
+   365→            <BookOpen className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+   366→            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300">No se encontraron perfiles</h3>
+   367→            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Ajuste los filtros o cree un nuevo perfil</p>
+   368→          </CardContent>
+   369→        </Card>
+   370→      ) : (
+   371→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   372→          {perfiles.map((perfil) => (
+   373→            <Card
+   374→              key={perfil.id}
+   375→              className="shadow-sm hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 dark:bg-slate-900 dark:border-slate-800 dark:hover:border-slate-700 group"
+   376→            >
+   377→              <CardContent className="p-5">
+   378→                {/* Header: Code badge + Status */}
+   379→                <div className="flex items-start justify-between mb-3">
+   380→                  <Badge variant="outline" className="text-[11px] font-mono px-2 py-0.5 bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
+   381→                    {perfil.codigo}
+   382→                  </Badge>
+   383→                  <div className="flex items-center gap-1.5">
+   384→                    <span className={`w-2 h-2 rounded-full ${estadoDotColors[perfil.estado] || 'bg-gray-400'}`} />
+   385→                    <Badge className={`${estadoColors[perfil.estado] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'} text-[11px] px-2 py-0.5`}>
+   386→                      {perfil.estado}
+   387→                    </Badge>
+   388→                  </div>
+   389→                </div>
+   390→
+   391→                {/* Job Title */}
+   392→                <h3 className="font-semibold text-base text-slate-900 dark:text-slate-100 mb-3 leading-snug line-clamp-2">
+   393→                  {perfil.nombre_puesto}
+   394→                </h3>
+   395→
+   396→                {/* Area with colored dot */}
+   397→                <div className="flex items-center gap-2 mb-2">
+   398→                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${getAreaColor(perfil.area?.nombre || '')}`} />
+   399→                  <span className="text-sm text-slate-600 dark:text-slate-400 truncate">{perfil.area?.nombre || 'Sin área'}</span>
+   400→                </div>
+   401→
+   402→                {/* Salary Band with range bar */}
+   403→                {perfil.banda_salarial && (
+   404→                  <div className="mb-3 p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+   405→                    <div className="flex items-center justify-between mb-1.5">
+   406→                      <span className="text-xs font-medium text-slate-600 dark:text-slate-400 flex items-center gap-1">
+   407→                        <DollarSign className="h-3 w-3" /> {perfil.banda_salarial.nombre} (G{perfil.banda_salarial.grado})
+   408→                      </span>
+   409→                    </div>
+   410→                    <SalaryRangeBar min={perfil.banda_salarial.salario_minimo} max={perfil.banda_salarial.salario_maximo} />
+   411→                  </div>
+   412→                )}
+   413→
+   414→                {/* Points valuation with visual indicator */}
+   415→                <div className="mb-3">
+   416→                  <div className="flex items-center justify-between mb-1">
+   417→                    <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+   418→                      <Star className="h-3 w-3" /> Valuación por Puntos
+   419→                    </span>
+   420→                  </div>
+   421→                  <PointsIndicator points={perfil.puntos_total} />
+   422→                </div>
+   423→
+   424→                {/* Footer info */}
+   425→                <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+   426→                  <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+   427→                    <span className="flex items-center gap-1">
+   428→                      <Clock className="h-3 w-3" /> V{perfil.version}
+   429→                    </span>
+   430→                    <span className="flex items-center gap-1">
+   431→                      <Users className="h-3 w-3" /> {perfil._count.empleados_perfil}
+   432→                    </span>
+   433→                  </div>
+   434→                  <div className="flex gap-1.5">
+   435→                    <Button
+   436→                      variant="outline"
+   437→                      size="sm"
+   438→                      className="h-7 text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+   439→                      onClick={() => handleViewDetail(perfil.id)}
+   440→                    >
+   441→                      <Eye className="h-3 w-3 mr-1" /> Ver
+   442→                    </Button>
+   443→                    {canDelete && perfil.estado !== 'OBSOLETO' && (
+   444→                      <Button
+   445→                        variant="ghost"
+   446→                        size="sm"
+   447→                        className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+   448→                        onClick={() => handleDeactivate(perfil.id)}
+   449→                      >
+   450→                        <Trash2 className="h-3 w-3" />
+   451→                      </Button>
+   452→                    )}
+   453→                  </div>
+   454→                </div>
+   455→              </CardContent>
+   456→            </Card>
+   457→          ))}
+   458→        </div>
+   459→      )}
+   460→
+   461→      {/* Create Dialog */}
+   462→      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+   463→        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-900 dark:border-slate-800">
+   464→          <DialogHeader>
+   465→            <DialogTitle className="dark:text-slate-100">Nuevo Perfil de Puesto</DialogTitle>
+   466→            <DialogDescription className="dark:text-slate-400">Complete la información para crear un nuevo perfil</DialogDescription>
+   467→          </DialogHeader>
+   468→          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
+   469→            <div className="space-y-2">
+   470→              <Label className="dark:text-slate-300">Código *</Label>
+   471→              <Input placeholder="PP-001" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   472→            </div>
+   473→            <div className="space-y-2">
+   474→              <Label className="dark:text-slate-300">Nombre del Puesto *</Label>
+   475→              <Input placeholder="Nombre del puesto" value={form.nombre_puesto} onChange={(e) => setForm({ ...form, nombre_puesto: e.target.value })} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   476→            </div>
+   477→            <div className="space-y-2">
+   478→              <Label className="dark:text-slate-300">Área *</Label>
+   479→              <Select value={form.area_id} onValueChange={(v) => setForm({ ...form, area_id: v })}>
+   480→                <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Seleccionar área" /></SelectTrigger>
+   481→                <SelectContent>
+   482→                  {Array.isArray(areas) && areas.map((a) => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
+   483→                </SelectContent>
+   484→              </Select>
+   485→            </div>
+   486→            <div className="space-y-2">
+   487→              <Label className="dark:text-slate-300">Banda Salarial</Label>
+   488→              <Select value={form.banda_salarial_id || 'none'} onValueChange={(v) => setForm({ ...form, banda_salarial_id: v === 'none' ? '' : v })}>
+   489→                <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Seleccionar banda" /></SelectTrigger>
+   490→                <SelectContent>
+   491→                  <SelectItem value="none">Sin banda</SelectItem>
+   492→                  {bandas.map((b) => <SelectItem key={b.id} value={b.id}>{b.nombre} (G{b.grado})</SelectItem>)}
+   493→                </SelectContent>
+   494→              </Select>
+   495→            </div>
+   496→            <div className="space-y-2">
+   497→              <Label className="dark:text-slate-300">Sector Laboral</Label>
+   498→              <Select value={form.sector_laboral} onValueChange={(v) => setForm({ ...form, sector_laboral: v })}>
+   499→                <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue /></SelectTrigger>
+   500→                <SelectContent>
+   501→                  <SelectItem value="COMERCIO">Comercio</SelectItem>
+   502→                  <SelectItem value="INDUSTRIA">Industria</SelectItem>
+   503→                  <SelectItem value="SERVICIOS">Servicios</SelectItem>
+   504→                  <SelectItem value="AGROPECUARIO">Agropecuario</SelectItem>
+   505→                </SelectContent>
+   506→              </Select>
+   507→            </div>
+   508→            <div className="space-y-2">
+   509→              <Label className="dark:text-slate-300">Puntos Total</Label>
+   510→              <Input type="number" value={form.puntos_total} onChange={(e) => setForm({ ...form, puntos_total: parseInt(e.target.value) || 0 })} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   511→            </div>
+   512→            <div className="sm:col-span-2 space-y-2">
+   513→              <Label className="dark:text-slate-300">Propósito</Label>
+   514→              <Textarea placeholder="Describa el propósito del puesto..." value={form.proposito} onChange={(e) => setForm({ ...form, proposito: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   515→            </div>
+   516→            <div className="sm:col-span-2 space-y-2">
+   517→              <Label className="dark:text-slate-300">Funciones Esenciales</Label>
+   518→              <Textarea placeholder="Describa las funciones esenciales..." value={form.funciones_esenciales} onChange={(e) => setForm({ ...form, funciones_esenciales: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   519→            </div>
+   520→            <div className="sm:col-span-2 space-y-2">
+   521→              <Label className="dark:text-slate-300">Requisitos de Educación</Label>
+   522→              <Textarea placeholder="Describa los requisitos educativos..." value={form.requisitos_educacion} onChange={(e) => setForm({ ...form, requisitos_educacion: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   523→            </div>
+   524→            <div className="sm:col-span-2 space-y-2">
+   525→              <Label className="dark:text-slate-300">Requisitos de Experiencia</Label>
+   526→              <Textarea placeholder="Describa los requisitos de experiencia..." value={form.requisitos_experiencia} onChange={(e) => setForm({ ...form, requisitos_experiencia: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   527→            </div>
+   528→            <div className="sm:col-span-2 space-y-2">
+   529→              <Label className="dark:text-slate-300">Requisitos de Habilidades</Label>
+   530→              <Textarea placeholder="Describa las habilidades requeridas..." value={form.requisitos_habilidades} onChange={(e) => setForm({ ...form, requisitos_habilidades: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   531→            </div>
+   532→            <div className="sm:col-span-2 space-y-2">
+   533→              <Label className="dark:text-slate-300">Responsabilidades</Label>
+   534→              <Textarea placeholder="Describa las responsabilidades..." value={form.responsabilidades} onChange={(e) => setForm({ ...form, responsabilidades: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   535→            </div>
+   536→            <div className="sm:col-span-2 space-y-2">
+   537→              <Label className="dark:text-slate-300">Condiciones de Trabajo</Label>
+   538→              <Textarea placeholder="Describa las condiciones de trabajo..." value={form.condiciones_trabajo} onChange={(e) => setForm({ ...form, condiciones_trabajo: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+   539→            </div>
+   540→          </div>
+   541→          <div className="flex justify-end gap-3">
+   542→            <Button variant="outline" onClick={() => setShowCreateDialog(false)} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">Cancelar</Button>
+   543→            <Button onClick={handleCreate} disabled={creating} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800">
+   544→              {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+   545→              Crear Perfil
+   546→            </Button>
+   547→          </div>
+   548→        </DialogContent>
+   549→      </Dialog>
+   550→
+   551→      {/* Detail Dialog */}
+   552→      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+   553→        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-slate-900 dark:border-slate-800">
+   554→          <DialogHeader>
+   555→            <DialogTitle className="flex items-center gap-2 dark:text-slate-100">
+   556→              <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   557→              {selectedPerfil?.codigo} - {selectedPerfil?.nombre_puesto}
+   558→            </DialogTitle>
+   559→            <DialogDescription className="dark:text-slate-400">Detalle del perfil de puesto</DialogDescription>
+   560→          </DialogHeader>
+   561→          {selectedPerfil && (
+   562→            <div className="space-y-4 py-4">
+   563→              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   564→                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
+   565→                  <p className="text-xs text-slate-500 dark:text-slate-400">Estado</p>
+   566→                  <Badge className={`${estadoColors[selectedPerfil.estado]} mt-1`}>{selectedPerfil.estado}</Badge>
+   567→                </div>
+   568→                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
+   569→                  <p className="text-xs text-slate-500 dark:text-slate-400">Área</p>
+   570→                  <p className="text-sm font-medium dark:text-slate-200">{selectedPerfil.area?.nombre}</p>
+   571→                </div>
+   572→                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
+   573→                  <p className="text-xs text-slate-500 dark:text-slate-400">Banda Salarial</p>
+   574→                  <p className="text-sm font-medium dark:text-slate-200">{selectedPerfil.banda_salarial?.nombre || 'Sin asignar'}</p>
+   575→                </div>
+   576→                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
+   577→                  <p className="text-xs text-slate-500 dark:text-slate-400">Puntos</p>
+   578→                  <p className="text-sm font-medium dark:text-slate-200">{selectedPerfil.puntos_total}</p>
+   579→                </div>
+   580→              </div>
+   581→
+   582→              {[
+   583→                { label: 'Propósito', value: selectedPerfil.proposito },
+   584→                { label: 'Funciones Esenciales', value: selectedPerfil.funciones_esenciales },
+   585→                { label: 'Requisitos de Educación', value: selectedPerfil.requisitos_educacion },
+   586→                { label: 'Requisitos de Experiencia', value: selectedPerfil.requisitos_experiencia },
+   587→                { label: 'Requisitos de Habilidades', value: selectedPerfil.requisitos_habilidades },
+   588→                { label: 'Responsabilidades', value: selectedPerfil.responsabilidades },
+   589→                { label: 'Condiciones de Trabajo', value: selectedPerfil.condiciones_trabajo },
+   590→              ].map((section) => (
+   591→                section.value && (
+   592→                  <div key={section.label} className="border dark:border-slate-800 rounded-lg p-4">
+   593→                    <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm mb-2">{section.label}</h4>
+   594→                    <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{section.value}</p>
+   595→                  </div>
+   596→                )
+   597→              ))}
+   598→
+   599→              {/* Version History */}
+   600→              {selectedPerfil.versiones && selectedPerfil.versiones.length > 0 && (
+   601→                <div className="border dark:border-slate-800 rounded-lg p-4">
+   602→                  <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm mb-3 flex items-center gap-2">
+   603→                    <Clock className="h-4 w-4" /> Historial de Versiones
+   604→                  </h4>
+   605→                  <div className="space-y-2">
+   606→                    {selectedPerfil.versiones.map((v) => (
+   607→                      <div key={v.id} className="flex items-center gap-3 text-sm bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
+   608→                        <Badge variant="outline" className="text-xs dark:border-slate-700 dark:text-slate-300">V{v.version}</Badge>
+   609→                        <span className="text-slate-600 dark:text-slate-400 flex-1">{v.cambio_descripcion}</span>
+   610→                        <span className="text-xs text-slate-400 dark:text-slate-500">
+   611→                          {new Date(v.fecha_creacion).toLocaleDateString('es-SV')}
+   612→                          {v.creado_por && ` · ${v.creado_por.nombre} ${v.creado_por.apellido}`}
+   613→                        </span>
+   614→                      </div>
+   615→                    ))}
+   616→                  </div>
+   617→                </div>
+   618→              )}
+   619→            </div>
+   620→          )}
+   621→        </DialogContent>
+   622→      </Dialog>
+   623→    </div>
+   624→  );
+   625→}
+   626→

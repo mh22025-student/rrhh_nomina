@@ -2631,3 +2631,138 @@ Significantly enhanced the IncidenceManager component with 7 major feature addit
 5. **Component size optimization** — Some components are very large (2000+ lines), consider splitting
 6. **Performance** — Consider lazy loading for less-used modules
 7. **More seed data** — Additional historical planillas would improve chart data
+
+---
+
+## Task 8: ProfileDetailDialog — Comprehensive Detail View Enhancement (2026-06-24)
+
+**Task ID**: 8  
+**Agent**: Code Agent  
+**Task**: Mejorar la vista al detalle de perfil de puesto (improve the job profile detail view)
+
+### What Was Done
+
+The original detail dialog in `ProfileCatalog.tsx` was a basic modal showing fields with labels and plain text — no visual hierarchy, no parsed content, no analytics. It was completely rewritten as a new dedicated component `ProfileDetailDialog.tsx` with a modern, information-rich design.
+
+### New Component: `/src/components/modules/ProfileDetailDialog.tsx` (~700 lines)
+
+#### 1. Hero Header with Gradient Background
+- Area-based gradient (8 color palettes, hashed by area name)
+- Decorative circles for depth
+- Code badge (`# CARGO-XXX`) with monospace font
+- Status badge with colored dot (VIGENTE/ACTIVO/BORRADOR/OBSOLETO)
+- Sector badge with icon (Comercio/Industria/Servicios/Agropecuario)
+- Edit button (shown only for ADMIN/ANALISTA)
+- Large job title with briefcase icon
+- Area name + area code subtitle
+- 4 quick stats cards (Version, Empleados, Valuación with points, Creado por)
+
+#### 2. Five-Tab Navigation
+- **Resumen** — Quick overview with tier banner, propósito quote card, funciones/responsabilidades, condiciones
+- **Detalle** — Full content with all 7 sections + metadata footer
+- **Valuación** — Tier system reference + progress bar + salary band analysis
+- **Empleados** — Live employee list (fetches from `/api/empleados?perfil_puesto_id=`)
+- **Versiones** — Vertical timeline of version history with current marker
+
+#### 3. Resumen Tab Features
+- **Tier banner**: Gradient card showing tier (PLATINO/ORO/PLATA/BRONCE/BÁSICO) with icon, description, and big points number
+- **Propósito card**: Quote-style card with emerald accent, italic text, decorative quote icon
+- **Funciones Esenciales & Responsabilidades**: Side-by-side cards with parsed bullet lists
+- **Condiciones de Trabajo**: Full-width card
+
+#### 4. Detalle Tab Features
+- **Requisitos del Puesto** section: 3-column grid (Educación/Experiencia/Habilidades) with colored icon headers
+- All 7 content sections in 2-column grid
+- **Metadata footer**: Internal ID, version, creation date, last update date
+
+#### 5. Valuación Tab Features
+- **Tier System Reference**: 5 tier cards (Platino/Oro/Plata/Bronce/Básico) with point ranges, icons, descriptions. Current tier highlighted with "ACTUAL" badge and scale effect.
+- **Progress Bar**: Visual 0-1000 scale with gradient fill, tier markers, current position, and "next tier" hint
+- **Salary Band Analysis**: 
+  - Range visualization with min/midpoint/max markers
+  - Estimated salary position (red marker with tooltip)
+  - 4 stats cards (Amplitud Banda, Salario Estimado, Posición en Banda %, Grado)
+
+#### 6. Empleados Tab Features
+- Fetches employees with this perfil_puesto_id from API
+- Sortable table: Código, Nombre (with avatar initials), Estado badge, Salario Base, Ingreso
+- Totals row with employee count and salary sum
+- Loading skeletons and empty state
+
+#### 7. Versiones Tab Features
+- Vertical timeline with connecting line
+- Color-coded dots (current=emerald with check, others=slate)
+- Per-version card with: version badge, "ACTUAL" badge for current, change description, date/time, author
+- Empty state with helpful note
+
+#### 8. Footer
+- Profile code and version display
+- Print button (window.print())
+- Close button
+
+### Smart Content Parsing (`parseBulletList`)
+Handles multiple data formats from seed/DB:
+- **JSON arrays**: `["Item 1","Item 2"]` → bullet list
+- **Pipe-separated**: `Item 1|Item 2|Item 3` → bullet list  
+- **Numbered lists**: `1. Item\n2. Item` → bullet list
+- **Bullet markers**: `- Item`, `• Item`, `· Item`, `* Item` → bullet list
+- **Multi-line text**: Newline-separated → bullet list
+- Single paragraph fallback for non-list content
+
+### Refactoring of ProfileCatalog.tsx
+- Removed old inline Detail Dialog (~70 lines of basic content)
+- Imported `ProfileDetailDialog` and `Perfil` type from new component
+- Catalog file now cleaner — focuses on listing/grid/filters/create dialog
+- All existing functionality preserved
+
+### QA Testing Results (agent-browser)
+- ✅ Login as admin@nomina.gob.sv — success
+- ✅ Navigate to Catálogo de Perfiles — 7 profile cards rendered
+- ✅ Click "Ver" on first profile (CARGO-001 Gerente General) — dialog opens with hero header
+- ✅ Hero header shows: code badge, VIGENTE status, Comercio sector, briefcase icon, area name
+- ✅ 4 quick stats visible (V1, 1 empleado, 950 pts, creado por)
+- ✅ 5 tabs render correctly (Resumen, Detalle, Valuación, Empleados, Versiones)
+- ✅ Resumen tab: Tier PLATINO banner (950 pts), propósito quote card, funciones bullet list
+- ✅ Detalle tab: 3 requirement cards (Educación/Experiencia/Habilidades), all bullet lists parsed correctly
+- ✅ Valuación tab: 5 tier cards with "ACTUAL" badge on Platino, progress bar 950/1000, salary band visualization with min $3,500 / mid $5,250 / max $7,000, estimated salary $6,825 at 95% position
+- ✅ Empleados tab: Employee table loads from API, shows Juan Carlos Pérez González with $5,000 salary, totals row correct
+- ✅ Versiones tab: Empty state with helpful message (no versions yet for V1)
+- ✅ Tested second profile (CARGO-002 Gerente de RRHH) — opens correctly with its own data
+- ✅ All API calls returned 200 (perfiles/[id], empleados?perfil_puesto_id=)
+- ✅ Lint passes with 0 errors
+- ✅ No runtime errors in dev log
+- ✅ Dialog close works (Escape key)
+
+### Bug Fix Applied During Testing
+- **Issue**: `requisitos_habilidades` and `funciones_esenciales` were stored as JSON array strings (`["Item 1","Item 2"]`), which my original `parseBulletList` couldn't parse — they were rendered as raw JSON text.
+- **Fix**: Enhanced `parseBulletList` to detect JSON arrays (`startsWith('[') && endsWith(']')`), parse them with `JSON.parse`, and return as bullet list. Also added pipe (`|`) separator handling for seed data compatibility.
+- **Verified**: Habilidades now shows as 4 bullet points (Liderazgo, Visión estratégica, Toma de decisiones, Negociación) instead of `["Liderazgo",...]`.
+
+### Files Modified
+- **NEW**: `/src/components/modules/ProfileDetailDialog.tsx` (~700 lines) — Comprehensive detail dialog component
+- **EDITED**: `/src/components/modules/ProfileCatalog.tsx` — Replaced inline detail dialog with ProfileDetailDialog import; cleaned up Perfil interface (now imported from new file)
+
+### Technical Notes
+- Used shadcn/ui components: Dialog, Tabs, Badge, Button, Skeleton, Separator, Tooltip, ScrollArea
+- Used Lucide icons: BookOpen, Building2, DollarSign, Star, Users, Clock, FileText, GraduationCap, Briefcase, Award, Settings, Shield, Printer, Edit, History, CheckCircle2, Target, TrendingUp, Hash, Calendar, User, ChevronRight, Sparkles, AlertTriangle, FileSignature, ListChecks, Palette, Gauge, BadgeCheck, ArrowUpRight, Quote, ScrollText, Layers, Medal
+- 'use client' directive maintained
+- Props interface: `{ perfil, open, onOpenChange, accessToken, userRole, onEdit? }`
+- All existing functionality preserved
+- No new npm packages installed
+- TypeScript strict typing throughout
+- Responsive: grid layouts adapt from 1 column (mobile) to 2-4 columns (desktop)
+- Dark mode fully supported with `dark:` variants
+
+### Stage Summary
+- Detail view completely transformed from basic 70-line modal to 700-line comprehensive multi-tab analytics dashboard
+- 5 tabs provide organized access to all profile information
+- Smart content parsing handles JSON arrays, pipe-separated, numbered, and bulleted text
+- Visual elements: gradient hero header, tier system cards, salary range chart with markers, progress bar, employee table, version timeline
+- QA verified end-to-end with agent-browser + VLM analysis on 2 different profiles
+- Lint clean, no runtime errors
+
+### Unresolved / Next Steps
+1. Wire up `onEdit` callback in ProfileCatalog to enable the Edit button (currently hidden since not provided)
+2. Consider adding "Export PDF" button using pdf skill for printable profile documents
+3. Consider adding comparison view between two profiles (side-by-side)
+4. Add "Copy link" or "Share" functionality

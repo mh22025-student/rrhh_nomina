@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import ProfileDetailDialog, { type Perfil } from './ProfileDetailDialog';
 
 interface ProfileCatalogProps {
   accessToken: string;
@@ -23,16 +24,6 @@ interface ProfileCatalogProps {
 
 interface Area { id: string; nombre: string; codigo: string; }
 interface Banda { id: string; nombre: string; grado: number; salario_minimo: number; salario_maximo: number; }
-interface Perfil {
-  id: string; codigo: string; nombre_puesto: string; estado: string; version: number;
-  puntos_total: number; proposito: string | null; funciones_esenciales: string | null;
-  requisitos_educacion: string | null; requisitos_experiencia: string | null;
-  requisitos_habilidades: string | null; responsabilidades: string | null;
-  condiciones_trabajo: string | null; sector_laboral: string;
-  area: Area; banda_salarial: Banda | null;
-  _count: { empleados_perfil: number };
-  versiones?: { id: string; version: number; cambio_descripcion: string; fecha_creacion: string; creado_por: { nombre: string; apellido: string } | null }[];
-}
 
 const estadoColors: Record<string, string> = {
   BORRADOR: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
@@ -548,78 +539,14 @@ export default function ProfileCatalog({ accessToken, userRole }: ProfileCatalog
         </DialogContent>
       </Dialog>
 
-      {/* Detail Dialog */}
-      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-slate-900 dark:border-slate-800">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 dark:text-slate-100">
-              <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              {selectedPerfil?.codigo} - {selectedPerfil?.nombre_puesto}
-            </DialogTitle>
-            <DialogDescription className="dark:text-slate-400">Detalle del perfil de puesto</DialogDescription>
-          </DialogHeader>
-          {selectedPerfil && (
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Estado</p>
-                  <Badge className={`${estadoColors[selectedPerfil.estado]} mt-1`}>{selectedPerfil.estado}</Badge>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Área</p>
-                  <p className="text-sm font-medium dark:text-slate-200">{selectedPerfil.area?.nombre}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Banda Salarial</p>
-                  <p className="text-sm font-medium dark:text-slate-200">{selectedPerfil.banda_salarial?.nombre || 'Sin asignar'}</p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Puntos</p>
-                  <p className="text-sm font-medium dark:text-slate-200">{selectedPerfil.puntos_total}</p>
-                </div>
-              </div>
-
-              {[
-                { label: 'Propósito', value: selectedPerfil.proposito },
-                { label: 'Funciones Esenciales', value: selectedPerfil.funciones_esenciales },
-                { label: 'Requisitos de Educación', value: selectedPerfil.requisitos_educacion },
-                { label: 'Requisitos de Experiencia', value: selectedPerfil.requisitos_experiencia },
-                { label: 'Requisitos de Habilidades', value: selectedPerfil.requisitos_habilidades },
-                { label: 'Responsabilidades', value: selectedPerfil.responsabilidades },
-                { label: 'Condiciones de Trabajo', value: selectedPerfil.condiciones_trabajo },
-              ].map((section) => (
-                section.value && (
-                  <div key={section.label} className="border dark:border-slate-800 rounded-lg p-4">
-                    <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm mb-2">{section.label}</h4>
-                    <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{section.value}</p>
-                  </div>
-                )
-              ))}
-
-              {/* Version History */}
-              {selectedPerfil.versiones && selectedPerfil.versiones.length > 0 && (
-                <div className="border dark:border-slate-800 rounded-lg p-4">
-                  <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-sm mb-3 flex items-center gap-2">
-                    <Clock className="h-4 w-4" /> Historial de Versiones
-                  </h4>
-                  <div className="space-y-2">
-                    {selectedPerfil.versiones.map((v) => (
-                      <div key={v.id} className="flex items-center gap-3 text-sm bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
-                        <Badge variant="outline" className="text-xs dark:border-slate-700 dark:text-slate-300">V{v.version}</Badge>
-                        <span className="text-slate-600 dark:text-slate-400 flex-1">{v.cambio_descripcion}</span>
-                        <span className="text-xs text-slate-400 dark:text-slate-500">
-                          {new Date(v.fecha_creacion).toLocaleDateString('es-SV')}
-                          {v.creado_por && ` · ${v.creado_por.nombre} ${v.creado_por.apellido}`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Detail Dialog - Comprehensive view */}
+      <ProfileDetailDialog
+        perfil={selectedPerfil}
+        open={showDetailDialog}
+        onOpenChange={setShowDetailDialog}
+        accessToken={accessToken}
+        userRole={userRole}
+      />
     </div>
   );
 }
