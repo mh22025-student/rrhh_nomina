@@ -3469,3 +3469,31 @@ Stage Summary:
 - Después: "Nuevo Perfil" navega al Formulario de Perfil (03-02) en modo creación nueva, que incluye valoración por puntos, secciones A/B/C/D, historial de versiones y todos los campos del esquema.
 - Se eliminó ~90 líneas de código muerto (diálogo + handler + state + imports) del ProfileCatalog, reduciendo complejidad.
 - El diálogo de DETALLE (ProfileDetailDialog) se conserva intacto — solo se eliminó el diálogo de CREACIÓN.
+
+---
+Task ID: nomina-dashboard-light-mode-1
+Agent: main (Z.ai Code)
+Task: El usuario reportó que el Dashboard de Nómina (módulo 04-01) se ve muy pálido en modo claro, causando mala UX. Se analizaron 5 capturas del dashboard en modo claro y se aplicaron mejoras de contraste.
+
+Work Log:
+- Análisis VLM de 5 capturas del usuario (pasted_image_1782358611796.png a ...8783178.png): confirmó que en modo claro (1) KPI cards tenían bordes casi invisibles (`ring-emerald-200/50` = 50% opacidad de color claro sobre blanco), (2) divisores de sección muy tenues (`from-emerald-200 via-teal-200`), (3) texto secundario gris muy claro (`text-slate-400/500`), (4) cards sin sombra definida (`shadow-sm` apenas visible), (5) fondos de barras pálidos (`bg-slate-100`).
+- Cambios aplicados a `src/components/modules/PayrollDashboard.tsx` (todos preservando variantes `dark:`):
+  * **Rings de cards**: `ring-1 ring-emerald-200/50 dark:ring-emerald-800/30` → `ring-1 ring-slate-200 dark:ring-slate-700/50` (18 ocurrencias). Ring amber similar (1 ocurrencia). Ahora los bordes son visibles sobre blanco.
+  * **Divisores de sección**: `from-emerald-200 via-teal-200 to-transparent` → `from-emerald-300 via-teal-300 to-transparent` (8 ocurrencias). Líneas más oscuras y visibles.
+  * **Texto secundario (labels/captions)**: `text-slate-500 dark:text-slate-400` → `text-slate-600 dark:text-slate-400` (22 ocurrencias). `text-slate-400 dark:text-slate-500` → `text-slate-500 dark:text-slate-400` (17 ocurrencias). Texto más oscuro y legible.
+  * **Sombras de cards**: `shadow-sm hover:shadow-md` → `shadow hover:shadow-md` (15 ocurrencias). `shadow-sm hover:shadow-lg` → `shadow hover:shadow-lg` (4 KPI cards). Mayor profundidad y separación del fondo.
+  * **Fondos de barras/progress tracks**: `bg-slate-100 dark:bg-slate-800` → `bg-slate-200 dark:bg-slate-800` (9 ocurrencias). Tracks más visibles.
+  * **Labels "Actual"/"Anterior"**: `text-[9px] text-slate-400` → `text-[9px] text-slate-500 dark:text-slate-400` (3 ocurrencias). Etiquetas de ejes más legibles.
+  * **Empty states**: `py-8 text-slate-400` → `py-8 text-slate-500 dark:text-slate-400` (4 ocurrencias), `py-6 text-slate-400` y `p-8 text-center text-slate-400` también actualizados.
+  * **Footer stat cards**: `bg-white/70 ... border-slate-100` → `bg-white ... border-slate-200 ... shadow-sm`. Cards más sólidas con borde más visible.
+- Lint: `bun run lint` → 0 errores.
+- Verificación con agent-browser + VLM (5 capturas en modo claro post-fix):
+  * Antes: bordes tenues, sin sombra, texto gris claro, divisores apenas visibles. Calidad visual pobre.
+  * Después: cards con bordes/rings visibles y sombras definidas, divisores con buen contraste, texto secundario legible, fondos de barras con buen contraste. VLM calificó 8/10 de contraste general en las 5 secciones.
+  * Modo oscuro preservado: todos los cambios solo modificaron la parte de modo claro de cada clase; las variantes `dark:` se mantuvieron o mejoraron ligeramente.
+
+Stage Summary:
+- Tipo: Fix de UX visual — el dashboard de Nómina en modo claro se veía pálido/deslavado por usar colores con baja opacidad (ring-emerald-200/50) y textos grises muy claros (slate-400/500) sobre fondo blanco.
+- Root cause: uso sistemático de colores claros con baja opacidad para bordes, divisores y textos secundarios, optimizados para modo oscuro pero casi invisibles en modo claro.
+- Solución: oscurecer selectivamente los elementos en modo claro (sin tocar modo oscuro): rings slate-200, divisores emerald-300, texto slate-500/600, sombras medias, tracks slate-200.
+- Resultado: contraste 8/10 en modo claro, cards bien definidas, texto legible, manteniendo la estética esmeralda/teal del diseño.
