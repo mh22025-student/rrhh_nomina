@@ -265,7 +265,7 @@ function ComplianceRing({ percentage, size = 128 }: { percentage: number; size?:
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-2xl font-bold" style={{ color }}>{percentage}%</span>
-        <span className="text-[10px] text-slate-600 dark:text-slate-400 font-medium">Cumplimiento</span>
+        <span className="text-[10px] text-slate-700 dark:text-slate-300 font-medium">Cumplimiento</span>
       </div>
     </div>
   );
@@ -276,8 +276,8 @@ function StatusDonut({ statusCounts }: { statusCounts: Record<string, number> })
   const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
   if (total === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-6 text-slate-500 dark:text-slate-400">
-        <PieChart className="h-8 w-8 mb-2 text-slate-300 dark:text-slate-600" />
+      <div className="flex flex-col items-center justify-center py-6 text-slate-600 dark:text-slate-400">
+        <PieChart className="h-8 w-8 mb-2 text-slate-400 dark:text-slate-600" />
         <p className="text-sm">Sin planillas</p>
       </div>
     );
@@ -306,7 +306,7 @@ function StatusDonut({ statusCounts }: { statusCounts: Record<string, number> })
             <div className="w-18 h-18 rounded-full bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center" style={{ width: '72px', height: '72px' }}>
               <div className="text-center">
                 <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{total}</p>
-                <p className="text-[9px] text-slate-500 dark:text-slate-400">Total</p>
+                <p className="text-[9px] text-slate-600 dark:text-slate-400">Total</p>
               </div>
             </div>
           </div>
@@ -325,8 +325,8 @@ function StatusDonut({ statusCounts }: { statusCounts: Record<string, number> })
                 <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{status}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-mono text-slate-600 dark:text-slate-400">{count}</span>
-                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                <span className="text-[11px] font-mono text-slate-700 dark:text-slate-300">{count}</span>
+                <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                   {pct}%
                 </span>
               </div>
@@ -362,8 +362,8 @@ function Sparkline({ data, color = '#10b981', width = 80, height = 28 }: { data:
     <svg width={width} height={height} className="overflow-visible">
       <defs>
         <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.05" />
         </linearGradient>
       </defs>
       <polygon points={areaPoints.join(' ')} fill={`url(#${gradientId})`} />
@@ -371,7 +371,7 @@ function Sparkline({ data, color = '#10b981', width = 80, height = 28 }: { data:
         points={points.join(' ')}
         fill="none"
         stroke={color}
-        strokeWidth="1.5"
+        strokeWidth="2"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
@@ -407,7 +407,7 @@ function PayrollCompositionDonut({ baseAmount }: { baseAmount: number }) {
             <div className="w-24 h-24 rounded-full bg-white dark:bg-slate-900 shadow-md flex items-center justify-center">
               <div className="text-center">
                 <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{fmtShort(baseAmount)}</p>
-                <p className="text-[9px] text-slate-500 dark:text-slate-400">Total</p>
+                <p className="text-[9px] text-slate-600 dark:text-slate-400">Total</p>
               </div>
             </div>
           </div>
@@ -1055,12 +1055,12 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
       {/* ── KPI Summary Cards with Sparklines ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Total Nómina del Mes */}
-        <Card className="shadow hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-slate-200 dark:border-slate-700/60">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-transparent dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-transparent pointer-events-none" />
           <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-emerald-500 to-teal-500" />
           <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Total Nómina del Mes</span>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Total Nómina del Mes</span>
               <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 group-hover:scale-110 transition-transform duration-300">
                 <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               </div>
@@ -1082,25 +1082,25 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                   <span className="text-xs font-semibold text-red-600 dark:text-red-400">-{nominaTrend.value.toFixed(1)}%</span>
                 </div>
               )}
-              <span className="text-xs text-slate-500 dark:text-slate-400">vs mes anterior</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400">vs mes anterior</span>
             </div>
           </CardContent>
         </Card>
 
         {/* KPI 2: Empleados Pagados */}
-        <Card className="shadow hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-teal-200/50 dark:ring-teal-800/30">
+        <Card className="shadow-md hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-teal-200 dark:border-teal-800/40">
           <div className="absolute inset-0 bg-gradient-to-br from-teal-50 via-cyan-50/50 to-transparent dark:from-teal-950/30 dark:via-cyan-950/20 dark:to-transparent pointer-events-none" />
           <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-500 to-cyan-500" />
           <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Empleados Pagados</span>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Empleados Pagados</span>
               <div className="p-2.5 rounded-xl bg-teal-100 dark:bg-teal-900/40 group-hover:scale-110 transition-transform duration-300">
                 <Users className="h-5 w-5 text-teal-600 dark:text-teal-400" />
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
               {empleadosPagados}
-              <span className="text-sm font-normal text-slate-500 dark:text-slate-400 ml-1.5">de {data.kpis.total_empleados_activos}</span>
+              <span className="text-sm font-normal text-slate-600 dark:text-slate-400 ml-1.5">de {data.kpis.total_empleados_activos}</span>
             </p>
             {/* SVG Sparkline */}
             <div className="mt-3 mb-1.5">
@@ -1118,25 +1118,25 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                   <span className="text-xs font-semibold text-teal-600 dark:text-teal-400">+{data.kpis.tendencia_empleados}%</span>
                 </div>
               )}
-              <span className="text-xs text-slate-500 dark:text-slate-400">vs mes anterior</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400">vs mes anterior</span>
             </div>
           </CardContent>
         </Card>
 
         {/* KPI 3: Planillas Activas */}
-        <Card className="shadow hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-amber-200 dark:ring-amber-800/40">
+        <Card className="shadow-md hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-amber-200 dark:border-amber-800/40">
           <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-transparent dark:from-amber-950/30 dark:via-orange-950/20 dark:to-transparent pointer-events-none" />
           <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-500 to-orange-500" />
           <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Planillas Activas</span>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Planillas Activas</span>
               <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 group-hover:scale-110 transition-transform duration-300">
                 <Activity className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
               {planillasActivas}
-              <span className="text-sm font-normal text-slate-500 dark:text-slate-400 ml-1.5">en proceso</span>
+              <span className="text-sm font-normal text-slate-600 dark:text-slate-400 ml-1.5">en proceso</span>
             </p>
             {/* SVG Sparkline */}
             <div className="mt-3 mb-1.5">
@@ -1152,7 +1152,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* KPI 4: Cumplimiento % */}
-        <Card className="shadow hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-slate-200 dark:border-slate-700/60">
           <div className={`absolute inset-0 pointer-events-none ${
             data.kpis.semaforo === 'verde'
               ? 'bg-gradient-to-br from-emerald-50 via-green-50/50 to-transparent dark:from-emerald-950/30 dark:via-green-950/20 dark:to-transparent'
@@ -1167,7 +1167,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           }`} />
           <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Cumplimiento</span>
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Cumplimiento</span>
               <div className="flex items-center gap-1 p-1 bg-slate-900 dark:bg-slate-800 rounded-full">
                 <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'rojo' ? 'bg-red-500 shadow-sm shadow-red-500/50' : 'bg-red-900/40'}`} />
                 <div className={`w-3 h-3 rounded-full ${data.kpis.semaforo === 'amarillo' ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-amber-900/40'}`} />
@@ -1195,7 +1195,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
       {/* ══════════════════════════════════════════════════════
           SECTION: Planilla Status Pipeline
           ══════════════════════════════════════════════════════ */}
-      <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50 overflow-hidden">
+      <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/50 via-teal-50/30 to-transparent dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-transparent pointer-events-none" />
         <CardHeader className="pb-3 relative">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1227,7 +1227,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                       ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/30'
                       : isActive
                         ? 'bg-white dark:bg-slate-900 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-lg shadow-emerald-500/20 ring-4 ring-emerald-100 dark:ring-emerald-900/50'
-                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400'
                     }
                   `}>
                     {isCompleted ? (
@@ -1242,7 +1242,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                   <span className={`text-xs mt-2.5 font-bold uppercase tracking-wider transition-colors duration-300 ${
                     isCompleted ? 'text-emerald-600 dark:text-emerald-400' :
                     isActive ? 'text-emerald-700 dark:text-emerald-300' :
-                    'text-slate-500 dark:text-slate-400'
+                    'text-slate-600 dark:text-slate-400'
                   }`}>
                     {PIPELINE_LABELS[step]}
                   </span>
@@ -1260,12 +1260,12 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
 
           {/* Current planilla info */}
           {data.kpis.planilla_actual && (
-            <div className="mt-4 pt-4 border-t border-emerald-200/50 dark:border-emerald-800/30 flex items-center justify-between">
+            <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-800/40 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-600 dark:text-slate-400">Planilla:</span>
+                <span className="text-xs text-slate-700 dark:text-slate-300">Planilla:</span>
                 <span className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.codigo}</span>
-                <span className="text-slate-300 dark:text-slate-600">·</span>
-                <span className="text-xs text-slate-600 dark:text-slate-400">{data.kpis.planilla_actual.tipo}</span>
+                <span className="text-slate-400 dark:text-slate-600">·</span>
+                <span className="text-xs text-slate-700 dark:text-slate-300">{data.kpis.planilla_actual.tipo}</span>
               </div>
               <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium`}>
                 <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${estadoDot[data.kpis.planilla_actual.estado] || 'bg-slate-400'}`} />
@@ -1285,7 +1285,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <div className="h-px flex-1 bg-gradient-to-l from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
       </div>
 
-      <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50 overflow-hidden">
+      <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-slate-50/50 via-emerald-50/20 to-slate-50/50 dark:from-slate-900/50 dark:via-emerald-950/10 dark:to-slate-900/50 pointer-events-none rounded-xl" />
         <CardHeader className="pb-3 relative">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1330,7 +1330,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                     <span className={`text-[10px] font-semibold uppercase ${item.isCompliant ? 'text-emerald-600 dark:text-emerald-400' : item.daysRemaining <= 5 ? 'text-red-600 dark:text-red-400' : colorClasses.text}`}>
                       {item.isCompliant ? 'Presentado' : 'Pendiente'}
                     </span>
-                    <span className={`text-[10px] font-medium ${item.daysRemaining <= 5 && !item.isCompliant ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                    <span className={`text-[10px] font-medium ${item.daysRemaining <= 5 && !item.isCompliant ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'}`}>
                       {item.isCompliant ? '✓ Al día' : item.daysRemaining <= 0 ? 'Vencido' : `${item.daysRemaining} días rest.`}
                     </span>
                   </div>
@@ -1354,7 +1354,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Planilla en Progreso</p>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-700 dark:text-slate-300 mt-0.5">
                     <span className="font-mono font-medium">{data.kpis.planilla_actual.codigo}</span>
                     <span className="mx-1.5">·</span>
                     {data.kpis.planilla_actual.tipo}
@@ -1374,7 +1374,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             </div>
 
             {/* ── Payroll Status Timeline ── */}
-            <div className="mt-4 pt-4 border-t border-emerald-200/60 dark:border-emerald-800/40">
+            <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-800/40">
               <div className="flex items-center justify-between relative">
                 <div className="absolute top-4 left-[12.5%] right-[12.5%] h-0.5 bg-slate-200 dark:bg-slate-700" />
                 <div
@@ -1404,7 +1404,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                       <span className={`text-[10px] mt-1.5 font-semibold uppercase tracking-wider ${
                         isCompleted ? 'text-emerald-600 dark:text-emerald-400' :
                         isActive ? 'text-amber-600 dark:text-amber-400' :
-                        'text-slate-500 dark:text-slate-400'
+                        'text-slate-600 dark:text-slate-400'
                       }`}>
                         {step === 'CALCULADA' ? 'Calculada' : step === 'APROBADA' ? 'Aprobada' : 'Pagada'}
                       </span>
@@ -1428,7 +1428,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Payroll Composition Donut Chart */}
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <PieChart className="h-4 w-4 text-emerald-500" /> Composición de Nómina
@@ -1441,7 +1441,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* Employee Salary Distribution Histogram */}
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="h-4 w-4 text-teal-500" /> Distribución Salarial
@@ -1481,7 +1481,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
               })}
               {/* Total indicator */}
               <div className="pt-3 mt-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Total Empleados</span>
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Total Empleados</span>
                 <span className="text-sm font-bold text-slate-900 dark:text-slate-100">{data.kpis.total_empleados_activos}</span>
               </div>
             </div>
@@ -1500,7 +1500,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Recent planillas - improved table */}
-        <Card className="shadow-sm lg:col-span-2 hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-sm lg:col-span-2 hover:shadow-md transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-emerald-500" /> Planillas Recientes
@@ -1512,20 +1512,20 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-t border-b bg-gradient-to-r from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/20 dark:to-teal-950/10">
-                    <th className="text-left font-medium text-slate-600 dark:text-slate-400 p-3">Código</th>
-                    <th className="text-left font-medium text-slate-600 dark:text-slate-400 p-3">Tipo</th>
-                    <th className="text-left font-medium text-slate-600 dark:text-slate-400 p-3">Estado</th>
-                    <th className="text-right font-medium text-slate-600 dark:text-slate-400 p-3">Total Neto</th>
-                    <th className="text-right font-medium text-slate-600 dark:text-slate-400 p-3">Empleados</th>
-                    <th className="text-right font-medium text-slate-600 dark:text-slate-400 p-3">Fecha</th>
+                    <th className="text-left font-medium text-slate-700 dark:text-slate-300 p-3">Código</th>
+                    <th className="text-left font-medium text-slate-700 dark:text-slate-300 p-3">Tipo</th>
+                    <th className="text-left font-medium text-slate-700 dark:text-slate-300 p-3">Estado</th>
+                    <th className="text-right font-medium text-slate-700 dark:text-slate-300 p-3">Total Neto</th>
+                    <th className="text-right font-medium text-slate-700 dark:text-slate-300 p-3">Empleados</th>
+                    <th className="text-right font-medium text-slate-700 dark:text-slate-300 p-3">Fecha</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.planillas_recientes.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                      <td colSpan={6} className="p-8 text-center text-slate-600 dark:text-slate-400">
                         <div className="flex flex-col items-center">
-                          <Info className="h-8 w-8 mb-2 text-slate-300" />
+                          <Info className="h-8 w-8 mb-2 text-slate-400 dark:text-slate-600" />
                           <p className="font-medium">No hay planillas registradas</p>
                           <p className="text-xs">Las planillas aparecerán aquí al calcularlas</p>
                         </div>
@@ -1535,7 +1535,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                     data.planillas_recientes.map(p => (
                       <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-emerald-50/30 dark:hover:bg-slate-800/50 transition-colors">
                         <td className="p-3 font-mono text-xs font-medium text-slate-700 dark:text-slate-300">{p.codigo}</td>
-                        <td className="p-3 text-slate-600 dark:text-slate-400">{p.tipo}</td>
+                        <td className="p-3 text-slate-700 dark:text-slate-300">{p.tipo}</td>
                         <td className="p-3">
                           <Badge className={`text-[10px] border ${estadoColors[p.estado] || 'bg-slate-100 text-slate-700'}`} variant="secondary">
                             <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${estadoDot[p.estado] || 'bg-slate-400'}`} />
@@ -1543,8 +1543,8 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                           </Badge>
                         </td>
                         <td className="p-3 text-right font-mono font-medium text-slate-900 dark:text-slate-100">{fmt(p.total_neto)}</td>
-                        <td className="p-3 text-right text-slate-600 dark:text-slate-400">{p.empleados}</td>
-                        <td className="p-3 text-right text-xs text-slate-500 dark:text-slate-500">{fmtDate(p.fecha_creacion)}</td>
+                        <td className="p-3 text-right text-slate-700 dark:text-slate-300">{p.empleados}</td>
+                        <td className="p-3 text-right text-xs text-slate-600 dark:text-slate-400">{fmtDate(p.fecha_creacion)}</td>
                       </tr>
                     ))
                   )}
@@ -1555,7 +1555,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* ── Status Summary Donut Widget ── */}
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <PieChart className="h-4 w-4 text-teal-500" /> Estado de Planillas
@@ -1573,7 +1573,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           ══════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Monthly Comparison Widget */}
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-emerald-500" /> Comparación Mensual
@@ -1618,7 +1618,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-slate-500 dark:text-slate-400 w-8 shrink-0">Actual</span>
+                        <span className="text-[9px] text-slate-600 dark:text-slate-400 w-8 shrink-0">Actual</span>
                         <div className="flex-1 h-3 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                           <div
                             className={`h-3 rounded-full ${comp.bgBar} transition-all duration-700`}
@@ -1627,14 +1627,14 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-slate-500 dark:text-slate-400 w-8 shrink-0">Anterior</span>
+                        <span className="text-[9px] text-slate-600 dark:text-slate-400 w-8 shrink-0">Anterior</span>
                         <div className="flex-1 h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                           <div
                             className={`h-2.5 rounded-full ${comp.bgBarPrev} transition-all duration-700`}
                             style={{ width: `${Math.max((comp.prev / maxVal) * 100, 2)}%` }}
                           />
                         </div>
-                        <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono w-16 text-right shrink-0">{fmt(comp.prev)}</span>
+                        <span className="text-[9px] text-slate-600 dark:text-slate-400 font-mono w-16 text-right shrink-0">{fmt(comp.prev)}</span>
                       </div>
                     </div>
                   </div>
@@ -1645,7 +1645,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* Employee Count Mini-Chart (CSS-only area chart with gradient fill) */}
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="h-4 w-4 text-teal-500" /> Evolución de Empleados
@@ -1702,7 +1702,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                 {employeeCountHistory.map((e, i) => (
                   <div key={i} className="flex flex-col items-center gap-0.5">
                     <span className="text-[10px] font-mono font-bold text-teal-600 dark:text-teal-400">{e.count}</span>
-                    <span className="text-[9px] text-slate-500 dark:text-slate-400">{e.month}</span>
+                    <span className="text-[9px] text-slate-600 dark:text-slate-400">{e.month}</span>
                   </div>
                 ))}
               </div>
@@ -1716,7 +1716,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           ══════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Monthly Trend Bar Chart */}
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-emerald-500" /> Tendencia Mensual
@@ -1725,13 +1725,13 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           </CardHeader>
           <CardContent>
             {data.tendencia_mensual.every(m => m.total === 0) ? (
-              <div className="flex items-center justify-center py-8 text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-center py-8 text-slate-600 dark:text-slate-400">
                 <p className="text-sm">Sin datos históricos</p>
               </div>
             ) : (
               <div className="relative">
                 {/* Y-axis labels - aligned to the plot area (h-48) */}
-                <div className="absolute left-0 top-0 w-14 h-48 flex flex-col justify-between text-[9px] text-slate-500 dark:text-slate-400 font-mono pr-1 pt-0">
+                <div className="absolute left-0 top-0 w-14 h-48 flex flex-col justify-between text-[9px] text-slate-600 dark:text-slate-400 font-mono pr-1 pt-0">
                   <span className="leading-none">{fmtShort(maxTendencia)}</span>
                   <span className="leading-none">{fmtShort(maxTendencia * 0.75)}</span>
                   <span className="leading-none">{fmtShort(maxTendencia * 0.5)}</span>
@@ -1781,7 +1781,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                   <div className="flex gap-2 mt-2">
                     {data.tendencia_mensual.map((m, i) => (
                       <div key={i} className="flex-1 text-center">
-                        <span className={`text-[9px] font-medium ${i === currentMonthIdx ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
+                        <span className={`text-[9px] font-medium ${i === currentMonthIdx ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}>
                           {m.mes.slice(0, 3)}
                         </span>
                       </div>
@@ -1794,7 +1794,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* Department Distribution */}
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Hash className="h-4 w-4 text-teal-500" /> Distribución por Área
@@ -1816,7 +1816,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                         <span className="text-xs font-medium text-slate-600 dark:text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">{area.nombre}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{sharePct.toFixed(1)}%</span>
+                        <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono">{sharePct.toFixed(1)}%</span>
                         <span className="text-xs font-bold font-mono text-slate-900 dark:text-slate-100">{fmt(area.total)}</span>
                       </div>
                     </div>
@@ -1833,7 +1833,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                 );
               })}
               {data.distribucion_areas.length === 0 && (
-                <div className="flex items-center justify-center py-8 text-slate-500 dark:text-slate-400">
+                <div className="flex items-center justify-center py-8 text-slate-600 dark:text-slate-400">
                   <p className="text-sm">Sin datos por área</p>
                 </div>
               )}
@@ -1847,7 +1847,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           ══════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Activity Timeline */}
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Activity className="h-4 w-4 text-emerald-500" /> Actividad Reciente
@@ -1856,7 +1856,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           </CardHeader>
           <CardContent>
             {activityEvents.length === 0 ? (
-              <div className="flex items-center justify-center py-8 text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-center py-8 text-slate-600 dark:text-slate-400">
                 <p className="text-sm">Sin actividad reciente</p>
               </div>
             ) : (
@@ -1874,7 +1874,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                           <Badge className={`text-[9px] border px-1.5 py-0 ${estadoColors[event.status] || 'bg-slate-100 text-slate-700'}`} variant="secondary">
                             {event.status}
                           </Badge>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{fmtRelativeTime(event.timestamp)}</span>
+                          <span className="text-[10px] text-slate-600 dark:text-slate-400">{fmtRelativeTime(event.timestamp)}</span>
                         </div>
                       </div>
                     </div>
@@ -1886,7 +1886,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* Expense Breakdown Donut */}
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <PieChart className="h-4 w-4 text-teal-500" /> Desglose de Descuentos
@@ -1904,7 +1904,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                     <div className="w-20 h-20 rounded-full bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center">
                       <div className="text-center">
                         <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{fmtShort(baseAmount)}</p>
-                        <p className="text-[8px] text-slate-500 dark:text-slate-400">Base</p>
+                        <p className="text-[8px] text-slate-600 dark:text-slate-400">Base</p>
                       </div>
                     </div>
                   </div>
@@ -1918,7 +1918,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                       <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{s.label}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-mono text-slate-600 dark:text-slate-400">{fmt(expenseAmounts[i])}</span>
+                      <span className="text-[11px] font-mono text-slate-700 dark:text-slate-300">{fmt(expenseAmounts[i])}</span>
                       <span className={`text-[10px] font-semibold ${s.color} bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded`}>
                         {s.pct}%
                       </span>
@@ -1936,7 +1936,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           ══════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Compliance semaphore - Enhanced with SVG ring */}
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Shield className="h-4 w-4 text-emerald-500" /> Semáforo Previsional
@@ -2010,7 +2010,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
 
         {/* ── Planilla Detail Card ── */}
         {data.kpis.planilla_actual ? (
-          <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+          <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <CircleDot className="h-4 w-4 text-emerald-500" /> Detalle de Estado
@@ -2020,15 +2020,15 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             <CardContent>
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Código</span>
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Código</span>
                   <span className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.codigo}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Tipo</span>
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Tipo</span>
                   <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.tipo}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Estado</span>
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Estado</span>
                   <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium`}>
                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${estadoDot[data.kpis.planilla_actual.estado] || 'bg-slate-400'}`} />
                     {data.kpis.planilla_actual.estado}
@@ -2036,7 +2036,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                 </div>
                 {data.kpis.planilla_actual.calculada_por && (
                   <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Calculada por</span>
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Calculada por</span>
                     <span className="text-sm text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.calculada_por}</span>
                   </div>
                 )}
@@ -2052,7 +2052,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                       <React.Fragment key={step}>
                         {idx > 0 && (
                           <ChevronRight className={`h-3 w-3 ${
-                            idx <= timelineActiveStep ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'
+                            idx <= timelineActiveStep ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-600'
                           }`} />
                         )}
                         <div className="flex items-center gap-1">
@@ -2064,7 +2064,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                           <span className={`text-[10px] font-semibold uppercase tracking-wider ${
                             isCompleted ? 'text-emerald-600 dark:text-emerald-400' :
                             isActive ? 'text-amber-600 dark:text-amber-400' :
-                            'text-slate-500 dark:text-slate-400'
+                            'text-slate-600 dark:text-slate-400'
                           }`}>
                             {step === 'CALCULADA' ? 'Calculada' : step === 'APROBADA' ? 'Aprobada' : 'Pagada'}
                           </span>
@@ -2077,7 +2077,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             </CardContent>
           </Card>
         ) : (
-          <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
+          <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <CircleDot className="h-4 w-4 text-emerald-500" /> Flujo de Planilla
@@ -2085,9 +2085,9 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
               <CardDescription>Progreso de la planilla actual</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-center py-8 text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-center py-8 text-slate-600 dark:text-slate-400">
                 <div className="text-center">
-                  <CircleDot className="h-8 w-8 mb-2 mx-auto text-slate-300 dark:text-slate-600" />
+                  <CircleDot className="h-8 w-8 mb-2 mx-auto text-slate-400 dark:text-slate-600" />
                   <p className="text-sm font-medium">No hay planilla en proceso</p>
                   {onNavigate && (
                     <Button
@@ -2108,11 +2108,11 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
 
       {/* Alerts with severity icons */}
       {data.alertas.length > 0 && (
-        <Card className="shadow hover:shadow-md transition-all duration-300 border-0 ring-1 ring-amber-200 dark:ring-amber-800/40">
+        <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-amber-200 dark:border-amber-800/40">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
               <AlertTriangle className="h-4 w-4 text-amber-500" /> Alertas del Sistema
-              <Badge variant="secondary" className="ml-1 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px]">
+              <Badge variant="secondary" className="ml-1 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px]">
                 {data.alertas.length}
               </Badge>
             </CardTitle>
@@ -2155,7 +2155,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
       {/* ══════════════════════════════════════════════════════
           SECTION: Quick Stats Footer
           ══════════════════════════════════════════════════════ */}
-      <Card className="shadow-sm border-0 ring-1 ring-slate-200 dark:ring-slate-700/50 bg-gradient-to-r from-emerald-50/50 via-teal-50/30 to-slate-50/50 dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-slate-900/50">
+      <Card className="shadow-sm border border-slate-200 dark:border-slate-700/60 bg-gradient-to-r from-emerald-50/50 via-teal-50/30 to-slate-50/50 dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-slate-900/50">
         <CardContent className="p-3 sm:p-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
@@ -2202,7 +2202,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{stat.value}</p>
-                  <p className="text-[9px] text-slate-600 dark:text-slate-400 truncate leading-tight">{stat.label}</p>
+                  <p className="text-[9px] text-slate-700 dark:text-slate-300 truncate leading-tight">{stat.label}</p>
                 </div>
               </div>
             ))}

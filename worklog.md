@@ -3497,3 +3497,69 @@ Stage Summary:
 - Root cause: uso sistemático de colores claros con baja opacidad para bordes, divisores y textos secundarios, optimizados para modo oscuro pero casi invisibles en modo claro.
 - Solución: oscurecer selectivamente los elementos en modo claro (sin tocar modo oscuro): rings slate-200, divisores emerald-300, texto slate-500/600, sombras medias, tracks slate-200.
 - Resultado: contraste 8/10 en modo claro, cards bien definidas, texto legible, manteniendo la estética esmeralda/teal del diseño.
+
+---
+Task ID: nomina-dashboard-light-mode-2
+Agent: main (Z.ai Code)
+Task: El usuario pidió volver a revisar el modo claro del Dashboard de Nómina (módulo 04-01) porque seguía viéndose pálido a pesar del fix anterior (Task ID: nomina-dashboard-light-mode-1).
+
+Work Log:
+- Leí el worklog previo (Task ID: nomina-dashboard-light-mode-1) — ya se habían aplicado fixes de contraste pero el usuario reportó que aún se ve pálido.
+- Verifiqué el estado actual con agent-browser: `htmlClass: "light"`, `currentModule: "Dashboard Nómina"`. Dev server limpio en :3000.
+- Análisis VLM (glm-4.6v) de la captura inicial del dashboard en modo claro:
+  * Calificación inicial: **3/10** (muy crítica).
+  * KPI cards: "carecen de bordes o sombras visibles, sus límites se difuminan con el fondo blanco".
+  * Texto secundario: "gris muy pálido (#999, #aaa) que se pierde contra el fondo blanco".
+  * Divisores de sección: "invisibles o extremadamente sutiles".
+  * Fondos de charts: "muy claros, se mezclan con el fondo blanco".
+  * Separaciones entre secciones: "difusas, basadas únicamente en espacio en blanco".
+- Inspección de estilos computados vía agent-browser: confirmé que las KPI cards usaban `bg-card` (lab(100 0 0) = blanco puro), con `border-width: 0px` (el `border` class de Tailwind 4 + shadcn Card no aplicaba width), y boxShadow `rgba(0, 0, 0, 0)` (transparente). Las cards NO tenían borde ni sombra real en modo claro.
+- Análisis del archivo PayrollDashboard.tsx (2240 líneas): identifiqué que los fixes previos (Task ID: nomina-dashboard-light-mode-1) habían cambiado `ring-emerald-200/50` → `ring-slate-200`, pero el problema era que `ring-1 ring-slate-200` es MUY sutil sobre blanco (#e2e8f0 con 1px ring apenas se ve).
+- Aplicé fixes comprehensivos vía MultiEdit:
+
+  **1. Bordes de cards (KPI + secciones) — 21 ocurrencias:**
+  * `border-0 ring-1 ring-slate-200 dark:ring-slate-700/50` → `border border-slate-200 dark:border-slate-700/60 shadow-sm` (border sólido visible + sombra ligera)
+  * `border-0 ring-1 ring-teal-200/50 dark:ring-teal-800/30` → `border border-teal-200 dark:border-teal-800/40 shadow-sm`
+  * `border-0 ring-1 ring-amber-200 dark:ring-amber-800/40` → `border border-amber-200 dark:border-amber-800/40 shadow-sm`
+
+  **2. Profundidad de sombras (KPI cards destacan más):**
+  * `shadow hover:shadow-lg` → `shadow-md hover:shadow-xl` (KPI cards, 4 ocurrencias)
+  * `shadow hover:shadow-md` → `shadow-md hover:shadow-lg` (cards de sección, ~15 ocurrencias)
+  * `shadow-sm border-l-4 border-l-emerald-500` → `shadow-md border-l-4 border-l-emerald-500` (Planilla en Progreso banner)
+
+  **3. Texto secundario (un tono más oscuro para mejor contraste):**
+  * `text-slate-600 dark:text-slate-400` → `text-slate-700 dark:text-slate-300` (labels importantes: "Total Nómina del Mes", "Empleados Pagados", etc.)
+  * `text-slate-500 dark:text-slate-400` → `text-slate-600 dark:text-slate-400` (texto secundario: "vs mes anterior", "en proceso", "de X", etc.)
+  * `text-slate-500 dark:text-slate-500` → `text-slate-600 dark:text-slate-400` (fecha en tabla planillas)
+
+  **4. Divisores de sección más visibles:**
+  * `border-t border-emerald-200/50 dark:border-emerald-800/30` → `border-t border-emerald-200 dark:border-emerald-800/40`
+  * `border-t border-emerald-200/60 dark:border-emerald-800/40` → `border-t border-emerald-200 dark:border-emerald-800/40`
+
+  **5. Sparklines más visibles:**
+  * strokeWidth `1.5` → `2` (línea más gruesa)
+  * gradient opacity `0.25/0.02` → `0.35/0.05` (área bajo la línea más visible)
+
+  **6. Iconos en empty states:**
+  * `text-slate-300 dark:text-slate-600` → `text-slate-400 dark:text-slate-600` (PieChart, Info, CircleDot icons en empty states — 4 ocurrencias)
+  * Separador "·" en pipeline info: `text-slate-300 dark:text-slate-600` → `text-slate-400 dark:text-slate-600`
+
+  **7. Limpieza de sombras redundantes:**
+  * Eliminé `shadow-sm` redundante que quedó al final de clases como `shadow-md hover:shadow-xl ... shadow-sm` (el `shadow-sm` final sobreescribía `shadow-md`). 18 ocurrencias limpiadas.
+
+- Lint: `bun run lint` → 0 errores después de todos los cambios.
+- Verificación con agent-browser + VLM (5 capturas en modo claro post-fix):
+  * **Antes (Task ID: nomina-dashboard-light-mode-1)**: 3/10 — "tarjetas pálidas, sin bordes visibles, texto gris claro".
+  * **Después (este task)**: **8/10** — "KPI cards con bordes y sombras visibles, texto secundario legible, separaciones entre secciones claras, cards bien definidas, charts/sparklines visibles". VLM calificó como "profesional y funcional, con una base sólida".
+  * Mejora de +5 puntos (3/10 → 8/10) en modo claro.
+- Verificación del modo oscuro (no regression):
+  * **Modo oscuro**: **8/10** — "Bordes/sombras correctos, texto legible, colores coherentes, no se rompió nada con los cambios". Los cambios solo afectaron modo claro (variantes sin `dark:` prefix) o mejoraron ligeramente modo oscuro.
+- Capturas: payroll-light-v3-top.png, payroll-light-v3-mid1.png, payroll-light-v3-mid2.png, payroll-light-v3-mid3.png, payroll-light-v3-bottom.png, payroll-light-v3-full.png, payroll-dark-v3-top.png.
+
+Stage Summary:
+- Tipo: Fix de UX visual continuo — el dashboard de Nómina en modo claro seguía viéndose pálido a pesar del fix anterior (Task ID: nomina-dashboard-light-mode-1).
+- Root cause del problema residual: el fix anterior usó `ring-1 ring-slate-200` que es un ring MUY sutil (1px de #e2e8f0) sobre fondo blanco, prácticamente invisible. Además, el `border-0` eliminaba el border sólido del Card base de shadcn/ui, dejando las cards sin ningún contorno real.
+- Solución: reemplazar `border-0 ring-1 ring-{color}-200` por `border border-{color}-200 shadow-sm` (border sólido + sombra ligera). Además, aumentar la profundidad de sombras (`shadow-md` en lugar de `shadow`) y oscurecer un tono el texto secundario (`slate-500 → slate-600`, `slate-600 → slate-700`).
+- Resultado: calificación VLM del modo claro subió de 3/10 → 8/10. El VLM confirma que ahora las KPI cards tienen "bordes sutiles y sombras internas que las separan del fondo", el texto secundario es "legible con suficiente contraste", y las separaciones entre secciones son "claras".
+- Modo oscuro preservado: 8/10, sin regresiones. Todos los cambios mantuvieron o mejoraron las variantes `dark:`.
+- El dashboard ahora se ve "profesional y funcional" en modo claro, cumpliendo estándares básicos de legibilidad y accesibilidad.
