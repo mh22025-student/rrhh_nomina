@@ -1645,9 +1645,9 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
 
       {/* ── Calendar Day Detail Dialog ───────────────────────────────────── */}
       <Dialog open={!!calendarDayIncidencias} onOpenChange={(open) => { if (!open) setCalendarDayIncidencias(null); }}>
-        <DialogContent className="sm:max-w-lg dark:bg-slate-900 dark:border-slate-800">
-          <DialogHeader>
-            <DialogTitle className="dark:text-slate-100 flex items-center gap-2">
+        <DialogContent className="sm:max-w-lg dark:bg-slate-900 dark:border-slate-800 max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden p-0 gap-0 [&>button[data-slot=dialog-close]]:top-4 [&>button[data-slot=dialog-close]]:right-4">
+          <DialogHeader className="shrink-0 px-5 py-4 border-b border-slate-100 dark:border-slate-800 space-y-2">
+            <DialogTitle className="dark:text-slate-100 flex items-center gap-2 pr-8">
               <CalendarDays className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               Incidencias del Día
             </DialogTitle>
@@ -1657,7 +1657,7 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
                 : 'Sin incidencias'}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-80 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto modal-scroll px-5 py-4 space-y-2">
             {calendarDayIncidencias?.map(inc => {
               const tipoStyle = TIPO_COLORS[inc.tipo] || TIPO_COLORS.AUSENCIA;
               const TipoIcon = TIPO_ICONS[inc.tipo] || AlertCircle;
@@ -1691,16 +1691,17 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
 
       {/* ── Incidence Detail Modal ───────────────────────────────────────── */}
       <Dialog open={!!detailModal} onOpenChange={(open) => { if (!open) { setDetailModal(null); setDetailComment(''); } }}>
-        <DialogContent className="sm:max-w-2xl dark:bg-slate-900 dark:border-slate-800">
+        <DialogContent className="sm:max-w-2xl dark:bg-slate-900 dark:border-slate-800 max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden p-0 gap-0 [&>button[data-slot=dialog-close]]:top-4 [&>button[data-slot=dialog-close]]:right-4">
           {detailModal && (() => {
             const inc = detailModal;
             const tipoStyle = TIPO_COLORS[inc.tipo] || TIPO_COLORS.AUSENCIA;
             const TipoIcon = TIPO_ICONS[inc.tipo] || AlertCircle;
             const legalRef = TIPO_LEGAL_REF[inc.tipo] || '';
+            const hasActionFooter = (canApprove && inc.estado === 'PENDIENTE') || (canDelete && inc.estado === 'PENDIENTE');
             return (
               <>
-                <DialogHeader>
-                  <DialogTitle className="dark:text-slate-100 flex items-center gap-2">
+                <DialogHeader className="shrink-0 px-5 py-4 border-b border-slate-100 dark:border-slate-800 space-y-2">
+                  <DialogTitle className="dark:text-slate-100 flex items-center gap-2 pr-8">
                     <div className={`p-1.5 rounded-lg ${tipoStyle.bg} border ${tipoStyle.border}`}>
                       <TipoIcon className={`h-4 w-4 ${tipoStyle.icon}`} />
                     </div>
@@ -1711,7 +1712,7 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
                   </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4">
+                <div className="flex-1 overflow-y-auto modal-scroll px-5 py-4 space-y-4">
                   {/* Status + Type Header */}
                   <div className="flex items-center justify-between">
                     <Badge className={`${tipoStyle.bg} ${tipoStyle.icon} border ${tipoStyle.border} text-xs px-3 py-1`}>
@@ -1909,88 +1910,94 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
                     </div>
                   )}
 
-                  {/* Action buttons for APROBADOR */}
-                  {canApprove && inc.estado === 'PENDIENTE' && (
-                    <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                      <div>
-                        <Label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block flex items-center gap-1">
-                          <MessageSquare className="h-3 w-3" /> Comentario (opcional)
-                        </Label>
-                        <Textarea
-                          value={detailComment}
-                          onChange={e => setDetailComment(e.target.value)}
-                          placeholder="Agregar un comentario para la aprobación o rechazo..."
-                          className="min-h-16 text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          className="flex-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/20"
-                          onClick={() => handleApproveReject(inc.id, 'APROBADA', detailComment || undefined)}
-                        >
-                          <ThumbsUp className="h-4 w-4 mr-1.5" /> Aprobar
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="flex-1 text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
-                          onClick={() => handleApproveReject(inc.id, 'RECHAZADA', detailComment || undefined)}
-                        >
-                          <ThumbsDown className="h-4 w-4 mr-1.5" /> Rechazar
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                </div>
 
-                  {/* Danger zone: delete pending incidencia (ADMIN/ANALISTA only) */}
-                  {canDelete && inc.estado === 'PENDIENTE' && (
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-                      {confirmDeleteId === inc.id ? (
-                        <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 space-y-2">
-                          <div className="flex items-start gap-2">
-                            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
-                            <div>
-                              <p className="text-xs font-medium text-red-700 dark:text-red-300">¿Confirmar eliminación?</p>
-                              <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">
-                                Esta acción es irreversible y quedará registrada en la bitácora con nivel ALTA.
-                              </p>
+                {/* ── Sticky action footer (always visible, never cut off) ── */}
+                {hasActionFooter && (
+                  <div className="shrink-0 px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 backdrop-blur-sm space-y-3">
+                    {/* Approve / Reject with comment */}
+                    {canApprove && inc.estado === 'PENDIENTE' && (
+                      <>
+                        <div>
+                          <Label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block flex items-center gap-1">
+                            <MessageSquare className="h-3 w-3" /> Comentario (opcional)
+                          </Label>
+                          <Textarea
+                            value={detailComment}
+                            onChange={e => setDetailComment(e.target.value)}
+                            placeholder="Agregar un comentario para la aprobación o rechazo..."
+                            className="min-h-14 max-h-24 text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            className="flex-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/20"
+                            onClick={() => handleApproveReject(inc.id, 'APROBADA', detailComment || undefined)}
+                          >
+                            <ThumbsUp className="h-4 w-4 mr-1.5" /> Aprobar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="flex-1 text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
+                            onClick={() => handleApproveReject(inc.id, 'RECHAZADA', detailComment || undefined)}
+                          >
+                            <ThumbsDown className="h-4 w-4 mr-1.5" /> Rechazar
+                          </Button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Danger zone: delete pending incidencia (ADMIN/ANALISTA only) */}
+                    {canDelete && inc.estado === 'PENDIENTE' && (
+                      <div className="pt-1">
+                        {confirmDeleteId === inc.id ? (
+                          <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 space-y-2">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                              <div>
+                                <p className="text-xs font-medium text-red-700 dark:text-red-300">¿Confirmar eliminación?</p>
+                                <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">
+                                  Esta acción es irreversible y quedará registrada en la bitácora con nivel ALTA.
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="flex-1 h-8"
+                                disabled={deleting}
+                                onClick={() => handleDelete(inc.id)}
+                              >
+                                {deleting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Ban className="h-3.5 w-3.5 mr-1" />}
+                                Sí, eliminar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8"
+                                disabled={deleting}
+                                onClick={() => setConfirmDeleteId(null)}
+                              >
+                                Cancelar
+                              </Button>
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              className="flex-1 h-8"
-                              disabled={deleting}
-                              onClick={() => handleDelete(inc.id)}
-                            >
-                              {deleting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Ban className="h-3.5 w-3.5 mr-1" />}
-                              Sí, eliminar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8"
-                              disabled={deleting}
-                              onClick={() => setConfirmDeleteId(null)}
-                            >
-                              Cancelar
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-[11px] text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-                          onClick={() => setConfirmDeleteId(inc.id)}
-                        >
-                          <Ban className="h-3 w-3 mr-1" /> Eliminar incidencia
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-[11px] text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                            onClick={() => setConfirmDeleteId(inc.id)}
+                          >
+                            <Ban className="h-3 w-3 mr-1" /> Eliminar incidencia
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             );
           })()}
@@ -1999,9 +2006,9 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
 
       {/* ── New Incidence Dialog (Wizard) ─────────────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-        <DialogContent className="sm:max-w-2xl dark:bg-slate-900 dark:border-slate-800">
-          <DialogHeader>
-            <DialogTitle className="dark:text-slate-100 flex items-center gap-2">
+        <DialogContent className="sm:max-w-2xl dark:bg-slate-900 dark:border-slate-800 max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden p-0 gap-0 [&>button[data-slot=dialog-close]]:top-4 [&>button[data-slot=dialog-close]]:right-4">
+          <DialogHeader className="shrink-0 px-5 pt-5 pb-3 space-y-2 border-b border-slate-100 dark:border-slate-800">
+            <DialogTitle className="dark:text-slate-100 flex items-center gap-2 pr-8">
               <Plus className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               Nueva Incidencia
             </DialogTitle>
@@ -2010,8 +2017,8 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
             </DialogDescription>
           </DialogHeader>
 
-          {/* Wizard Progress Bar */}
-          <div className="flex items-center gap-1 mb-2">
+          {/* Wizard Progress Bar (sticky under header) */}
+          <div className="shrink-0 px-5 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
             {WIZARD_STEPS.map((step, idx) => {
               const StepIcon = step.icon;
               const isActive = wizardStep === step.id;
@@ -2040,6 +2047,8 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
             })}
           </div>
 
+          {/* ── Scrollable step body ── */}
+          <div className="flex-1 overflow-y-auto modal-scroll px-5 py-4">
           {/* Step 1: Select Employee */}
           {wizardStep === 1 && (
             <div className="space-y-4 animate-in slide-in-from-right-2 duration-200">
@@ -2438,8 +2447,11 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
             </div>
           )}
 
-          {/* ── Wizard Navigation ──────────────────────────────────────────── */}
-          <div className="flex justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+          {/* ── end scrollable step body ── */}
+          </div>
+
+          {/* ── Wizard Navigation (sticky footer — always visible) ─────────── */}
+          <div className="shrink-0 flex justify-between gap-2 px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 backdrop-blur-sm">
             <div>
               {wizardStep > 1 && (
                 <Button

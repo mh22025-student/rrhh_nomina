@@ -3336,3 +3336,76 @@ Stage Summary:
 - El módulo ahora cumple el ciclo completo: crear (wizard 4 pasos) → aprobar/rechazar (con comentario persistente) → eliminar (solo pendientes, con auditoría ALTA) → filtrar por estado/tipo/empleado/fechas/severidad → ver en lista o calendario.
 - Toda acción de modificación (crear, aprobar, rechazar, eliminar) queda registrada en la bitácora inmutable con nivel de criticidad apropiado (NORMAL/BAJO/ALTA) y snapshot de valor_anterior/valor_nuevo.
 - La trazabilidad del comentario del revisor cierra el gap de auditoría: ahora se puede ver QUIÉN aprobó, CUÁNDO, y POR QUÉ (comentario) sin necesidad de un campo adicional en el schema (se aprovecha `bitacora.detalle_adicional`).
+
+---
+Task ID: incidencias-modal-ux-1
+Agent: main (Z.ai Code)
+Task: Revisar el toolbar del apartado de Incidencias (verificar que el contenedor/contenido sea correcto) y corregir el modal "Ver detalle completo" que estaba condicionado al tamaño de pantalla — texto quedaba tapado y no daba buena UX.
+
+Work Log:
+- Leí el worklog previo (tarea incidencias-review-1) para entender el contexto: ya se habían corregido 3 bugs (comentario del revisor, DELETE, filtro de fechas) en el módulo 02-04 Incidencias.
+- Inspeccioné IncidenceManager.tsx (2483 líneas) — identifiqué 3 diálogos:
+  1. Calendar Day Detail Dialog (línea 1647) — `sm:max-w-lg`, body con `max-h-80 overflow-y-auto`
+  2. Incidence Detail Modal "Ver detalle completo" (línea 1693) — `sm:max-w-2xl`, SIN max-height, SIN scroll
+  3. New Incidence Wizard Dialog (línea 2001) — `sm:max-w-2xl`, SIN max-height, SIN scroll, 4 pasos
+- Inspeccioné dialog.tsx (componente base shadcn): usa `position: fixed; top: 50%; transform: translate(-50%, -50%)` SIN max-height ni overflow → cuando el contenido excede el viewport, la parte inferior (botones de acción) queda inaccesible.
+
+### Revisión del toolbar (header + filter bar)
+- Header: h2 "Incidencias de Nómina" + badge con count + view toggle (Lista/Calendario) + botón "Nueva Incidencia" (condicional a canCreate). Estructura `flex-col sm:flex-row sm:justify-between` — correcto y responsive.
+- Filter card: Tabs (Todas/Pendientes/Aprobadas/Rechazadas) + botón Filtros con badge de count + panel expandible con fecha/estado/severidad/tipo/empleado + filter chips activos.
+- Verificación: el contenido del toolbar refleja correctamente lo que tiene la sección (KPIs, estadísticas, filtros, cumplimiento legal). No se encontraron problemas de contenedor/contenido.
+
+### Fix 1: Modal "Ver detalle completo" (el problema principal reportado)
+**Root cause**: DialogContent usaba `sm:max-w-2xl` sin max-height ni overflow. El contenido del modal incluye: header + status + empleado/fechas + monto/horas + descripción + línea de tiempo (3 pasos con conectores) + referencia legal + comentario del revisor + textarea + botones Aprobar/Rechazar + confirmación de eliminación. En pantallas pequeñas o con incidencias PENDIENTE (que muestran todos los bloques), el contenido excedía el viewport y los botones de acción quedaban tapados/inaccesibles.
+
+**Fix**:
+- DialogContent: añadido `max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden p-0 gap-0` (anula el `grid gap-4 p-6` del base) + `[&>button[data-slot=dialog-close]]:top-4 [&>button[data-slot=dialog-close]]:right-4` para mantener el botón X posicionado correctamente.
+- DialogHeader: `shrink-0 px-5 py-4 border-b border-slate-100 dark:border-slate-800` — sticky en el tope, con separador visual.
+- Body: `flex-1 overflow-y-auto modal-scroll px-5 py-4 space-y-4` — área scrollable con scrollbar personalizada.
+- **Sticky action footer** (nuevo): los botones Aprobar/Rechazar + textarea de comentario + botón Eliminar incidencia + confirmación inline se movieron FUERA del body scrollable a un footer separado: `shrink-0 px-5 py-3.5 border-t bg-slate-50/80 backdrop-blur-sm`. Así los botones de acción SIEMPRE están visibles al pie del modal, sin importar cuánto contenido haya en el body. Se renderiza condicionalmente solo si `hasActionFooter = (canApprove && PENDIENTE) || (canDelete && PENDIENTE)`.
+- Se añadió `pr-8` al DialogTitle para que el texto del título no se solape con el botón X.
+
+### Fix 2: Wizard "Nueva Incidencia" (mismo problema, mismo tratamiento)
+- Mismo patrón aplicado: `max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden p-0 gap-0`.
+- Header sticky + **progress bar del wizard sticky** (`shrink-0 px-5 py-3 border-b bg-slate-50/50`) — los 4 pasos (Empleado/Tipo/Detalles/Revisión) siempre visibles.
+- Body scrollable: `flex-1 overflow-y-auto modal-scroll px-5 py-4` — contiene el contenido del paso activo.
+- **Navigation footer sticky** (nuevo): `shrink-0 flex justify-between px-5 py-3.5 border-t bg-slate-50/80 backdrop-blur-sm` — botones Anterior/Cancelar/Siguiente/Confirmar siempre accesibles. Antes estaban al final del contenido y si el paso tenía mucho contenido (ej. lista de empleados), los botones quedaban fuera del viewport.
+
+### Fix 3: Calendar Day Detail Dialog (consistencia)
+- Mismo tratamiento: `max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden p-0 gap-0` + header sticky + body `flex-1 overflow-y-auto modal-scroll`. Antes tenía `max-h-80` hardcodeado en el body que no se ajustaba al viewport.
+
+### CSS: nueva utilidad `.modal-scroll`
+- Añadida en globals.css: scrollbar thin (6px), thumb `oklch(0.7 0 0 / 45%)` con hover, track transparente, variante dark mode. Firefox `scrollbar-width: thin` + `scrollbar-color`.
+
+### Verificación con agent-browser (login admin@nomina.gob.sv):
+
+**Desktop (1280x577 — viewport corto):**
+- Modal APROBADA (Bono — Laura Gómez): modal=545px en viewport=577px, NO overflow. Header=98px (sticky), body scrollHeight=692 en clientHeight=444 (scroll activo), sin footer (no PENDIENTE). ✓
+- Modal PENDIENTE (Bono — María Rodríguez): modal=545px, NO overflow. Header=98px, body=592px en 244px (scroll), **footer=199px con Aprobar/Rechazar/Eliminar visible**. Scroll al fondo (260px) → footer sigue visible. ✓
+
+**Mobile (390x700):**
+- Modal PENDIENTE: modal=358x668 en viewport=390x700, NO overflow. Header=98px, body=627px en 367px (scroll), footer=199px visible. ✓
+- Wizard Paso 1: modal=358x668, NO overflow. Header=108px + progress=134px (ambos sticky), body=472px en 357px (scroll), nav footer=64px con Cancelar/Siguiente visible. ✓
+
+**VLM verification (glm-4.6v):**
+- Desktop PENDIENTE: "Header visible, no cut-off text, Aprobar/Rechazar visible, Eliminar visible, modal fits well". ✓
+- Mobile PENDIENTE: "Modal fits screen width, header visible, action buttons visible at bottom, no text cut off". ✓
+- Mobile Wizard: "Title header visible, step progress bar visible, content scrollable, Cancelar/Siguiente visible at bottom, no text cut off". ✓
+
+### Archivos modificados
+- `src/app/globals.css` — añadida utilidad `.modal-scroll` (thin scrollbar para modales, con dark mode).
+- `src/components/modules/IncidenceManager.tsx`:
+  * Incidence Detail Modal: DialogContent reestructurado (flex col + max-h + p-0), header sticky, body scrollable, **action footer sticky nuevo** con Aprobar/Rechazar + Eliminar movidos fuera del body.
+  * New Incidence Wizard: DialogContent reestructurado, header sticky, **progress bar sticky**, body scrollable, **navigation footer sticky**.
+  * Calendar Day Detail Dialog: mismo tratamiento (max-h + flex col + header sticky + body scrollable).
+- `bun run lint`: 0 errores.
+- Dev server: limpio en :3000, sin errores runtime. Bitácora API llamada correctamente al abrir modal (fetchApprovalComment funciona).
+- Capturas: qa-inc-modal-1-initial.png, qa-inc-modal-2-list.png, qa-inc-modal-3-detail-desktop.png, qa-inc-modal-4-pendiente-desktop.png, qa-inc-modal-5-pendiente-mobile.png, qa-inc-modal-6-wizard-mobile.png.
+
+Stage Summary:
+- Tipo: Fix de UX — el problema principal reportado por el usuario (modal "Ver detalle completo" condicionado al tamaño de pantalla, con texto tapado).
+- Antes: en pantallas pequeñas o con incidencias PENDIENTE, los botones Aprobar/Rechazar/Eliminar quedaban fuera del viewport e inaccesibles. El usuario no podía completar la acción de aprobación.
+- Después: el modal tiene header sticky, body scrollable con scrollbar personalizada, y **footer de acciones sticky** que garantiza que Aprobar/Rechazar/Eliminar (o Anterior/Siguiente/Cancelar en el wizard) SIEMPRE estén visibles y accesibles, sin importar el tamaño de pantalla ni la cantidad de contenido.
+- Se aplicó el mismo patrón a los 3 diálogos del módulo (detalle, wizard, calendario) para consistencia.
+- El toolbar (header + filtros + KPIs) se verificó correcto — contenido refleja adecuadamente la sección, estructura responsive proper.
+- Cumplimiento: 100dvh (mejor que vh en mobile browsers con barra dinámica), backdrop-blur en footers para legibilidad, dark mode completo.

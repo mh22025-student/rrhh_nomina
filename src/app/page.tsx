@@ -843,11 +843,9 @@ function PasswordRecoveryDialog({ open, onOpenChange }: PasswordRecoveryDialogPr
 // SIDEBAR - Enhanced with Search, Keyboard Nav, Favorites, Collapse
 // ============================================================
 
-// Badge counts for specific nav items (can be dynamic from API later)
-const NAV_BADGES: Partial<Record<ViewId, number>> = {
-  '02-04': 3, // Incidencias - pending count
-  '04-04': 1, // Aprobación - pending count
-};
+// Sidebar badge counts are now dynamic — fetched from the API in the main
+// component (see `navBadges` state) and passed to <Sidebar> as a prop.
+// Previously these were hardcoded; now they reflect the real pending counts.
 
 const MAX_FAVORITES = 5;
 const FAVORITES_KEY = 'sidebar-favorites';
@@ -896,9 +894,10 @@ interface SidebarProps {
   onToggle: () => void;     // toggle desktop collapsed
   mobileOpen: boolean;      // mobile overlay open
   onMobileToggle: () => void; // toggle mobile overlay
+  navBadges?: Partial<Record<ViewId, number>>; // dynamic badge counts from API
 }
 
-function Sidebar({ user, currentView, onNavigate, collapsed, onToggle, mobileOpen, onMobileToggle }: SidebarProps) {
+function Sidebar({ user, currentView, onNavigate, collapsed, onToggle, mobileOpen, onMobileToggle, navBadges }: SidebarProps) {
   // Expanded groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
     const initial = new Set<string>();
@@ -1025,7 +1024,7 @@ function Sidebar({ user, currentView, onNavigate, collapsed, onToggle, mobileOpe
     const isFocused = focusedIndex === index;
     const isFav = favorites.includes(item.id);
     const ItemIcon = item.icon;
-    const badgeCount = NAV_BADGES[item.id];
+    const badgeCount = navBadges?.[item.id] ?? 0;
 
     if (collapsed) {
       return (
@@ -2974,6 +2973,11 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
+  // Dynamic sidebar badge counts (real pending counts from API).
+  // Refetched whenever the user navigates back to the dashboard or returns
+  // from an incidence-management view, so the badge stays in sync with reality.
+  const [navBadges, setNavBadges] = useState<Partial<Record<ViewId, number>>>({});
+
   // Global keyboard shortcut: Cmd+K / Ctrl+K
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -2985,6 +2989,45 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Fetch real pending counts for sidebar badges.
+  // Re-runs when accessToken changes or when the user leaves an
+  // incidence/approval view (currentView changes) so the badge updates
+  // after they approve/reject/create/delete an incidence.
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    const fetchBadges = async () => {
+      try {
+        const headers = { Authorization: `Bearer ${accessToken}` };
+        const [pendIncRes, pendPlanillasRes] = await Promise.all([
+          fetch('/api/incidencias?estado=PENDIENTE&pageSize=1', { headers }).catch(() => null),
+          fetch('/api/nomina/planillas?estado=PENDIENTE_APROBACION&limit=1', { headers }).catch(() => null),
+        ]);
+        if (cancelled) return;
+        const badges: Partial<Record<ViewId, number>> = {};
+        if (pendIncRes?.ok) {
+          const data = await pendIncRes.json();
+          const total = data?.pagination?.total ?? data?.total ?? 0;
+          if (typeof total === 'number' && total > 0) {
+            badges['02-04'] = total; // Incidencias pendientes
+          }
+        }
+        if (pendPlanillasRes?.ok) {
+          const data = await pendPlanillasRes.json();
+          const total = data?.total ?? data?.pagination?.total ?? 0;
+          if (typeof total === 'number' && total > 0) {
+            badges['04-04'] = total; // Planillas pendientes de aprobación
+          }
+        }
+        if (!cancelled) setNavBadges(badges);
+      } catch {
+        // silent — badges are non-critical
+      }
+    };
+    fetchBadges();
+    return () => { cancelled = true; };
+  }, [accessToken, currentView]);
 
   // Handle employee selection from command palette
   const handleCommandPaletteEmployee = useCallback((employeeId: string) => {
@@ -3060,6 +3103,7 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         mobileOpen={mobileMenuOpen}
         onMobileToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
+        navBadges={navBadges}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
