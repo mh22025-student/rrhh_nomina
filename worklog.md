@@ -3409,3 +3409,35 @@ Stage Summary:
 - Se aplicó el mismo patrón a los 3 diálogos del módulo (detalle, wizard, calendario) para consistencia.
 - El toolbar (header + filtros + KPIs) se verificó correcto — contenido refleja adecuadamente la sección, estructura responsive proper.
 - Cumplimiento: 100dvh (mejor que vh en mobile browsers con barra dinámica), backdrop-blur en footers para legibilidad, dark mode completo.
+
+---
+Task ID: incidencias-kpi-real-count-1
+Agent: main (Z.ai Code)
+Task: El usuario reportó que en el resumen de Incidencias se muestran 5 pendientes, pero en realidad hay 8 pendientes (el badge del sidebar sí muestra 8). Investigar y corregir la discrepancia entre el badge del sidebar y los KPIs del IncidenceManager.
+
+Work Log:
+- Análisis de la captura del usuario con VLM (glm-4.6v): confirmó que el sidebar badge = 8, pero los KPIs mostraban Total=15, Pendientes=5, Aprobadas=5, Rechazadas=0 (suma 10 ≠ 15), y el gráfico de torta mostraba 10. Inconsistencia clara.
+- Rastreo de la fuente del sidebar: en `src/app/page.tsx` (líneas ~3003-3014), el badge '02-04' se obtiene de `fetch('/api/incidencias?estado=PENDIENTE&pageSize=1')` → lee `pagination.total`. Como el filtro `estado=PENDIENTE` aplica y `pagination.total` cuenta solo las pendientes, devuelve 8. ✅ Correcto.
+- Rastreo del bug en `IncidenceManager.tsx`: en `fetchIncidencias` se hace `fetch('/api/incidencias?page=1&pageSize=10')` (sin filtro de estado). La API devuelve `data` (solo la página actual, máx 10 items) + `pagination.total` (15). El `summary` calculaba `pendientes/aprobadas/rechazadas` filtrando el array local `incidencias` (que solo tiene la página actual = 10 items), pero `total` usaba `pagination.total` (15). Por eso total=15 pero los estados solo sumaban 10.
+- Mismo bug afectaba a `StatisticsPanel`: `byType` (gráfico torta), `byMonth` (tendencia), `approvalRate`, `avgProcessingHours`, `approved` y `total` — todos calculados sobre el array local (página actual), no sobre el universo real.
+- Fix backend (`src/app/api/incidencias/route.ts` GET): se añadieron queries paralelos para calcular `stats` globales respetando todos los filtros EXCEPTO `estado` (el filtro de estado se usa para navegar entre KPIs, no para reducir el panorama) y sin paginación. Devuelve: `stats.total`, `stats.pendientes`, `stats.aprobadas`, `stats.rechazadas`, `stats.byType` (vía `groupBy`), `stats.byMonth` (vía `findMany` select fecha_inicio + agrupación JS), `stats.avgProcessingHours` (vía `findMany` select fechas + cálculo JS sobre incidencias no pendientes), `stats.approvalRate`, `stats.approved`.
+- Fix frontend (`src/components/modules/IncidenceManager.tsx`):
+  * Nuevo tipo `IncidenceStats` + constante `EMPTY_STATS`.
+  * Nuevo estado `stats` en el componente principal.
+  * `fetchIncidencias` ahora hace `if (data.stats) setStats(data.stats)`.
+  * `summary` ahora usa `stats.total/pendientes/aprobadas/rechazadas` en lugar de filtrar `incidencias`.
+  * `StatisticsPanel` reescrita para recibir `stats: IncidenceStats` (props) en lugar de `incidencias: Incidencia[]` y calcular todo del array local. Solo ordena meses y deriva `totalForPie`/`conicGradient`/`maxMonthCount` de los stats pre-agregados.
+  * Llamada actualizada: `<StatisticsPanel stats={stats} />`.
+- Lint: `bun run lint` → 0 errores.
+- Verificación con agent-browser + VLM:
+  * Antes: Total=15, Pendientes=5, Aprobadas=5, Rechazadas=0, torta=10 (suma estados 10 ≠ 15). ❌
+  * Después: Total=15, Pendientes=8, Aprobadas=7, Rechazadas=0, torta=15 (Bono 5 + Comisión 1 + Horas Extra 5 + Incapacidad 1 + Permiso 3). Suma estados 8+7+0=15 = Total ✅.
+  * Badge sidebar = 8 = KPI Pendientes = 8 ✅ (coinciden).
+  * Al clicar tab "Pendientes": la lista muestra 8 items (coincide con KPI). Los KPIs NO cambian al filtrar (siguen 15/8/7/0) — comportamiento correcto: KPIs = panorama global, lista = filtrada.
+
+Stage Summary:
+- Tipo: Fix de consistencia de datos — los KPIs y gráficos del IncidenceManager mostraban conteos calculados sobre la página actual (10 items) en lugar del universo real, causando discrepancia con el badge del sidebar (que sí consulta el total correctamente).
+- Root cause: el frontend mezclaba `pagination.total` (total real del servidor) con conteos por estado calculados del array local `incidencias` (página actual). Esto producía total=15 pero pendientes+aprobadas+rechazadas=10.
+- Solución: la API ahora devuelve `stats` pre-agregados sobre el universo filtrado (sin `estado`, sin paginación). El frontend consume esos `stats` para KPIs y `StatisticsPanel`, garantizando que suma de estados = total = suma del gráfico de torta.
+- Beneficio adicional: el gráfico de torta, tendencia mensual, tiempo promedio y tasa de aprobación ahora también reflejan el universo real, no solo la página visible.
+- Filosofía: los KPIs/gráficos muestran el panorama completo (universo filtrado sin estado); la lista paginada muestra lo filtrado (incluido estado). Así el usuario ve el contexto global mientras navega.

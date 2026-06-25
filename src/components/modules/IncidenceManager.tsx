@@ -73,6 +73,34 @@ interface EmpleadoOption {
   primer_apellido: string;
 }
 
+// Agregados globales que devuelve la API /api/incidencias en `stats`.
+// Se calculan en el backend sobre el universo filtrado (sin el filtro de
+// `estado` y sin paginación) para que los KPIs y gráficos reflejen el total
+// real, no solo la página actual.
+interface IncidenceStats {
+  total: number;
+  pendientes: number;
+  aprobadas: number;
+  rechazadas: number;
+  byType: Record<string, number>;
+  byMonth: Record<string, number>;
+  avgProcessingHours: number;
+  approvalRate: number;
+  approved: number;
+}
+
+const EMPTY_STATS: IncidenceStats = {
+  total: 0,
+  pendientes: 0,
+  aprobadas: 0,
+  rechazadas: 0,
+  byType: {},
+  byMonth: {},
+  avgProcessingHours: 0,
+  approvalRate: 0,
+  approved: 0,
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TIPO_LABELS: Record<string, string> = {
@@ -313,44 +341,14 @@ function CalendarView({ incidencias, onDayClick }: { incidencias: Incidencia[]; 
 
 // ─── Statistics Panel Component ───────────────────────────────────────────────
 
-function StatisticsPanel({ incidencias }: { incidencias: Incidencia[] }) {
-  const stats = useMemo(() => {
-    const byType: Record<string, number> = {};
-    incidencias.forEach(inc => {
-      byType[inc.tipo] = (byType[inc.tipo] || 0) + 1;
-    });
-
-    const byMonth: Record<string, number> = {};
-    incidencias.forEach(inc => {
-      const d = new Date(inc.fecha_inicio);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      byMonth[key] = (byMonth[key] || 0) + 1;
-    });
-
-    const sortedMonths = Object.entries(byMonth).sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
-
-    const approved = incidencias.filter(i => i.estado === 'APROBADA').length;
-    const total = incidencias.length;
-    const approvalRate = total > 0 ? Math.round((approved / total) * 100) : 0;
-
-    let totalProcessingHours = 0;
-    let processedCount = 0;
-    incidencias.forEach(inc => {
-      if (inc.fecha_creacion && inc.fecha_actualizacion && inc.estado !== 'PENDIENTE') {
-        const created = new Date(inc.fecha_creacion).getTime();
-        const updated = new Date(inc.fecha_actualizacion).getTime();
-        const hours = (updated - created) / (1000 * 60 * 60);
-        if (hours >= 0) {
-          totalProcessingHours += hours;
-          processedCount++;
-        }
-      }
-    });
-    const avgProcessingHours = processedCount > 0 ? totalProcessingHours / processedCount : 0;
-
-    return { byType, sortedMonths, approvalRate, avgProcessingHours, total, approved };
-  }, [incidencias]);
-
+function StatisticsPanel({ stats }: { stats: IncidenceStats }) {
+  // Los datos ya vienen pre-agregados desde el backend (sobre el universo
+  // filtrado sin `estado` y sin paginación), así que aquí solo ordenamos los
+  // meses y derivamos valores de presentación.
+  const sortedMonths = useMemo(
+    () => Object.entries(stats.byMonth).sort((a, b) => a[0].localeCompare(b[0])).slice(-6),
+    [stats.byMonth],
+  );
   const totalForPie = Object.values(stats.byType).reduce((s, v) => s + v, 0);
 
   // Build conic-gradient for pie chart
@@ -367,7 +365,7 @@ function StatisticsPanel({ incidencias }: { incidencias: Incidencia[] }) {
     return `conic-gradient(${stops.join(', ')})`;
   }, [stats.byType, totalForPie]);
 
-  const maxMonthCount = Math.max(...stats.sortedMonths.map(([, c]) => c), 1);
+  const maxMonthCount = Math.max(...sortedMonths.map(([, c]) => c), 1);
 
   return (
     <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
@@ -405,7 +403,7 @@ function StatisticsPanel({ incidencias }: { incidencias: Incidencia[] }) {
               <TrendingUp className="h-3 w-3" /> Tendencia Mensual
             </p>
             <div className="flex items-end gap-1.5 h-24">
-              {stats.sortedMonths.map(([month, count]) => {
+              {sortedMonths.map(([month, count]) => {
                 const heightPct = Math.max((count / maxMonthCount) * 100, 8);
                 const monthLabel = month.split('-')[1];
                 return (
@@ -419,7 +417,7 @@ function StatisticsPanel({ incidencias }: { incidencias: Incidencia[] }) {
                   </div>
                 );
               })}
-              {stats.sortedMonths.length === 0 && (
+              {sortedMonths.length === 0 && (
                 <div className="flex-1 flex items-center justify-center">
                   <span className="text-[10px] text-slate-400 dark:text-slate-500">Sin datos</span>
                 </div>
@@ -465,6 +463,12 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
   const [empleados, setEmpleados] = useState<EmpleadoOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: 10, totalPages: 0 });
+  // Agregados globales (conteos por estado, por tipo, por mes, etc.) que
+  // vienen pre-calculados desde el backend sobre el universo filtrado sin
+  // `estado` ni paginación. Evita que los KPIs/gráficos se calculen sobre
+  // la página actual (lo que producía discrepancias como 15 totales pero
+  // solo 5+5+0 por estado).
+  const [stats, setStats] = useState<IncidenceStats>(EMPTY_STATS);
 
   // Filters
   const [quickTab, setQuickTab] = useState('all');
@@ -539,6 +543,7 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
       if (res.ok) {
         setIncidencias(data.data);
         setPagination(data.pagination);
+        if (data.stats) setStats(data.stats);
       }
     } catch (err) {
       console.error('Error fetching incidencias:', err);
@@ -565,11 +570,11 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
   // ─── Computed Values ───────────────────────────────────────────────────────
 
   const summary = useMemo(() => ({
-    total: pagination.total,
-    pendientes: incidencias.filter(i => i.estado === 'PENDIENTE').length,
-    aprobadas: incidencias.filter(i => i.estado === 'APROBADA').length,
-    rechazadas: incidencias.filter(i => i.estado === 'RECHAZADA').length,
-  }), [pagination.total, incidencias]);
+    total: stats.total,
+    pendientes: stats.pendientes,
+    aprobadas: stats.aprobadas,
+    rechazadas: stats.rechazadas,
+  }), [stats]);
 
   const activeFilterCount = [
     tipoFilter !== 'all',
@@ -1046,7 +1051,7 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
       </div>
 
       {/* ── Statistics Panel ─────────────────────────────────────────────── */}
-      <StatisticsPanel incidencias={incidencias} />
+      <StatisticsPanel stats={stats} />
 
       {/* ── Quick Filter Tabs + Advanced Filter Panel ────────────────────── */}
       <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">

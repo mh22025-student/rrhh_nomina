@@ -58,7 +58,28 @@ export async function GET(request: NextRequest) {
 
   const skip = (page - 1) * pageSize;
 
-  const [data, total] = await Promise.all([
+  // ── Stats globales por estado y tipo ──────────────────────────────────────
+  // Los KPIs y gráficos del frontend deben reflejar el universo filtrado SIN
+  // el filtro de `estado` (el filtro de estado se usa para navegar entre los
+  // KPIs, no para reducir el panorama). También ignoran la paginación, pues
+  // son agregados sobre el total. Así, la suma de pendientes + aprobadas +
+  // rechazadas siempre coincide con `stats.total` y con la suma del gráfico
+  // de torta, evitando la discrepancia que ocurría cuando se calculaban
+  // sobre el array de la página actual.
+  const statsWhere: Record<string, unknown> = { ...where };
+  delete statsWhere.estado;
+
+  const [
+    data,
+    total,
+    statsTotal,
+    statsPendientes,
+    statsAprobadas,
+    statsRechazadas,
+    byTypeRows,
+    fechasInicio,
+    processingRows,
+  ] = await Promise.all([
     db.incidenciaNomina.findMany({
       where,
       include: {
@@ -79,7 +100,45 @@ export async function GET(request: NextRequest) {
       take: pageSize,
     }),
     db.incidenciaNomina.count({ where }),
+    db.incidenciaNomina.count({ where: statsWhere }),
+    db.incidenciaNomina.count({ where: { ...statsWhere, estado: 'PENDIENTE' } }),
+    db.incidenciaNomina.count({ where: { ...statsWhere, estado: 'APROBADA' } }),
+    db.incidenciaNomina.count({ where: { ...statsWhere, estado: 'RECHAZADA' } }),
+    db.incidenciaNomina.groupBy({ by: ['tipo'], where: statsWhere, _count: { _all: true } }),
+    db.incidenciaNomina.findMany({ where: statsWhere, select: { fecha_inicio: true } }),
+    db.incidenciaNomina.findMany({
+      where: { ...statsWhere, estado: { not: 'PENDIENTE' } },
+      select: { fecha_creacion: true, fecha_actualizacion: true },
+    }),
   ]);
+
+  // byType: { HORAS_EXTRA: 4, BONO: 4, ... }
+  const byType: Record<string, number> = {};
+  byTypeRows.forEach(r => { byType[r.tipo] = r._count._all; });
+
+  // byMonth: { '2025-05': 4, '2025-06': 6, ... } (últimos 6 meses)
+  const byMonth: Record<string, number> = {};
+  fechasInicio.forEach(({ fecha_inicio }) => {
+    const d = new Date(fecha_inicio);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    byMonth[key] = (byMonth[key] || 0) + 1;
+  });
+
+  // Tiempo promedio de procesamiento (horas) para incidencias ya resueltas
+  let totalProcessingHours = 0;
+  let processedCount = 0;
+  processingRows.forEach(({ fecha_creacion, fecha_actualizacion }) => {
+    if (fecha_creacion && fecha_actualizacion) {
+      const hours = (new Date(fecha_actualizacion).getTime() - new Date(fecha_creacion).getTime()) / (1000 * 60 * 60);
+      if (hours >= 0) {
+        totalProcessingHours += hours;
+        processedCount++;
+      }
+    }
+  });
+  const avgProcessingHours = processedCount > 0 ? totalProcessingHours / processedCount : 0;
+
+  const approvalRate = statsTotal > 0 ? Math.round((statsAprobadas / statsTotal) * 100) : 0;
 
   return NextResponse.json({
     data,
@@ -88,6 +147,17 @@ export async function GET(request: NextRequest) {
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
+    },
+    stats: {
+      total: statsTotal,
+      pendientes: statsPendientes,
+      aprobadas: statsAprobadas,
+      rechazadas: statsRechazadas,
+      byType,
+      byMonth,
+      avgProcessingHours,
+      approvalRate,
+      approved: statsAprobadas,
     },
   });
 }
