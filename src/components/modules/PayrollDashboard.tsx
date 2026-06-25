@@ -432,7 +432,7 @@ function PayrollCompositionDonut({ baseAmount }: { baseAmount: number }) {
       </div>
       <div className="flex-1 space-y-3 w-full">
         {COMPOSITION_SLICES.map((s, i) => (
-          <div key={s.label} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100/80 dark:hover:bg-slate-700/50 transition-colors">
+          <div key={s.label} className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-50/80 dark:bg-slate-800/50 hover:bg-emerald-100/80 dark:hover:bg-slate-700/50 transition-colors">
             <div className="flex items-center gap-2.5">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: s.conicColor }} />
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{s.label}</span>
@@ -910,7 +910,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
       {/* ══════════════════════════════════════════════════════
           SECTION: Gradient Header with Clock + Quick Actions
           ══════════════════════════════════════════════════════ */}
-      <div className="bg-gradient-to-r from-emerald-700 via-teal-600 to-emerald-700 rounded-xl p-5 text-white shadow-lg relative overflow-hidden">
+      <div className="bg-gradient-to-r from-emerald-800 via-teal-700 to-emerald-800 rounded-xl p-5 text-white shadow-xl shadow-emerald-900/20 relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(255,255,255,0.08),transparent_50%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.06),transparent_40%)]" />
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4" />
@@ -1047,22 +1047,22 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           SECTION DIVIDER: Indicadores Clave
           ══════════════════════════════════════════════════════ */}
       <div className="flex items-center gap-3 px-1">
-        <div className="h-px flex-1 bg-gradient-to-r from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600/70 dark:text-emerald-400/70">Indicadores Clave</span>
-        <div className="h-px flex-1 bg-gradient-to-l from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-emerald-400 via-teal-400 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-700 dark:text-emerald-400/80">Indicadores Clave</span>
+        <div className="h-px flex-1 bg-gradient-to-l from-emerald-400 via-teal-400 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
       </div>
 
       {/* ── KPI Summary Cards with Sparklines ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Total Nómina del Mes */}
         <Card className="shadow-md hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-slate-200 dark:border-slate-700/60">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-transparent dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-transparent pointer-events-none" />
-          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-emerald-500 to-teal-500" />
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-100 via-teal-100/60 to-transparent dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-transparent pointer-events-none" />
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-emerald-600 to-teal-600" />
           <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Total Nómina del Mes</span>
-              <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 group-hover:scale-110 transition-transform duration-300">
-                <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <div className="p-2.5 rounded-xl bg-emerald-200/80 dark:bg-emerald-900/40 group-hover:scale-110 transition-transform duration-300">
+                <DollarSign className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono tracking-tight">{fmt(data.kpis.nomina_mes)}</p>
@@ -1072,12 +1072,12 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             </div>
             <div className="flex items-center gap-1.5">
               {nominaTrend.direction === 'up' ? (
-                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30">
+                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/30">
                   <ArrowUpRight className="h-3 w-3 text-emerald-500" />
                   <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">+{nominaTrend.value.toFixed(1)}%</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30">
+                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-950/30">
                   <ArrowDownRight className="h-3 w-3 text-red-500" />
                   <span className="text-xs font-semibold text-red-600 dark:text-red-400">-{nominaTrend.value.toFixed(1)}%</span>
                 </div>
@@ -1089,13 +1089,13 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
 
         {/* KPI 2: Empleados Pagados */}
         <Card className="shadow-md hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-teal-200 dark:border-teal-800/40">
-          <div className="absolute inset-0 bg-gradient-to-br from-teal-50 via-cyan-50/50 to-transparent dark:from-teal-950/30 dark:via-cyan-950/20 dark:to-transparent pointer-events-none" />
-          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-500 to-cyan-500" />
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-100 via-cyan-100/60 to-transparent dark:from-teal-950/30 dark:via-cyan-950/20 dark:to-transparent pointer-events-none" />
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-600 to-cyan-600" />
           <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Empleados Pagados</span>
-              <div className="p-2.5 rounded-xl bg-teal-100 dark:bg-teal-900/40 group-hover:scale-110 transition-transform duration-300">
-                <Users className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+              <div className="p-2.5 rounded-xl bg-teal-200/80 dark:bg-teal-900/40 group-hover:scale-110 transition-transform duration-300">
+                <Users className="h-5 w-5 text-teal-700 dark:text-teal-400" />
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
@@ -1108,12 +1108,12 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             </div>
             <div className="flex items-center gap-1.5">
               {data.kpis.tendencia_empleados.startsWith('-') ? (
-                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30">
+                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-950/30">
                   <ArrowDownRight className="h-3 w-3 text-red-500" />
                   <span className="text-xs font-semibold text-red-600 dark:text-red-400">{data.kpis.tendencia_empleados}%</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/30">
+                <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-teal-100 dark:bg-teal-950/30">
                   <ArrowUpRight className="h-3 w-3 text-teal-500" />
                   <span className="text-xs font-semibold text-teal-600 dark:text-teal-400">+{data.kpis.tendencia_empleados}%</span>
                 </div>
@@ -1125,13 +1125,13 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
 
         {/* KPI 3: Planillas Activas */}
         <Card className="shadow-md hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-amber-200 dark:border-amber-800/40">
-          <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-transparent dark:from-amber-950/30 dark:via-orange-950/20 dark:to-transparent pointer-events-none" />
-          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-500 to-orange-500" />
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-100 via-orange-100/60 to-transparent dark:from-amber-950/30 dark:via-orange-950/20 dark:to-transparent pointer-events-none" />
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-600 to-orange-600" />
           <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Planillas Activas</span>
-              <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 group-hover:scale-110 transition-transform duration-300">
-                <Activity className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <div className="p-2.5 rounded-xl bg-amber-200/80 dark:bg-amber-900/40 group-hover:scale-110 transition-transform duration-300">
+                <Activity className="h-5 w-5 text-amber-700 dark:text-amber-400" />
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
@@ -1143,7 +1143,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
               <Sparkline data={planillasSparkline} color="#f59e0b" width={120} height={28} />
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/30">
+              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/30">
                 <Zap className="h-3 w-3 text-amber-500" />
                 <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">{data.planillas_recientes.length} total</span>
               </div>
@@ -1155,15 +1155,15 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-slate-200 dark:border-slate-700/60">
           <div className={`absolute inset-0 pointer-events-none ${
             data.kpis.semaforo === 'verde'
-              ? 'bg-gradient-to-br from-emerald-50 via-green-50/50 to-transparent dark:from-emerald-950/30 dark:via-green-950/20 dark:to-transparent'
+              ? 'bg-gradient-to-br from-emerald-100 via-green-100/60 to-transparent dark:from-emerald-950/30 dark:via-green-950/20 dark:to-transparent'
               : data.kpis.semaforo === 'amarillo'
-                ? 'bg-gradient-to-br from-amber-50 via-yellow-50/50 to-transparent dark:from-amber-950/30 dark:via-yellow-950/20 dark:to-transparent'
-                : 'bg-gradient-to-br from-red-50 via-rose-50/50 to-transparent dark:from-red-950/30 dark:via-rose-950/20 dark:to-transparent'
+                ? 'bg-gradient-to-br from-amber-100 via-yellow-100/60 to-transparent dark:from-amber-950/30 dark:via-yellow-950/20 dark:to-transparent'
+                : 'bg-gradient-to-br from-red-100 via-rose-100/60 to-transparent dark:from-red-950/30 dark:via-rose-950/20 dark:to-transparent'
           }`} />
           <div className={`absolute top-0 left-0 w-1.5 h-full ${
-            data.kpis.semaforo === 'verde' ? 'bg-gradient-to-b from-emerald-500 to-green-500' :
-            data.kpis.semaforo === 'amarillo' ? 'bg-gradient-to-b from-amber-500 to-yellow-500' :
-            'bg-gradient-to-b from-red-500 to-rose-500'
+            data.kpis.semaforo === 'verde' ? 'bg-gradient-to-b from-emerald-600 to-green-600' :
+            data.kpis.semaforo === 'amarillo' ? 'bg-gradient-to-b from-amber-600 to-yellow-600' :
+            'bg-gradient-to-b from-red-600 to-rose-600'
           }`} />
           <CardContent className="p-5 relative">
             <div className="flex items-center justify-between mb-3">
@@ -1196,10 +1196,10 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           SECTION: Planilla Status Pipeline
           ══════════════════════════════════════════════════════ */}
       <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/50 via-teal-50/30 to-transparent dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-100/60 via-teal-100/40 to-transparent dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-transparent pointer-events-none" />
         <CardHeader className="pb-3 relative">
           <CardTitle className="text-base flex items-center gap-2">
-            <Play className="h-4 w-4 text-emerald-500" /> Pipeline de Planilla
+            <Play className="h-4 w-4 text-emerald-600" /> Pipeline de Planilla
           </CardTitle>
           <CardDescription>Flujo de estado de la planilla actual</CardDescription>
         </CardHeader>
@@ -1209,7 +1209,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             <div className="absolute top-8 left-[8%] right-[8%] h-1 rounded-full bg-slate-200 dark:bg-slate-700" />
             {/* Active progress line */}
             <div
-              className="absolute top-8 left-[8%] h-1 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-700 ease-out"
+              className="absolute top-8 left-[8%] h-1 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 transition-all duration-700 ease-out"
               style={{ width: pipelineActiveIdx >= 0 ? `${(pipelineActiveIdx / (PIPELINE_STEPS.length - 1)) * 84}%` : '0%' }}
             />
 
@@ -1280,16 +1280,16 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           SECTION: Compliance Progress Tracker
           ══════════════════════════════════════════════════════ */}
       <div className="flex items-center gap-3 px-1">
-        <div className="h-px flex-1 bg-gradient-to-r from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600/70 dark:text-emerald-400/70">Cumplimiento y Vencimientos</span>
-        <div className="h-px flex-1 bg-gradient-to-l from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-emerald-400 via-teal-400 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-700 dark:text-emerald-400/80">Cumplimiento y Vencimientos</span>
+        <div className="h-px flex-1 bg-gradient-to-l from-emerald-400 via-teal-400 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
       </div>
 
       <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-50/50 via-emerald-50/20 to-slate-50/50 dark:from-slate-900/50 dark:via-emerald-950/10 dark:to-slate-900/50 pointer-events-none rounded-xl" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-100/60 via-emerald-100/30 to-slate-100/60 dark:from-slate-900/50 dark:via-emerald-950/10 dark:to-slate-900/50 pointer-events-none rounded-xl" />
         <CardHeader className="pb-3 relative">
           <CardTitle className="text-base flex items-center gap-2">
-            <Gauge className="h-4 w-4 text-emerald-500" /> Seguimiento de Cumplimiento
+            <Gauge className="h-4 w-4 text-emerald-600" /> Seguimiento de Cumplimiento
           </CardTitle>
           <CardDescription>Progreso de obligaciones previsionales y plazos</CardDescription>
         </CardHeader>
@@ -1298,10 +1298,10 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             {complianceTrackerData.map(item => {
               const IconComp = item.icon;
               const colorClasses = {
-                emerald: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', ring: 'ring-emerald-200 dark:ring-emerald-800', progress: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400' },
-                teal: { bg: 'bg-teal-50 dark:bg-teal-950/30', ring: 'ring-teal-200 dark:ring-teal-800', progress: 'bg-teal-500', text: 'text-teal-600 dark:text-teal-400', iconBg: 'bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400' },
-                amber: { bg: 'bg-amber-50 dark:bg-amber-950/30', ring: 'ring-amber-200 dark:ring-amber-800', progress: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400' },
-                sky: { bg: 'bg-sky-50 dark:bg-sky-950/30', ring: 'ring-sky-200 dark:ring-sky-800', progress: 'bg-sky-500', text: 'text-sky-600 dark:text-sky-400', iconBg: 'bg-sky-100 dark:bg-sky-900/40 text-sky-600 dark:text-sky-400' },
+                emerald: { bg: 'bg-emerald-100 dark:bg-emerald-950/30', ring: 'ring-emerald-200 dark:ring-emerald-800', progress: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-200 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' },
+                teal: { bg: 'bg-teal-100 dark:bg-teal-950/30', ring: 'ring-teal-200 dark:ring-teal-800', progress: 'bg-teal-500', text: 'text-teal-600 dark:text-teal-400', iconBg: 'bg-teal-200 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400' },
+                amber: { bg: 'bg-amber-100 dark:bg-amber-950/30', ring: 'ring-amber-200 dark:ring-amber-800', progress: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-200 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' },
+                sky: { bg: 'bg-sky-100 dark:bg-sky-950/30', ring: 'ring-sky-200 dark:ring-sky-800', progress: 'bg-sky-500', text: 'text-sky-600 dark:text-sky-400', iconBg: 'bg-sky-200 dark:bg-sky-900/40 text-sky-700 dark:text-sky-400' },
               }[item.color];
 
               return (
@@ -1345,12 +1345,12 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           SECTION: Current Planilla Banner + Status Timeline
           ══════════════════════════════════════════════════════ */}
       {data.kpis.planilla_actual && (
-        <Card className="shadow-sm border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-50 to-white dark:from-emerald-950/30 dark:to-card hover:shadow-md transition-shadow duration-300">
+        <Card className="shadow-sm border-l-4 border-l-emerald-500 bg-gradient-to-r from-emerald-100 to-white dark:from-emerald-950/30 dark:to-card hover:shadow-md transition-shadow duration-300">
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
-                  <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  <DollarSign className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Planilla en Progreso</p>
@@ -1421,9 +1421,9 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           SECTION: Composition Donut + Employee Salary Distribution
           ══════════════════════════════════════════════════════ */}
       <div className="flex items-center gap-3 px-1">
-        <div className="h-px flex-1 bg-gradient-to-r from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600/70 dark:text-emerald-400/70">Composición y Distribución</span>
-        <div className="h-px flex-1 bg-gradient-to-l from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-emerald-400 via-teal-400 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-700 dark:text-emerald-400/80">Composición y Distribución</span>
+        <div className="h-px flex-1 bg-gradient-to-l from-emerald-400 via-teal-400 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1431,7 +1431,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <PieChart className="h-4 w-4 text-emerald-500" /> Composición de Nómina
+              <PieChart className="h-4 w-4 text-emerald-600" /> Composición de Nómina
             </CardTitle>
             <CardDescription>Desglose de la última planilla</CardDescription>
           </CardHeader>
@@ -1444,7 +1444,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-4 w-4 text-teal-500" /> Distribución Salarial
+              <Users className="h-4 w-4 text-teal-600" /> Distribución Salarial
             </CardTitle>
             <CardDescription>Empleados por rango salarial</CardDescription>
           </CardHeader>
@@ -1493,9 +1493,9 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           SECTION: Main content grid - Planillas Table + Status Donut
           ══════════════════════════════════════════════════════ */}
       <div className="flex items-center gap-3 px-1">
-        <div className="h-px flex-1 bg-gradient-to-r from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
-        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600/70 dark:text-emerald-400/70">Planillas y Actividad</span>
-        <div className="h-px flex-1 bg-gradient-to-l from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-emerald-400 via-teal-400 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-700 dark:text-emerald-400/80">Planillas y Actividad</span>
+        <div className="h-px flex-1 bg-gradient-to-l from-emerald-400 via-teal-400 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1503,7 +1503,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-sm lg:col-span-2 hover:shadow-md transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-emerald-500" /> Planillas Recientes
+              <BarChart3 className="h-4 w-4 text-emerald-600" /> Planillas Recientes
             </CardTitle>
             <CardDescription>Últimas planillas procesadas</CardDescription>
           </CardHeader>
@@ -1511,7 +1511,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-t border-b bg-gradient-to-r from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/20 dark:to-teal-950/10">
+                  <tr className="border-t border-b bg-gradient-to-r from-emerald-100/80 to-teal-100/60 dark:from-emerald-950/20 dark:to-teal-950/10">
                     <th className="text-left font-medium text-slate-700 dark:text-slate-300 p-3">Código</th>
                     <th className="text-left font-medium text-slate-700 dark:text-slate-300 p-3">Tipo</th>
                     <th className="text-left font-medium text-slate-700 dark:text-slate-300 p-3">Estado</th>
@@ -1558,7 +1558,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <PieChart className="h-4 w-4 text-teal-500" /> Estado de Planillas
+              <PieChart className="h-4 w-4 text-teal-600" /> Estado de Planillas
             </CardTitle>
             <CardDescription>Distribución por estado</CardDescription>
           </CardHeader>
@@ -1576,7 +1576,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-emerald-500" /> Comparación Mensual
+              <BarChart3 className="h-4 w-4 text-emerald-600" /> Comparación Mensual
             </CardTitle>
             <CardDescription>Mes actual vs. mes anterior</CardDescription>
           </CardHeader>
@@ -1648,7 +1648,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-4 w-4 text-teal-500" /> Evolución de Empleados
+              <Users className="h-4 w-4 text-teal-600" /> Evolución de Empleados
             </CardTitle>
             <CardDescription>Últimos 6 meses</CardDescription>
           </CardHeader>
@@ -1719,7 +1719,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-emerald-500" /> Tendencia Mensual
+              <BarChart3 className="h-4 w-4 text-emerald-600" /> Tendencia Mensual
             </CardTitle>
             <CardDescription>Total salarios brutos por mes</CardDescription>
           </CardHeader>
@@ -1762,8 +1762,8 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                               <div
                                 className={`w-full max-w-[40px] rounded-t-md transition-all duration-700 ease-out cursor-pointer ${
                                   isLast
-                                    ? 'bg-gradient-to-t from-emerald-600 to-teal-400 shadow-md shadow-emerald-500/30'
-                                    : 'bg-gradient-to-t from-slate-300 to-slate-200 dark:from-slate-600 dark:to-slate-500 hover:from-emerald-400 hover:to-teal-300'
+                                    ? 'bg-gradient-to-t from-emerald-700 to-teal-500 shadow-md shadow-emerald-500/40'
+                                    : 'bg-gradient-to-t from-slate-400 to-slate-300 dark:from-slate-600 dark:to-slate-500 hover:from-emerald-500 hover:to-teal-400'
                                 }`}
                                 style={{
                                   height: `${barPct}%`,
@@ -1797,7 +1797,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Hash className="h-4 w-4 text-teal-500" /> Distribución por Área
+              <Hash className="h-4 w-4 text-teal-600" /> Distribución por Área
             </CardTitle>
             <CardDescription>Nómina por departamento</CardDescription>
           </CardHeader>
@@ -1850,7 +1850,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Activity className="h-4 w-4 text-emerald-500" /> Actividad Reciente
+              <Activity className="h-4 w-4 text-emerald-600" /> Actividad Reciente
             </CardTitle>
             <CardDescription>Últimos movimientos del sistema</CardDescription>
           </CardHeader>
@@ -1889,7 +1889,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <PieChart className="h-4 w-4 text-teal-500" /> Desglose de Descuentos
+              <PieChart className="h-4 w-4 text-teal-600" /> Desglose de Descuentos
             </CardTitle>
             <CardDescription>Distribución aproximada según ley SV</CardDescription>
           </CardHeader>
@@ -1912,7 +1912,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
               </div>
               <div className="flex-1 space-y-2 w-full">
                 {EXPENSE_SLICES.map((s, i) => (
-                  <div key={s.label} className="flex items-center justify-between p-2 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100/80 dark:hover:bg-slate-700/50 transition-colors">
+                  <div key={s.label} className="flex items-center justify-between p-2 rounded-lg bg-emerald-50/80 dark:bg-slate-800/50 hover:bg-emerald-100/80 dark:hover:bg-slate-700/50 transition-colors">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: s.conicColor }} />
                       <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{s.label}</span>
@@ -1939,7 +1939,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Shield className="h-4 w-4 text-emerald-500" /> Semáforo Previsional
+              <Shield className="h-4 w-4 text-emerald-600" /> Semáforo Previsional
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -1974,7 +1974,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             <Separator />
 
             {data.cumplimientos.map(c => (
-              <div key={c.nombre} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100/80 dark:hover:bg-slate-700/50 transition-colors">
+              <div key={c.nombre} className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-50/80 dark:bg-slate-800/50 hover:bg-emerald-100/80 dark:hover:bg-slate-700/50 transition-colors">
                 <div className="flex items-center gap-2">
                   {c.presentado ? (
                     <CheckCircle className="h-4 w-4 text-emerald-500" />
@@ -2013,21 +2013,21 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <CircleDot className="h-4 w-4 text-emerald-500" /> Detalle de Estado
+                <CircleDot className="h-4 w-4 text-emerald-600" /> Detalle de Estado
               </CardTitle>
               <CardDescription>Información de la planilla actual</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-100 dark:bg-slate-800/50">
                   <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Código</span>
                   <span className="text-sm font-mono font-bold text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.codigo}</span>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-100 dark:bg-slate-800/50">
                   <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Tipo</span>
                   <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.tipo}</span>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-100 dark:bg-slate-800/50">
                   <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Estado</span>
                   <Badge className={`${estadoColors[data.kpis.planilla_actual.estado] || 'bg-slate-100 text-slate-700'} border text-xs font-medium`}>
                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${estadoDot[data.kpis.planilla_actual.estado] || 'bg-slate-400'}`} />
@@ -2035,7 +2035,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                   </Badge>
                 </div>
                 {data.kpis.planilla_actual.calculada_por && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-100 dark:bg-slate-800/50">
                     <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Calculada por</span>
                     <span className="text-sm text-slate-900 dark:text-slate-100">{data.kpis.planilla_actual.calculada_por}</span>
                   </div>
@@ -2080,7 +2080,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           <Card className="shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700/60">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <CircleDot className="h-4 w-4 text-emerald-500" /> Flujo de Planilla
+                <CircleDot className="h-4 w-4 text-emerald-600" /> Flujo de Planilla
               </CardTitle>
               <CardDescription>Progreso de la planilla actual</CardDescription>
             </CardHeader>
@@ -2126,9 +2126,9 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
                   <div
                     key={i}
                     className={`flex items-start gap-2.5 p-3 rounded-lg border transition-all duration-200 hover:shadow-sm ${
-                      isHigh ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300' :
-                      isMedium ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300' :
-                      'bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300'
+                      isHigh ? 'bg-red-100 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300' :
+                      isMedium ? 'bg-amber-100 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300' :
+                      'bg-sky-100 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300'
                     }`}
                   >
                     {isHigh ? (
@@ -2155,43 +2155,43 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
       {/* ══════════════════════════════════════════════════════
           SECTION: Quick Stats Footer
           ══════════════════════════════════════════════════════ */}
-      <Card className="shadow-sm border border-slate-200 dark:border-slate-700/60 bg-gradient-to-r from-emerald-50/50 via-teal-50/30 to-slate-50/50 dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-slate-900/50">
+      <Card className="shadow-sm border border-slate-200 dark:border-slate-700/60 bg-gradient-to-r from-emerald-100/60 via-teal-100/40 to-slate-100/60 dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-slate-900/50">
         <CardContent className="p-3 sm:p-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
               {
                 icon: <Users className="h-3.5 w-3.5" />,
-                iconBg: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400',
+                iconBg: 'bg-emerald-200 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400',
                 value: data.kpis.total_empleados_activos,
                 label: 'Empleados Activos',
               },
               {
                 icon: <FileText className="h-3.5 w-3.5" />,
-                iconBg: 'bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400',
+                iconBg: 'bg-teal-200 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400',
                 value: data.planillas_recientes.length,
                 label: 'Planillas Este Mes',
               },
               {
                 icon: <AlertTriangle className="h-3.5 w-3.5" />,
-                iconBg: 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400',
+                iconBg: 'bg-amber-200 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400',
                 value: additionalStats.incidenciasPendientes,
                 label: 'Incidencias Pendientes',
               },
               {
                 icon: <CalendarDays className="h-3.5 w-3.5" />,
-                iconBg: 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400',
+                iconBg: 'bg-red-200 dark:bg-red-900/40 text-red-700 dark:text-red-400',
                 value: vencimientosProximos || data.vencimientos.length,
                 label: 'Vencimientos',
               },
               {
                 icon: <Shield className="h-3.5 w-3.5" />,
-                iconBg: `${data.kpis.cumplimiento_previsional >= 80 ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400' : data.kpis.cumplimiento_previsional >= 50 ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'}`,
+                iconBg: `${data.kpis.cumplimiento_previsional >= 80 ? 'bg-emerald-200 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400' : data.kpis.cumplimiento_previsional >= 50 ? 'bg-amber-200 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400' : 'bg-red-200 dark:bg-red-900/40 text-red-700 dark:text-red-400'}`,
                 value: `${data.kpis.cumplimiento_previsional}%`,
                 label: 'Cumplimiento',
               },
               {
                 icon: <Clock4 className="h-3.5 w-3.5" />,
-                iconBg: 'bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400',
+                iconBg: 'bg-teal-200 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400',
                 value: svTime.toLocaleTimeString('es-SV', { timeZone: 'America/El_Salvador', hour: '2-digit', minute: '2-digit' }),
                 label: 'Hora SV',
               },

@@ -3563,3 +3563,100 @@ Stage Summary:
 - Resultado: calificación VLM del modo claro subió de 3/10 → 8/10. El VLM confirma que ahora las KPI cards tienen "bordes sutiles y sombras internas que las separan del fondo", el texto secundario es "legible con suficiente contraste", y las separaciones entre secciones son "claras".
 - Modo oscuro preservado: 8/10, sin regresiones. Todos los cambios mantuvieron o mejoraron las variantes `dark:`.
 - El dashboard ahora se ve "profesional y funcional" en modo claro, cumpliendo estándares básicos de legibilidad y accesibilidad.
+
+---
+Task ID: nomina-dashboard-vivid-colors-1
+Agent: main (Z.ai Code)
+Task: El usuario reportó que los colores del Dashboard de Nómina en modo claro se ven grises y tenues, con poco contraste, difíciles de leer. Quiere colores más fuertes y tonos más vivos.
+
+Work Log:
+- Leí el worklog previo (Task ID: nomina-dashboard-light-mode-2) — ya se habían aplicado fixes de contraste (3/10 → 8/10) pero el usuario reportó que los colores seguían viéndose grises/tenues.
+- Verifiqué el estado actual con agent-browser: `htmlClass: "light"`, `currentModule: "Dashboard Nómina"`.
+- Análisis VLM (glm-4.6v) de la captura inicial del dashboard en modo claro:
+  * Viveza de color inicial: **3/10** — "colores excesivamente pálidos, fondos casi blancos y tonos grises que pierden contraste".
+  * KPI cards: fondos `emerald-50`, `cyan-50`, `amber-50`, `green-50` — muy pálidos.
+  * Barras laterales: `emerald-500 to teal-500` — podrían ser más vivas.
+  * Iconos: `gray-300` / `emerald-600` — grises tenues.
+  * Texto secundario: `gray-400` — poco visible.
+- Aplicé fixes comprehensivos vía MultiEdit para intensificar colores (estrategia: subir 1-2 tonos cada color):
+
+  **1. Gradientes de fondo de KPI cards (más saturados):**
+  * `from-emerald-50 via-teal-50/50` → `from-emerald-100 via-teal-100/60` (KPI Total Nómina)
+  * `from-teal-50 via-cyan-50/50` → `from-teal-100 via-cyan-100/60` (KPI Empleados Pagados)
+  * `from-amber-50 via-orange-50/50` → `from-amber-100 via-orange-100/60` (KPI Planillas Activas)
+  * `from-emerald-50 via-green-50/50` → `from-emerald-100 via-green-100/60` (KPI Cumplimiento verde)
+  * `from-amber-50 via-yellow-50/50` → `from-amber-100 via-yellow-100/60` (KPI Cumplimiento amarillo)
+  * `from-red-50 via-rose-50/50` → `from-red-100 via-rose-100/60` (KPI Cumplimiento rojo)
+  * Gradientes de secciones: `from-emerald-50/50 via-teal-50/30` → `from-emerald-100/60 via-teal-100/40`
+  * Banner de Planilla en Progreso: `from-emerald-50 to-white` → `from-emerald-100 to-white`
+  * Header de tabla: `from-emerald-50/80 to-teal-50/50` → `from-emerald-100/80 to-teal-100/60`
+  * Footer de Quick Stats: `from-emerald-50/50 via-teal-50/30 to-slate-50/50` → `from-emerald-100/60 via-teal-100/40 to-slate-100/60`
+
+  **2. Barras laterales de KPI cards (un tono más oscuro/vivo):**
+  * `from-emerald-500 to-teal-500` → `from-emerald-600 to-teal-600`
+  * `from-teal-500 to-cyan-500` → `from-teal-600 to-cyan-600`
+  * `from-amber-500 to-orange-500` → `from-amber-600 to-orange-600`
+  * `from-emerald-500 to-green-500` → `from-emerald-600 to-green-600`
+  * `from-amber-500 to-yellow-500` → `from-amber-600 to-yellow-600`
+  * `from-red-500 to-rose-500` → `from-red-600 to-rose-600`
+  * Línea de progreso del pipeline: `from-emerald-500 to-teal-500` → `from-emerald-600 to-teal-600`
+
+  **3. Fondos de iconos (más saturados):**
+  * `bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600` → `bg-emerald-200 dark:bg-emerald-900/40 text-emerald-700`
+  * `bg-teal-100 dark:bg-teal-900/40 text-teal-600` → `bg-teal-200 dark:bg-teal-900/40 text-teal-700`
+  * `bg-amber-100 dark:bg-amber-900/40 text-amber-600` → `bg-amber-200 dark:bg-amber-900/40 text-amber-700`
+  * `bg-sky-100 dark:bg-sky-900/40 text-sky-600` → `bg-sky-200 dark:bg-sky-900/40 text-sky-700`
+  * `bg-red-100 dark:bg-red-900/40 text-red-600` → `bg-red-200 dark:bg-red-900/40 text-red-700`
+  * Fondos de iconos KPI específicos: `bg-emerald-100` → `bg-emerald-200/80`, `bg-teal-100` → `bg-teal-200/80`, `bg-amber-100` → `bg-amber-200/80`
+
+  **4. Iconos lucide de secciones (un tono más vivo):**
+  * `text-emerald-500` → `text-emerald-600` (15 iconos de títulos de sección: Play, Gauge, PieChart, Users, BarChart3, Hash, Activity, Shield, CircleDot)
+  * `text-teal-500` → `text-teal-600` (iconos de secciones teal)
+  * Iconos grandes de KPI: `text-emerald-600` → `text-emerald-700`, `text-teal-600` → `text-teal-700`, `text-amber-600` → `text-amber-700`
+
+  **5. Divisores de sección y labels (más visibles):**
+  * `from-emerald-300 via-teal-300` → `from-emerald-400 via-teal-400` (divisores horizontales)
+  * `text-emerald-600/70 dark:text-emerald-400/70` → `text-emerald-700 dark:text-emerald-400/80` (labels de sección: "Indicadores Clave", "Cumplimiento y Vencimientos", etc.)
+
+  **6. Header principal del dashboard (más impacto):**
+  * `from-emerald-700 via-teal-600 to-emerald-700 shadow-lg` → `from-emerald-800 via-teal-700 to-emerald-800 shadow-xl shadow-emerald-900/20`
+
+  **7. Barras de tendencia mensual (más vivas):**
+  * Barra actual: `from-emerald-600 to-teal-400 shadow-emerald-500/30` → `from-emerald-700 to-teal-500 shadow-emerald-500/40`
+  * Barras pasadas: `from-slate-300 to-slate-200 hover:from-emerald-400 hover:to-teal-300` → `from-slate-400 to-slate-300 hover:from-emerald-500 hover:to-teal-400`
+
+  **8. Fondos grises → fondos con tinte esmeralda:**
+  * `bg-slate-50/80 hover:bg-slate-100/80` → `bg-emerald-50/80 hover:bg-emerald-100/80` (3 listas: composición, descuentos, cumplimientos)
+  * `bg-slate-50 dark:bg-slate-800/50` → `bg-slate-100 dark:bg-slate-800/50` (detalle de planilla: Código, Tipo, Estado, Calculada por)
+
+  **9. Badges de tendencia (más saturados):**
+  * `bg-emerald-50 dark:bg-emerald-950/30` → `bg-emerald-100 dark:bg-emerald-950/30`
+  * `bg-red-50 dark:bg-red-950/30` → `bg-red-100 dark:bg-red-950/30`
+  * `bg-teal-50 dark:bg-teal-950/30` → `bg-teal-100 dark:bg-teal-950/30`
+  * `bg-amber-50 dark:bg-amber-950/30` → `bg-amber-100 dark:bg-amber-950/30`
+  * `bg-sky-50 dark:bg-sky-950/30` → `bg-sky-100 dark:bg-sky-950/30`
+
+- Lint: `bun run lint` → 0 errores después de todos los cambios.
+- Verificación con agent-browser + VLM (5 capturas en modo claro + 1 en modo oscuro post-fix):
+  * **Antes (Task ID: nomina-dashboard-light-mode-2)**: Viveza 3/10 — "colores grises, tenues, poco saturados".
+  * **Después (este task)**: **Viveza 9/10, Contraste 8/10** — "colores vivos y atractivos, KPI cards con colores definidos, secciones visualmente distinguibles, sparklines coloridos, texto legible".
+  * Mejora de +6 puntos en viveza (3/10 → 9/10) en modo claro.
+  * VLM confirma: "cumple con estándares profesionales en diseño de UI/UX, colores vivos, legibilidad y distinción de secciones. Funcional y atractivo para un entorno corporativo".
+- Verificación del modo oscuro (no regression):
+  * **Modo oscuro**: **8/10** — "colores vivos pero equilibrados, texto legible, contrastes adecuados. No hay elementos rotos o disfuncionales". Los cambios solo afectaron modo claro o mejoraron modo oscuro.
+- Capturas: payroll-vivid-before-top.png, payroll-vivid-before-full.png, payroll-vivid-after-top.png, payroll-vivid-after-mid1.png, payroll-vivid-after-mid2.png, payroll-vivid-after-mid3.png, payroll-vivid-after-bottom.png, payroll-vivid-after-full.png, payroll-vivid-dark-top.png.
+
+Stage Summary:
+- Tipo: Fix de UX visual — el dashboard de Nómina en modo claro usaba colores muy pálidos (emerald-50, teal-50, amber-50) que se veían grises/tenues, dificultando la lectura.
+- Root cause: uso sistemático de tonos -50 (los más claros de cada color) para fondos de KPI cards y badges, combinado con iconos en -500/-600 (medios) y barras laterales en -500. Esto producía un aspecto "apagado" donde todo se veía gris.
+- Solución: subir 1-2 tonos cada color:
+  * Fondos de KPI: -50 → -100 (más saturados pero aún suaves)
+  * Barras laterales: -500 → -600 (más vivas)
+  * Iconos: -500/-600 → -600/-700 (más oscuros/vivos)
+  * Fondos de iconos: -100 → -200 (más saturados)
+  * Divisores: -300 → -400 (más visibles)
+  * Header principal: -700 → -800 (más impacto)
+  * Badges de tendencia: -50 → -100 (más coloridos)
+- Resultado: calificación VLM de viveza subió de 3/10 → 9/10, contraste 8/10. El VLM confirma que ahora los colores son "vivos y atractivos, dinámicos, sin monotonía".
+- Modo oscuro preservado: 8/10, sin regresiones. Todos los cambios mantuvieron las variantes `dark:`.
+- El dashboard ahora se ve "profesional y atractivo para un entorno corporativo" con colores vivos que facilitan la lectura y distinguibilidad de secciones.
