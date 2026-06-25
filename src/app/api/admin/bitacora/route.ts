@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const usuario = searchParams.get('usuario') || '';
     const accion = searchParams.get('accion') || '';
     const tabla = searchParams.get('tabla') || '';
+    const registroId = searchParams.get('registro_id') || '';
     const fechaDesde = searchParams.get('fecha_desde') || '';
     const fechaHasta = searchParams.get('fecha_hasta') || '';
     const nivelCriticidad = searchParams.get('nivel_criticidad') || '';
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
     }
     if (accion) where.accion = accion;
     if (tabla) where.tabla_afectada = tabla;
+    if (registroId) where.registro_id = registroId;
     if (fechaDesde || fechaHasta) {
       where.fecha_accion = {};
       if (fechaDesde) (where.fecha_accion as Record<string, unknown>).gte = new Date(fechaDesde);

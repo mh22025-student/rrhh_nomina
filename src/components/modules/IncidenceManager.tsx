@@ -753,7 +753,9 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
   const handleApproveReject = async (id: string, estado: 'APROBADA' | 'RECHAZADA', comment?: string) => {
     try {
       const body: Record<string, unknown> = { estado };
-      if (comment) body.descripcion = comment;
+      // Send as "comentario" so the backend stores it in bitacora.detalle_adicional
+      // instead of overwriting the incidence's own descripcion.
+      if (comment) body.comentario = comment;
       const res = await fetch(`/api/incidencias/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -763,10 +765,13 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
       if (res.ok) {
         toast({
           title: `Incidencia ${estado.toLowerCase()}`,
-          description: `La incidencia ha sido ${estado === 'APROBADA' ? 'aprobada' : 'rechazada'}`,
+          description: comment
+            ? `La incidencia ha sido ${estado === 'APROBADA' ? 'aprobada' : 'rechazada'} con comentario registrado en bitácora`
+            : `La incidencia ha sido ${estado === 'APROBADA' ? 'aprobada' : 'rechazada'}`,
         });
         fetchIncidencias();
         if (detailModal?.id === id) setDetailModal(null);
+        setDetailComment('');
       } else {
         toast({ title: 'Error', description: data.error || 'Error al actualizar', variant: 'destructive' });
       }
@@ -774,6 +779,84 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
       toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
     }
   };
+
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/incidencias/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast({
+          title: 'Incidencia eliminada',
+          description: 'La incidencia pendiente fue eliminada. Acción registrada en bitácora (nivel ALTA).',
+        });
+        fetchIncidencias();
+        if (detailModal?.id === id) setDetailModal(null);
+        setConfirmDeleteId(null);
+      } else {
+        toast({ title: 'No se puede eliminar', description: data.error || 'Error al eliminar', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Fetch the approver's comment from the audit log for a given incidencia.
+  const [approvalComment, setApprovalComment] = useState<{ texto: string; accion: string; fecha: string; autor: string } | null>(null);
+  const [loadingComment, setLoadingComment] = useState(false);
+
+  const fetchApprovalComment = useCallback(async (incidenciaId: string, estado: string) => {
+    if (estado === 'PENDIENTE') { setApprovalComment(null); return; }
+    setLoadingComment(true);
+    try {
+      const res = await fetch(
+        `/api/admin/bitacora?registro_id=${encodeURIComponent(incidenciaId)}&tabla=incidencias_nomina&page_size=10`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const data = await res.json();
+      // The bitacora API returns { entries: [...] } (not { data: [...] })
+      const entries = Array.isArray(data.entries) ? data.entries : (Array.isArray(data.data) ? data.data : []);
+      if (res.ok && entries.length > 0) {
+        const accionBuscada = estado === 'APROBADA' ? 'APROBAR_INCIDENCIA' : 'RECHAZAR_INCIDENCIA';
+        const entry = entries.find((e: { accion: string; detalle_adicional?: string | null; fecha_accion?: string; usuario?: { nombre: string; apellido: string } | null; usuario_email?: string | null }) => e.accion === accionBuscada);
+        if (entry && entry.detalle_adicional) {
+          setApprovalComment({
+            texto: entry.detalle_adicional,
+            accion: entry.accion,
+            fecha: entry.fecha_accion || '',
+            autor: entry.usuario ? `${entry.usuario.nombre} ${entry.usuario.apellido}` : (entry.usuario_email || 'Sistema'),
+          });
+        } else {
+          setApprovalComment(null);
+        }
+      } else {
+        setApprovalComment(null);
+      }
+    } catch {
+      setApprovalComment(null);
+    } finally {
+      setLoadingComment(false);
+    }
+  }, [accessToken]);
+
+  // When the detail modal opens, fetch the approval comment (if any)
+  useEffect(() => {
+    if (detailModal) {
+      setApprovalComment(null);
+      setDetailComment('');
+      fetchApprovalComment(detailModal.id, detailModal.estado);
+    }
+  }, [detailModal, fetchApprovalComment]);
+
+  const canDelete = userRole === 'ADMIN' || userRole === 'ANALISTA';
 
   const handleBulkAction = async (estado: 'APROBADA' | 'RECHAZADA') => {
     const ids = Array.from(selectedIds);
@@ -1794,6 +1877,38 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
                     </div>
                   )}
 
+                  {/* Reviewer comment (from audit log) — only for approved/rejected */}
+                  {inc.estado !== 'PENDIENTE' && (
+                    <div className={`p-3 rounded-md border ${
+                      inc.estado === 'APROBADA'
+                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                    }`}>
+                      <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                        <MessageSquare className="h-3 w-3" />
+                        Comentario del Revisor
+                      </p>
+                      {loadingComment ? (
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 dark:text-slate-500">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Cargando desde bitácora...
+                        </div>
+                      ) : approvalComment ? (
+                        <div className="space-y-1">
+                          <p className={`text-xs italic ${inc.estado === 'APROBADA' ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+                            “{approvalComment.texto}”
+                          </p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                            — {approvalComment.autor} · {formatDateTime(approvalComment.fecha)}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+                          Sin comentario registrado (aprobación/rechazo sin observación)
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   {/* Action buttons for APROBADOR */}
                   {canApprove && inc.estado === 'PENDIENTE' && (
                     <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -1824,6 +1939,55 @@ export default function IncidenceManager({ accessToken, userRole }: IncidenceMan
                           <ThumbsDown className="h-4 w-4 mr-1.5" /> Rechazar
                         </Button>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Danger zone: delete pending incidencia (ADMIN/ANALISTA only) */}
+                  {canDelete && inc.estado === 'PENDIENTE' && (
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                      {confirmDeleteId === inc.id ? (
+                        <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 space-y-2">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-medium text-red-700 dark:text-red-300">¿Confirmar eliminación?</p>
+                              <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">
+                                Esta acción es irreversible y quedará registrada en la bitácora con nivel ALTA.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="flex-1 h-8"
+                              disabled={deleting}
+                              onClick={() => handleDelete(inc.id)}
+                            >
+                              {deleting ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Ban className="h-3.5 w-3.5 mr-1" />}
+                              Sí, eliminar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8"
+                              disabled={deleting}
+                              onClick={() => setConfirmDeleteId(null)}
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-[11px] text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                          onClick={() => setConfirmDeleteId(inc.id)}
+                        >
+                          <Ban className="h-3 w-3 mr-1" /> Eliminar incidencia
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>

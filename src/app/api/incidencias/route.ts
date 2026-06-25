@@ -17,6 +17,8 @@ export async function GET(request: NextRequest) {
   const tipo = searchParams.get('tipo') || '';
   const estado = searchParams.get('estado') || '';
   const periodoId = searchParams.get('periodo_id') || '';
+  const fechaDesde = searchParams.get('fechaDesde') || searchParams.get('from') || '';
+  const fechaHasta = searchParams.get('fechaHasta') || searchParams.get('to') || '';
 
   const where: Record<string, unknown> = {};
 
@@ -35,6 +37,24 @@ export async function GET(request: NextRequest) {
   if (tipo) where.tipo = tipo;
   if (estado) where.estado = estado;
   if (periodoId) where.periodo_id = periodoId;
+
+  // Date range filter on fecha_inicio (inclusive on both ends).
+  // The frontend sends fechaDesde/fechaHasta as YYYY-MM-DD.
+  if (fechaDesde || fechaHasta) {
+    const dateFilter: Record<string, Date> = {};
+    if (fechaDesde) {
+      const from = new Date(fechaDesde + 'T00:00:00');
+      if (!isNaN(from.getTime())) dateFilter.gte = from;
+    }
+    if (fechaHasta) {
+      // Inclusive end of day
+      const to = new Date(fechaHasta + 'T23:59:59.999');
+      if (!isNaN(to.getTime())) dateFilter.lte = to;
+    }
+    if (Object.keys(dateFilter).length > 0) {
+      where.fecha_inicio = dateFilter;
+    }
+  }
 
   const skip = (page - 1) * pageSize;
 

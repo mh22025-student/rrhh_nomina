@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { verifyAuth, requireRoles } from '@/lib/auth-middleware';
 import type { UserRole } from '@/lib/auth';
 
-// PUT /api/incidencias/[id] - Update incidencia (approve, reject, apply)
+// PUT /api/incidencias/[id] - Update incidencia (approve, reject, edit)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -35,6 +35,16 @@ export async function PUT(
         return NextResponse.json({ error: 'Solo se puede aprobar/rechazar incidencias pendientes' }, { status: 400 });
       }
 
+      // The optional comment from the approver. It is stored in the audit log
+      // (bitacora.detalle_adicional) so the incidence description is preserved
+      // but the reviewer's rationale is still retrievable for audit purposes.
+      const comment: string | undefined =
+        typeof body.comentario === 'string'
+          ? body.comentario.trim().slice(0, 500) || undefined
+          : typeof body.descripcion === 'string'
+            ? body.descripcion.trim().slice(0, 500) || undefined
+            : undefined;
+
       const result = await db.$transaction(async (tx) => {
         const updated = await tx.incidenciaNomina.update({
           where: { id },
@@ -52,7 +62,8 @@ export async function PUT(
             tabla_afectada: 'incidencias_nomina',
             registro_id: id,
             valor_anterior: JSON.stringify({ estado: existing.estado }),
-            valor_nuevo: JSON.stringify({ estado: body.estado }),
+            valor_nuevo: JSON.stringify({ estado: body.estado, comentario: comment || null }),
+            detalle_adicional: comment || null,
             nivel_criticidad: body.estado === 'APROBADA' ? 'NORMAL' : 'BAJO',
           },
         });
@@ -73,7 +84,7 @@ export async function PUT(
         },
       });
 
-      return NextResponse.json({ data: resultWithRelations });
+      return NextResponse.json({ data: resultWithRelations, comentario: comment || null });
     }
 
     // Edit - ANALISTA or ADMIN
@@ -111,5 +122,88 @@ export async function PUT(
   } catch (error) {
     console.error('Error updating incidencia:', error);
     return NextResponse.json({ error: 'Error al actualizar incidencia' }, { status: 500 });
+  }
+}
+
+// DELETE /api/incidencias/[id] - Delete a PENDING incidencia (ADMIN/ANALISTA only)
+// Approved/rejected incidences cannot be deleted (they are part of the audit trail);
+// they must be reverted to PENDING first if a correction is needed.
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = verifyAuth(request);
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
+  const roleCheck = requireRoles('ADMIN', 'ANALISTA' as UserRole)(request);
+  if ('error' in roleCheck) {
+    return roleCheck.error;
+  }
+  const { user: actor } = roleCheck;
+
+  const { id } = await params;
+
+  try {
+    const existing = await db.incidenciaNomina.findUnique({
+      where: { id },
+      include: {
+        empleado: {
+          select: { codigo_empleado: true, primer_nombre: true, primer_apellido: true },
+        },
+      },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Incidencia no encontrada' }, { status: 404 });
+    }
+
+    if (existing.estado !== 'PENDIENTE') {
+      return NextResponse.json(
+        {
+          error:
+            'No se puede eliminar una incidencia que ya fue aprobada o rechazada. ' +
+            'Revierta el estado a PENDIENTE antes de eliminarla, o créela nuevamente.',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Snapshot for audit before hard-delete
+    const snapshot = {
+      tipo: existing.tipo,
+      estado: existing.estado,
+      empleado_id: existing.empleado_id,
+      empleado: `${existing.empleado.primer_nombre} ${existing.empleado.primer_apellido} (${existing.empleado.codigo_empleado})`,
+      fecha_inicio: existing.fecha_inicio,
+      fecha_fin: existing.fecha_fin,
+      cantidad_horas: existing.cantidad_horas,
+      monto: existing.monto,
+      descripcion: existing.descripcion,
+    };
+
+    await db.$transaction(async (tx) => {
+      await tx.incidenciaNomina.delete({ where: { id } });
+
+      await tx.bitacoraAuditoria.create({
+        data: {
+          usuario_id: actor.userId,
+          usuario_email: actor.email,
+          accion: 'ELIMINAR_INCIDENCIA',
+          tabla_afectada: 'incidencias_nomina',
+          registro_id: id,
+          valor_anterior: JSON.stringify(snapshot),
+          valor_nuevo: null,
+          detalle_adicional: `Incidencia eliminada por ${actor.email}`,
+          nivel_criticidad: 'ALTA',
+        },
+      });
+    });
+
+    return NextResponse.json({ data: { id, deleted: true } });
+  } catch (error) {
+    console.error('Error deleting incidencia:', error);
+    return NextResponse.json({ error: 'Error al eliminar incidencia' }, { status: 500 });
   }
 }

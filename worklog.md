@@ -3268,3 +3268,71 @@ Stage Summary:
   * 3 componentes actualizados: IsssReport.tsx, AfpReport.tsx, IsrReport.tsx
 - No se modificó el schema ni las APIs GET existentes.
 - El cron job webDevReview (ID 230655) sigue activo para QA continuo.
+
+---
+Task ID: incidencias-review-1
+Agent: main (Z.ai Code)
+Task: Revisar el apartado de Incidencias (Módulo 02-04) — auditoría completa de bugs y fixes.
+
+Work Log:
+- Inspeccioné IncidenceManager.tsx (2319→2483 líneas), /api/incidencias/route.ts (GET/POST) y /api/incidencias/[id]/route.ts (PUT).
+- Login como ADMIN (admin@nomina.gob.sv) y navegué a 02-04 Incidencias vía agent-browser.
+- Verifiqué el render inicial: 15 incidencias totales, KPIs, tabs Todas/Pendientes/Aprobadas/Rechazadas, toggle Lista/Calendario, wizard de 4 pasos, calculadora de horas extra, widget de cumplimiento legal.
+- Probé el modal de detalle: muestra tipo, estado, empleado, período, monto/horas, descripción, línea de tiempo de aprobación (Creada → En Revisión → Aprobada/Rechazada), referencia legal con Art. CT/ISSS, y botones Aprobar/Rechazar con comentario.
+- Detecté 3 bugs reales durante la revisión:
+
+### Bug 1: El comentario del revisor se perdía silenciosamente
+**Root cause**: `handleApproveReject` enviaba el comentario como `body.descripcion`, pero la rama de approve/reject del PUT route solo actualizaba `estado` y `aprobada_por_id` — el campo `descripcion` se ignoraba. El usuario escribía un comentario pensando que se guardaba, pero se perdía.
+**Fix**: 
+- Backend ([id]/route.ts): la rama approve/reject ahora acepta `body.comentario` (o `body.descripcion` como fallback), lo valida (trim, max 500 chars) y lo almacena en `bitacoraAuditoria.detalle_adicional` + lo incluye en `valor_nuevo`. Así el comentario queda en el trail de auditoría sin sobreescribir la descripción de la incidencia.
+- API bitacora (admin/bitacora/route.ts): añadido soporte para filtrar por `registro_id` (antes no se podía consultar la bitácora de un registro específico).
+- Frontend (IncidenceManager.tsx): `handleApproveReject` ahora envía `body.comentario` (no `descripcion`). Añadido `fetchApprovalComment` que al abrir el modal consulta `/api/admin/bitacora?registro_id=X&tabla=incidencias_nomina` y muestra el comentario del revisor en una nueva sección "Comentario del Revisor" (con cita italic, autor y fecha). Si no hay comentario, muestra "Sin comentario registrado".
+- Fix adicional: el frontend esperaba `data.data` pero la bitacora devuelve `data.entries` — corregido para aceptar ambos.
+
+### Bug 2: No existía DELETE — las incidencias no se podían eliminar
+**Root cause**: `/api/incidencias/[id]/route.ts` solo exportaba PUT. Una incidencia creada por error no tenía forma de eliminarse; solo se podía rechazar (que la deja en el sistema).
+**Fix**:
+- Backend: añadido `DELETE` handler. Solo permite eliminar incidencias en estado PENDIENTE (las aprobadas/rechazadas son parte del trail de auditoría y no se pueden borrar). RBAC: ADMIN/ANALISTA. Antes de borrar, hace un snapshot del registro (tipo, estado, empleado, fechas, monto, descripción) y lo guarda en `bitacoraAuditoria.valor_anterior` con `accion=ELIMINAR_INCIDENCIA`, `nivel_criticidad=ALTA`, y `detalle_adicional="Incidencia eliminada por {email}"`. Usa transacción para garantizar atomicidad.
+- Frontend: añadido `handleDelete` + estado `deleting`/`confirmDeleteId`. En el modal de detalle, para incidencias PENDIENTE y roles ADMIN/ANALISTA, se muestra un botón "Eliminar incidencia" (ghost, rojo). Al clicar aparece un panel de confirmación inline (rojo) con advertencia "Esta acción es irreversible y quedará registrada en la bitácora con nivel ALTA" + botones "Sí, eliminar" (destructive) / "Cancelar". Toast de éxito menciona el nivel ALTA.
+
+### Bug 3: El filtro por rango de fechas era ignorado por la API
+**Root cause**: El frontend enviaba `fechaDesde` y `fechaHasta` en el query string (`params.set('fechaDesde', dateFrom)`), pero el GET route de `/api/incidencias` NO los procesaba — solo leía `empleado_id, tipo, estado, periodo_id`. El usuario seleccionaba un rango de fechas y la API devolvía todas las incidencias sin filtrar.
+**Fix**:
+- Backend (route.ts GET): añadido parsing de `fechaDesde`/`fechaHasta` (con alias `from`/`to`). Construye un filtro `fecha_inicio: { gte, lte }` con fechas inclusive (desde 00:00:00 hasta 23:59:59.999). Valida que las fechas sean parseables antes de aplicarlas.
+- Verificado vía curl: sin filtro=14, 2026-06-01..15=12, 2026-06-16..30=2. Todas las incidencias retornadas tienen fecha_inicio dentro del rango.
+
+### Verificación con agent-browser (login admin@nomina.gob.sv):
+1. **Modal de detalle (APROBADA)**: muestra nueva sección "Comentario del Revisor" → "Sin comentario registrado (aprobación/rechazo sin observación)" para la incidencia aprobada vía curl sin comentario. ✅
+2. **Modal de detalle (PENDIENTE)**: muestra botón "Eliminar incidencia" (rojo, ghost) además de Aprobar/Rechazar. ✅
+3. **Aprobar con comentario**: llené textarea "Permiso aprobado por QA — verificar flujo de comentario", clic Aprobar → PUT 200 → modal cerró, lista refrescó. Re-abrí en tab Aprobadas → "Comentario del Revisor" muestra "Permiso aprobado por QA — verificar flujo de comentario" — Carlos Hernández · 25/06/2026 01:04. ✅
+4. **Eliminar incidencia PENDIENTE**: clic "Eliminar incidencia" → panel de confirmación → "Sí, eliminar" → DELETE 200 → modal cerró, count bajó de 10 a 9 pendientes. Bitácora registró `ELIMINAR_INCIDENCIA` nivel ALTA con snapshot en valor_anterior. ✅
+5. **Filtro por rango de fechas**: seteé Fecha Desde=2026-06-16, Fecha Hasta=2026-06-30 → API recibió `fechaDesde=2026-06-16&fechaHasta=2026-06-30` → retornó solo incidencias en ese rango. Badge "Filtros 3" activo. "Limpiar filtros" resetea todo. ✅
+
+### Nota sobre agent-browser + Radix Dialog
+Durante el QA detecté que `agent-browser click @ref` sobre los botones Aprobar/Rechazar (dentro de un Dialog de Radix UI) cierra el modal SIN disparar el onClick. Esto es un artefacto de testing (CDP dispatcha pointerdown en el overlay antes del click), NO un bug de usuario. Verifiqué que el handler está correctamente cableado usando `element.click()` vía `agent-browser eval`, lo cual dispara el PUT correctamente. Un usuario real con mouse no tendría este problema.
+
+### Archivos modificados
+- `src/app/api/incidencias/[id]/route.ts` — Añadido handler DELETE (con transacción, snapshot, bitacora ALTA); la rama approve/reject del PUT ahora almacena `comentario` en `bitacora.detalle_adicional` y `valor_nuevo`.
+- `src/app/api/incidencias/route.ts` — GET ahora soporta `fechaDesde`/`fechaHasta` (alias `from`/`to`) con filtro inclusive en `fecha_inicio`.
+- `src/app/api/admin/bitacora/route.ts` — GET ahora soporta filtro por `registro_id`.
+- `src/components/modules/IncidenceManager.tsx`:
+  * `handleApproveReject` envía `comentario` (no `descripcion`); toast menciona si se registró comentario.
+  * Nuevo `handleDelete` + estado `deleting`/`confirmDeleteId` + `canDelete`.
+  * Nuevo `fetchApprovalComment` + estado `approvalComment`/`loadingComment` que consulta la bitácora al abrir el modal.
+  * Sección "Comentario del Revisor" en el modal (cita, autor, fecha) para incidencias aprobadas/rechazadas.
+  * Botón "Eliminar incidencia" + panel de confirmación inline para incidencias PENDIENTE (ADMIN/ANALISTA).
+
+### Verificación
+- ✅ `bun run lint` pasa con 0 errores
+- ✅ Dev server corriendo limpio en :3000, sin errores runtime ni en consola del navegador
+- ✅ PUT /api/incidencias/[id] 200 (approve con comentario)
+- ✅ DELETE /api/incidencias/[id] 200 (eliminación con bitacora ALTA)
+- ✅ GET /api/incidencias con fechaDesde/fechaHasta filtra correctamente
+- ✅ GET /api/admin/bitacora?registro_id=X retorna las entradas del registro
+- ✅ Capturas: qa-incidencias-1-initial.png, qa-incidencias-2-list.png, qa-incidencias-3-detail.png, qa-incidencias-4-after-approve.png, qa-incidencias-5-final.png
+
+Stage Summary:
+- 3 bugs reales corregidos en el módulo de Incidencias (02-04): comentario del revisor perdido, falta de DELETE, y filtro de fechas ignorado.
+- El módulo ahora cumple el ciclo completo: crear (wizard 4 pasos) → aprobar/rechazar (con comentario persistente) → eliminar (solo pendientes, con auditoría ALTA) → filtrar por estado/tipo/empleado/fechas/severidad → ver en lista o calendario.
+- Toda acción de modificación (crear, aprobar, rechazar, eliminar) queda registrada en la bitácora inmutable con nivel de criticidad apropiado (NORMAL/BAJO/ALTA) y snapshot de valor_anterior/valor_nuevo.
+- La trazabilidad del comentario del revisor cierra el gap de auditoría: ahora se puede ver QUIÉN aprobó, CUÁNDO, y POR QUÉ (comentario) sin necesidad de un campo adicional en el schema (se aprovecha `bitacora.detalle_adicional`).

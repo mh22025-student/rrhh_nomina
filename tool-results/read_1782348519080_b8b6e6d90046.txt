@@ -1,0 +1,702 @@
+   300→        {/* Legend */}
+   301→        <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+   302→          {Object.entries(TIPO_LABELS).slice(0, 5).map(([key, label]) => (
+   303→            <div key={key} className="flex items-center gap-1.5">
+   304→              <span className={`w-2.5 h-2.5 rounded-full ${TIPO_COLORS[key]?.dot}`} />
+   305→              <span className="text-[10px] text-slate-500 dark:text-slate-400">{label}</span>
+   306→            </div>
+   307→          ))}
+   308→        </div>
+   309→      </CardContent>
+   310→    </Card>
+   311→  );
+   312→}
+   313→
+   314→// ─── Statistics Panel Component ───────────────────────────────────────────────
+   315→
+   316→function StatisticsPanel({ incidencias }: { incidencias: Incidencia[] }) {
+   317→  const stats = useMemo(() => {
+   318→    const byType: Record<string, number> = {};
+   319→    incidencias.forEach(inc => {
+   320→      byType[inc.tipo] = (byType[inc.tipo] || 0) + 1;
+   321→    });
+   322→
+   323→    const byMonth: Record<string, number> = {};
+   324→    incidencias.forEach(inc => {
+   325→      const d = new Date(inc.fecha_inicio);
+   326→      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+   327→      byMonth[key] = (byMonth[key] || 0) + 1;
+   328→    });
+   329→
+   330→    const sortedMonths = Object.entries(byMonth).sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
+   331→
+   332→    const approved = incidencias.filter(i => i.estado === 'APROBADA').length;
+   333→    const total = incidencias.length;
+   334→    const approvalRate = total > 0 ? Math.round((approved / total) * 100) : 0;
+   335→
+   336→    let totalProcessingHours = 0;
+   337→    let processedCount = 0;
+   338→    incidencias.forEach(inc => {
+   339→      if (inc.fecha_creacion && inc.fecha_actualizacion && inc.estado !== 'PENDIENTE') {
+   340→        const created = new Date(inc.fecha_creacion).getTime();
+   341→        const updated = new Date(inc.fecha_actualizacion).getTime();
+   342→        const hours = (updated - created) / (1000 * 60 * 60);
+   343→        if (hours >= 0) {
+   344→          totalProcessingHours += hours;
+   345→          processedCount++;
+   346→        }
+   347→      }
+   348→    });
+   349→    const avgProcessingHours = processedCount > 0 ? totalProcessingHours / processedCount : 0;
+   350→
+   351→    return { byType, sortedMonths, approvalRate, avgProcessingHours, total, approved };
+   352→  }, [incidencias]);
+   353→
+   354→  const totalForPie = Object.values(stats.byType).reduce((s, v) => s + v, 0);
+   355→
+   356→  // Build conic-gradient for pie chart
+   357→  const conicGradient = useMemo(() => {
+   358→    if (totalForPie === 0) return 'conic-gradient(#e2e8f0 0deg 360deg)';
+   359→    let currentDeg = 0;
+   360→    const stops: string[] = [];
+   361→    Object.entries(stats.byType).forEach(([tipo, count]) => {
+   362→      const deg = (count / totalForPie) * 360;
+   363→      const color = TIPO_COLORS[tipo]?.hex || '#94a3b8';
+   364→      stops.push(`${color} ${currentDeg}deg ${currentDeg + deg}deg`);
+   365→      currentDeg += deg;
+   366→    });
+   367→    return `conic-gradient(${stops.join(', ')})`;
+   368→  }, [stats.byType, totalForPie]);
+   369→
+   370→  const maxMonthCount = Math.max(...stats.sortedMonths.map(([, c]) => c), 1);
+   371→
+   372→  return (
+   373→    <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   374→      <CardHeader className="pb-3">
+   375→        <CardTitle className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+   376→          <BarChart3 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+   377→          Estadísticas de Incidencias
+   378→        </CardTitle>
+   379→      </CardHeader>
+   380→      <CardContent className="p-4 pt-0">
+   381→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+   382→          {/* Pie chart - Distribution by type */}
+   383→          <div className="flex flex-col items-center">
+   384→            <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+   385→              <PieChart className="h-3 w-3" /> Por Tipo
+   386→            </p>
+   387→            <div className="relative w-28 h-28 rounded-full" style={{ background: conicGradient }}>
+   388→              <div className="absolute inset-3 rounded-full bg-white dark:bg-slate-900 flex items-center justify-center">
+   389→                <span className="text-lg font-bold text-slate-900 dark:text-slate-100">{totalForPie}</span>
+   390→              </div>
+   391→            </div>
+   392→            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 justify-center">
+   393→              {Object.entries(stats.byType).map(([tipo, count]) => (
+   394→                <div key={tipo} className="flex items-center gap-1">
+   395→                  <span className={`w-2 h-2 rounded-full ${TIPO_COLORS[tipo]?.dot}`} />
+   396→                  <span className="text-[9px] text-slate-500 dark:text-slate-400">{TIPO_LABELS[tipo]} ({count})</span>
+   397→                </div>
+   398→              ))}
+   399→            </div>
+   400→          </div>
+   401→
+   402→          {/* Bar chart - Monthly trend */}
+   403→          <div className="flex flex-col">
+   404→            <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+   405→              <TrendingUp className="h-3 w-3" /> Tendencia Mensual
+   406→            </p>
+   407→            <div className="flex items-end gap-1.5 h-24">
+   408→              {stats.sortedMonths.map(([month, count]) => {
+   409→                const heightPct = Math.max((count / maxMonthCount) * 100, 8);
+   410→                const monthLabel = month.split('-')[1];
+   411→                return (
+   412→                  <div key={month} className="flex-1 flex flex-col items-center gap-1">
+   413→                    <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">{count}</span>
+   414→                    <div
+   415→                      className="w-full rounded-t-sm bg-gradient-to-t from-emerald-500 to-teal-400 dark:from-emerald-600 dark:to-teal-500 transition-all duration-500"
+   416→                      style={{ height: `${heightPct}%`, minHeight: '4px' }}
+   417→                    />
+   418→                    <span className="text-[8px] text-slate-400 dark:text-slate-500">{monthLabel}</span>
+   419→                  </div>
+   420→                );
+   421→              })}
+   422→              {stats.sortedMonths.length === 0 && (
+   423→                <div className="flex-1 flex items-center justify-center">
+   424→                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Sin datos</span>
+   425→                </div>
+   426→              )}
+   427→            </div>
+   428→          </div>
+   429→
+   430→          {/* Average Processing Time */}
+   431→          <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+   432→            <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+   433→              <Timer className="h-3 w-3" /> Tiempo Promedio
+   434→            </p>
+   435→            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+   436→              {stats.avgProcessingHours < 24
+   437→                ? `${stats.avgProcessingHours.toFixed(1)}h`
+   438→                : `${(stats.avgProcessingHours / 24).toFixed(1)}d`
+   439→              }
+   440→            </p>
+   441→            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">procesamiento</p>
+   442→          </div>
+   443→
+   444→          {/* Approval Rate */}
+   445→          <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+   446→            <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+   447→              <CheckCircle2 className="h-3 w-3" /> Tasa de Aprobación
+   448→            </p>
+   449→            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{stats.approvalRate}%</p>
+   450→            <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mt-1.5">
+   451→              <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${stats.approvalRate}%` }} />
+   452→            </div>
+   453→            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{stats.approved} de {stats.total}</p>
+   454→          </div>
+   455→        </div>
+   456→      </CardContent>
+   457→    </Card>
+   458→  );
+   459→}
+   460→
+   461→// ─── Main Component ───────────────────────────────────────────────────────────
+   462→
+   463→export default function IncidenceManager({ accessToken, userRole }: IncidenceManagerProps) {
+   464→  const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
+   465→  const [empleados, setEmpleados] = useState<EmpleadoOption[]>([]);
+   466→  const [loading, setLoading] = useState(true);
+   467→  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: 10, totalPages: 0 });
+   468→
+   469→  // Filters
+   470→  const [quickTab, setQuickTab] = useState('all');
+   471→  const [tipoFilter, setTipoFilter] = useState('all');
+   472→  const [tipoMultiFilter, setTipoMultiFilter] = useState<string[]>([]);
+   473→  const [estadoFilter, setEstadoFilter] = useState('all');
+   474→  const [dateFrom, setDateFrom] = useState('');
+   475→  const [dateTo, setDateTo] = useState('');
+   476→  const [employeeFilter, setEmployeeFilter] = useState('all');
+   477→  const [employeeSearchText, setEmployeeSearchText] = useState('');
+   478→  const [severidadFilter, setSeveridadFilter] = useState('all');
+   479→  const [showFilters, setShowFilters] = useState(false);
+   480→
+   481→  // View mode
+   482→  const [viewMode, setViewMode] = useState<'lista' | 'calendario'>('lista');
+   483→
+   484→  // Dialog & Wizard
+   485→  const [dialogOpen, setDialogOpen] = useState(false);
+   486→  const [wizardStep, setWizardStep] = useState(1);
+   487→  const [saving, setSaving] = useState(false);
+   488→  const [searchEmpleado, setSearchEmpleado] = useState('');
+   489→
+   490→  // Expandable detail
+   491→  const [expandedId, setExpandedId] = useState<string | null>(null);
+   492→
+   493→  // Bulk selection
+   494→  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+   495→
+   496→  // Detail modal
+   497→  const [detailModal, setDetailModal] = useState<Incidencia | null>(null);
+   498→  const [detailComment, setDetailComment] = useState('');
+   499→
+   500→  // Overtime calculator (enhanced)
+   501→  const [horasCalc, setHorasCalc] = useState({ rate: '', hours: '' });
+   502→  const [overtimeRateType, setOvertimeRateType] = useState('DIURNA');
+   503→
+   504→  // Calendar day click
+   505→  const [calendarDayIncidencias, setCalendarDayIncidencias] = useState<Incidencia[] | null>(null);
+   506→
+   507→  const { toast } = useToast();
+   508→
+   509→  const [form, setForm] = useState({
+   510→    empleado_id: '',
+   511→    tipo: 'HORAS_EXTRA',
+   512→    fecha_inicio: '',
+   513→    fecha_fin: '',
+   514→    descripcion: '',
+   515→    cantidad_horas: '',
+   516→    tipo_horas_extra: 'DIURNA',
+   517→    monto: '',
+   518→    numero_incapacidad: '',
+   519→  });
+   520→
+   521→  // ─── Data Fetching ────────────────────────────────────────────────────────
+   522→
+   523→  const fetchIncidencias = useCallback(async () => {
+   524→    setLoading(true);
+   525→    try {
+   526→      const params = new URLSearchParams();
+   527→      params.set('page', String(pagination.page));
+   528→      params.set('pageSize', String(pagination.pageSize));
+   529→      if (tipoFilter && tipoFilter !== 'all') params.set('tipo', tipoFilter);
+   530→      if (estadoFilter && estadoFilter !== 'all') params.set('estado', estadoFilter);
+   531→      if (employeeFilter && employeeFilter !== 'all') params.set('empleado_id', employeeFilter);
+   532→      if (dateFrom) params.set('fechaDesde', dateFrom);
+   533→      if (dateTo) params.set('fechaHasta', dateTo);
+   534→
+   535→      const res = await fetch(`/api/incidencias?${params.toString()}`, {
+   536→        headers: { Authorization: `Bearer ${accessToken}` },
+   537→      });
+   538→      const data = await res.json();
+   539→      if (res.ok) {
+   540→        setIncidencias(data.data);
+   541→        setPagination(data.pagination);
+   542→      }
+   543→    } catch (err) {
+   544→      console.error('Error fetching incidencias:', err);
+   545→    } finally {
+   546→      setLoading(false);
+   547→    }
+   548→  }, [accessToken, pagination.page, pagination.pageSize, tipoFilter, estadoFilter, employeeFilter, dateFrom, dateTo]);
+   549→
+   550→  useEffect(() => { fetchIncidencias(); }, [fetchIncidencias]);
+   551→
+   552→  useEffect(() => {
+   553→    const fetchEmpleados = async () => {
+   554→      try {
+   555→        const res = await fetch('/api/empleados?pageSize=100&estado=ACTIVO', {
+   556→          headers: { Authorization: `Bearer ${accessToken}` },
+   557→        });
+   558→        const data = await res.json();
+   559→        if (res.ok) setEmpleados(data.data || []);
+   560→      } catch { /* ignore */ }
+   561→    };
+   562→    fetchEmpleados();
+   563→  }, [accessToken]);
+   564→
+   565→  // ─── Computed Values ───────────────────────────────────────────────────────
+   566→
+   567→  const summary = useMemo(() => ({
+   568→    total: pagination.total,
+   569→    pendientes: incidencias.filter(i => i.estado === 'PENDIENTE').length,
+   570→    aprobadas: incidencias.filter(i => i.estado === 'APROBADA').length,
+   571→    rechazadas: incidencias.filter(i => i.estado === 'RECHAZADA').length,
+   572→  }), [pagination.total, incidencias]);
+   573→
+   574→  const activeFilterCount = [
+   575→    tipoFilter !== 'all',
+   576→    tipoMultiFilter.length > 0,
+   577→    estadoFilter !== 'all',
+   578→    employeeFilter !== 'all',
+   579→    !!dateFrom,
+   580→    !!dateTo,
+   581→    severidadFilter !== 'all',
+   582→  ].filter(Boolean).length;
+   583→
+   584→  // Client-side filter for multi-select tipo and severidad (server only supports single tipo)
+   585→  const filteredIncidencias = useMemo(() => {
+   586→    let result = incidencias;
+   587→    if (tipoMultiFilter.length > 0) {
+   588→      result = result.filter(i => tipoMultiFilter.includes(i.tipo));
+   589→    }
+   590→    // Severidad is a virtual field based on tipo (since the API doesn't have severidad)
+   591→    // We map: HORAS_EXTRA -> MEDIA, INCAPACIDAD_ISSS -> ALTA, AUSENCIA -> MEDIA, BONO -> BAJA, etc.
+   592→    if (severidadFilter !== 'all') {
+   593→      const severidadMap: Record<string, string> = {
+   594→        HORAS_EXTRA: 'MEDIA',
+   595→        AUSENCIA: 'MEDIA',
+   596→        INCAPACIDAD_ISSS: 'ALTA',
+   597→        PERMISO: 'BAJA',
+   598→        COMISION: 'BAJA',
+   599→        BONO: 'BAJA',
+   600→        DESCUENTO_ESPECIAL: 'CRITICA',
+   601→      };
+   602→      result = result.filter(i => severidadMap[i.tipo] === severidadFilter);
+   603→    }
+   604→    if (employeeSearchText) {
+   605→      const search = employeeSearchText.toLowerCase();
+   606→      result = result.filter(i =>
+   607→        `${i.empleado.primer_nombre} ${i.empleado.primer_apellido} ${i.empleado.codigo_empleado}`.toLowerCase().includes(search)
+   608→      );
+   609→    }
+   610→    return result;
+   611→  }, [incidencias, tipoMultiFilter, severidadFilter, employeeSearchText]);
+   612→
+   613→  const filteredEmpleados = searchEmpleado
+   614→    ? empleados.filter(e => `${e.primer_nombre} ${e.primer_apellido} ${e.codigo_empleado}`.toLowerCase().includes(searchEmpleado.toLowerCase()))
+   615→    : empleados;
+   616→
+   617→  const selectedEmpleadoName = form.empleado_id
+   618→    ? (() => {
+   619→        const emp = empleados.find(e => e.id === form.empleado_id);
+   620→        return emp ? `${emp.primer_nombre} ${emp.primer_apellido}` : '';
+   621→      })()
+   622→    : '';
+   623→
+   624→  const selectedEmpleadoCode = form.empleado_id
+   625→    ? (() => {
+   626→        const emp = empleados.find(e => e.id === form.empleado_id);
+   627→        return emp?.codigo_empleado || '';
+   628→      })()
+   629→    : '';
+   630→
+   631→  const canCreate = userRole === 'ADMIN' || userRole === 'ANALISTA';
+   632→  const canApprove = userRole === 'ADMIN' || userRole === 'APROBADOR';
+   633→
+   634→  // Enhanced Overtime calculation
+   635→  const overtimeCalcResult = useMemo(() => {
+   636→    if (!horasCalc.rate || !horasCalc.hours) return null;
+   637→    const rate = parseFloat(horasCalc.rate);
+   638→    const hours = parseFloat(horasCalc.hours);
+   639→    if (isNaN(rate) || isNaN(hours) || rate <= 0 || hours <= 0) return null;
+   640→    const dailyRate = rate / 30;
+   641→    const hourlyRate = dailyRate / 8; // monthly salary / 30 days / 8 hours
+   642→    const rateInfo = OVERTIME_RATE_TYPES.find(r => r.value === overtimeRateType) || OVERTIME_RATE_TYPES[0];
+   643→    const multiplier = rateInfo.multiplier;
+   644→    const overtimePay = hourlyRate * hours * multiplier;
+   645→    const basePay = dailyRate; // one day of base pay for reference
+   646→    return { hourlyRate, multiplier, overtimePay, basePay, dailyRate, totalDayPay: basePay + overtimePay };
+   647→  }, [horasCalc, overtimeRateType]);
+   648→
+   649→  // ─── Legal Compliance Data ────────────────────────────────────────────────
+   650→
+   651→  const overtimeHoursUsed = useMemo(() => {
+   652→    const extraIncs = incidencias.filter(i => i.tipo === 'HORAS_EXTRA' && i.estado !== 'RECHAZADA');
+   653→    return extraIncs.reduce((sum, i) => sum + (i.cantidad_horas || 0), 0);
+   654→  }, [incidencias]);
+   655→
+   656→  const overtimeWarning = overtimeHoursUsed > 100;
+   657→
+   658→  // ─── Handlers ──────────────────────────────────────────────────────────────
+   659→
+   660→  const handleQuickTabChange = (tab: string) => {
+   661→    setQuickTab(tab);
+   662→    if (tab === 'all') setEstadoFilter('all');
+   663→    else if (tab === 'PENDIENTE') setEstadoFilter('PENDIENTE');
+   664→    else if (tab === 'APROBADA') setEstadoFilter('APROBADA');
+   665→    else if (tab === 'RECHAZADA') setEstadoFilter('RECHAZADA');
+   666→    setPagination(p => ({ ...p, page: 1 }));
+   667→  };
+   668→
+   669→  const clearAllFilters = () => {
+   670→    setTipoFilter('all');
+   671→    setTipoMultiFilter([]);
+   672→    setEstadoFilter('all');
+   673→    setEmployeeFilter('all');
+   674→    setEmployeeSearchText('');
+   675→    setDateFrom('');
+   676→    setDateTo('');
+   677→    setSeveridadFilter('all');
+   678→    setQuickTab('all');
+   679→    setPagination(p => ({ ...p, page: 1 }));
+   680→  };
+   681→
+   682→  const toggleTipoMulti = (tipo: string) => {
+   683→    setTipoMultiFilter(prev => {
+   684→      const next = prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo];
+   685→      // Also set the single tipoFilter for server-side if only one selected
+   686→      if (next.length === 1) setTipoFilter(next[0]);
+   687→      else setTipoFilter('all');
+   688→      return next;
+   689→    });
+   690→    setPagination(p => ({ ...p, page: 1 }));
+   691→  };
+   692→
+   693→  const handleCreate = async () => {
+   694→    if (!form.empleado_id) { toast({ title: 'Error', description: 'Seleccione un empleado', variant: 'destructive' }); return; }
+   695→    if (!form.tipo) { toast({ title: 'Error', description: 'Seleccione el tipo de incidencia', variant: 'destructive' }); return; }
+   696→    if (!form.fecha_inicio) { toast({ title: 'Error', description: 'Fecha inicio es requerida', variant: 'destructive' }); return; }
+   697→
+   698→    if (form.tipo === 'HORAS_EXTRA' && (!form.cantidad_horas || parseFloat(form.cantidad_horas) <= 0)) {
+   699→      toast({ title: 'Error', description: 'Cantidad de horas es requerida para HORAS_EXTRA', variant: 'destructive' });
+   700→      return;
+   701→    }
+   702→    if (form.tipo === 'HORAS_EXTRA' && parseFloat(form.cantidad_horas) > 4) {
+   703→      toast({ title: 'Advertencia Legal', description: 'Art. 169 CT: Máximo 4 horas de horas extra por día', variant: 'destructive' });
+   704→      return;
+   705→    }
+   706→    if (['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && (!form.monto || parseFloat(form.monto) <= 0)) {
+   707→      toast({ title: 'Error', description: 'Monto es requerido', variant: 'destructive' });
+   708→      return;
+   709→    }
+   710→
+   711→    setSaving(true);
+   712→    try {
+   713→      const body: Record<string, unknown> = {
+   714→        empleado_id: form.empleado_id,
+   715→        tipo: form.tipo,
+   716→        fecha_inicio: form.fecha_inicio,
+   717→        fecha_fin: form.fecha_fin || null,
+   718→        descripcion: form.descripcion || null,
+   719→      };
+   720→
+   721→      if (form.tipo === 'HORAS_EXTRA') {
+   722→        body.cantidad_horas = parseFloat(form.cantidad_horas);
+   723→        body.tipo_horas_extra = form.tipo_horas_extra;
+   724→      }
+   725→      if (form.tipo === 'INCAPACIDAD_ISSS') {
+   726→        body.numero_incapacidad = form.numero_incapacidad;
+   727→      }
+   728→      if (['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo)) {
+   729→        body.monto = parseFloat(form.monto);
+   730→      }
+   731→
+   732→      const res = await fetch('/api/incidencias', {
+   733→        method: 'POST',
+   734→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   735→        body: JSON.stringify(body),
+   736→      });
+   737→      const data = await res.json();
+   738→      if (res.ok) {
+   739→        toast({ title: 'Incidencia creada', description: 'La incidencia ha sido registrada exitosamente' });
+   740→        setDialogOpen(false);
+   741→        resetForm();
+   742→        fetchIncidencias();
+   743→      } else {
+   744→        toast({ title: 'Error', description: data.error || 'Error al crear incidencia', variant: 'destructive' });
+   745→      }
+   746→    } catch {
+   747→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   748→    } finally {
+   749→      setSaving(false);
+   750→    }
+   751→  };
+   752→
+   753→  const handleApproveReject = async (id: string, estado: 'APROBADA' | 'RECHAZADA', comment?: string) => {
+   754→    try {
+   755→      const body: Record<string, unknown> = { estado };
+   756→      if (comment) body.descripcion = comment;
+   757→      const res = await fetch(`/api/incidencias/${id}`, {
+   758→        method: 'PUT',
+   759→        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   760→        body: JSON.stringify(body),
+   761→      });
+   762→      const data = await res.json();
+   763→      if (res.ok) {
+   764→        toast({
+   765→          title: `Incidencia ${estado.toLowerCase()}`,
+   766→          description: `La incidencia ha sido ${estado === 'APROBADA' ? 'aprobada' : 'rechazada'}`,
+   767→        });
+   768→        fetchIncidencias();
+   769→        if (detailModal?.id === id) setDetailModal(null);
+   770→      } else {
+   771→        toast({ title: 'Error', description: data.error || 'Error al actualizar', variant: 'destructive' });
+   772→      }
+   773→    } catch {
+   774→      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
+   775→    }
+   776→  };
+   777→
+   778→  const handleBulkAction = async (estado: 'APROBADA' | 'RECHAZADA') => {
+   779→    const ids = Array.from(selectedIds);
+   780→    if (ids.length === 0) return;
+   781→    let successCount = 0;
+   782→    for (const id of ids) {
+   783→      try {
+   784→        const res = await fetch(`/api/incidencias/${id}`, {
+   785→          method: 'PUT',
+   786→          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+   787→          body: JSON.stringify({ estado }),
+   788→        });
+   789→        if (res.ok) successCount++;
+   790→      } catch { /* ignore individual errors */ }
+   791→    }
+   792→    toast({
+   793→      title: `${successCount} incidencia(s) ${estado === 'APROBADA' ? 'aprobada(s)' : 'rechazada(s)'}`,
+   794→      description: `De ${ids.length} seleccionadas`,
+   795→    });
+   796→    setSelectedIds(new Set());
+   797→    fetchIncidencias();
+   798→  };
+   799→
+   800→  const resetForm = () => {
+   801→    setForm({
+   802→      empleado_id: '', tipo: 'HORAS_EXTRA', fecha_inicio: '', fecha_fin: '',
+   803→      descripcion: '', cantidad_horas: '', tipo_horas_extra: 'DIURNA',
+   804→      monto: '', numero_incapacidad: '',
+   805→    });
+   806→    setWizardStep(1);
+   807→    setSearchEmpleado('');
+   808→    setHorasCalc({ rate: '', hours: '' });
+   809→    setOvertimeRateType('DIURNA');
+   810→  };
+   811→
+   812→  const openDialog = () => {
+   813→    resetForm();
+   814→    setDialogOpen(true);
+   815→  };
+   816→
+   817→  const toggleSelect = (id: string) => {
+   818→    setSelectedIds(prev => {
+   819→      const next = new Set(prev);
+   820→      if (next.has(id)) next.delete(id);
+   821→      else next.add(id);
+   822→      return next;
+   823→    });
+   824→  };
+   825→
+   826→  const toggleSelectAll = () => {
+   827→    if (selectedIds.size === filteredIncidencias.length) {
+   828→      setSelectedIds(new Set());
+   829→    } else {
+   830→      setSelectedIds(new Set(filteredIncidencias.map(i => i.id)));
+   831→    }
+   832→  };
+   833→
+   834→  // ─── Formatters ────────────────────────────────────────────────────────────
+   835→
+   836→  const formatDate = (d: string) => {
+   837→    if (!d) return '—';
+   838→    const date = new Date(d);
+   839→    const day = String(date.getDate()).padStart(2, '0');
+   840→    const month = String(date.getMonth() + 1).padStart(2, '0');
+   841→    const year = date.getFullYear();
+   842→    return `${day}/${month}/${year}`;
+   843→  };
+   844→
+   845→  const formatDateTime = (d: string | undefined) => {
+   846→    if (!d) return '—';
+   847→    const date = new Date(d);
+   848→    const day = String(date.getDate()).padStart(2, '0');
+   849→    const month = String(date.getMonth() + 1).padStart(2, '0');
+   850→    const year = date.getFullYear();
+   851→    const hours = String(date.getHours()).padStart(2, '0');
+   852→    const mins = String(date.getMinutes()).padStart(2, '0');
+   853→    return `${day}/${month}/${year} ${hours}:${mins}`;
+   854→  };
+   855→
+   856→  const formatMonto = (v: number | null) => v ? `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+   857→  const getNombreEmp = (inc: Incidencia) =>
+   858→    `${inc.empleado.primer_nombre} ${inc.empleado.primer_apellido}`;
+   859→
+   860→  const canAdvanceWizard = () => {
+   861→    if (wizardStep === 1) return !!form.empleado_id;
+   862→    if (wizardStep === 2) return !!form.tipo;
+   863→    if (wizardStep === 3) {
+   864→      if (!form.fecha_inicio) return false;
+   865→      if (form.tipo === 'HORAS_EXTRA' && (!form.cantidad_horas || parseFloat(form.cantidad_horas) <= 0)) return false;
+   866→      if (['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && (!form.monto || parseFloat(form.monto) <= 0)) return false;
+   867→      if (form.tipo === 'INCAPACIDAD_ISSS' && !form.numero_incapacidad) return false;
+   868→    }
+   869→    return true;
+   870→  };
+   871→
+   872→  // ─── Render ───────────────────────────────────────────────────────────────
+   873→
+   874→  return (
+   875→    <div className="space-y-5 pb-16">
+   876→      {/* ── Header ────────────────────────────────────────────────────────── */}
+   877→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   878→        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+   879→          <AlertCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+   880→          Incidencias de Nómina
+   881→          <Badge variant="outline" className="ml-1 text-emerald-600 border-emerald-300 dark:text-emerald-400 dark:border-emerald-700">
+   882→            {summary.total}
+   883→          </Badge>
+   884→        </h2>
+   885→        <div className="flex items-center gap-2">
+   886→          {/* View Toggle */}
+   887→          <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-0.5">
+   888→            <button
+   889→              onClick={() => setViewMode('lista')}
+   890→              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+   891→                viewMode === 'lista'
+   892→                  ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+   893→                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+   894→              }`}
+   895→            >
+   896→              <LayoutList className="h-3.5 w-3.5" /> Lista
+   897→            </button>
+   898→            <button
+   899→              onClick={() => setViewMode('calendario')}
+   900→              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+   901→                viewMode === 'calendario'
+   902→                  ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+   903→                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+   904→              }`}
+   905→            >
+   906→              <CalendarIcon className="h-3.5 w-3.5" /> Calendario
+   907→            </button>
+   908→          </div>
+   909→          {canCreate && (
+   910→            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800 shadow-sm" onClick={openDialog}>
+   911→              <Plus className="h-4 w-4 mr-1" /> Nueva Incidencia
+   912→            </Button>
+   913→          )}
+   914→        </div>
+   915→      </div>
+   916→
+   917→      {/* ── KPI Summary Cards (with gradient borders) ────────────────────── */}
+   918→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   919→        <KpiCard
+   920→          title="Total Incidencias"
+   921→          count={summary.total}
+   922→          total={Math.max(summary.total, 1)}
+   923→          icon={AlertCircle}
+   924→          iconBg="bg-slate-100 dark:bg-slate-800"
+   925→          iconColor="text-slate-600 dark:text-slate-400"
+   926→          gradientFrom="from-slate-300"
+   927→          gradientTo="to-slate-400"
+   928→          barColor="bg-slate-400"
+   929→        />
+   930→        <KpiCard
+   931→          title="Pendientes"
+   932→          count={summary.pendientes}
+   933→          total={Math.max(summary.total, 1)}
+   934→          icon={Clock}
+   935→          iconBg="bg-amber-50 dark:bg-amber-900/30"
+   936→          iconColor="text-amber-600 dark:text-amber-400"
+   937→          gradientFrom="from-amber-400"
+   938→          gradientTo="to-amber-500"
+   939→          barColor="bg-amber-500"
+   940→        />
+   941→        <KpiCard
+   942→          title="Aprobadas"
+   943→          count={summary.aprobadas}
+   944→          total={Math.max(summary.total, 1)}
+   945→          icon={CheckCircle2}
+   946→          iconBg="bg-emerald-50 dark:bg-emerald-900/30"
+   947→          iconColor="text-emerald-600 dark:text-emerald-400"
+   948→          gradientFrom="from-emerald-400"
+   949→          gradientTo="to-emerald-500"
+   950→          barColor="bg-emerald-500"
+   951→        />
+   952→        <KpiCard
+   953→          title="Rechazadas"
+   954→          count={summary.rechazadas}
+   955→          total={Math.max(summary.total, 1)}
+   956→          icon={XCircle}
+   957→          iconBg="bg-red-50 dark:bg-red-900/30"
+   958→          iconColor="text-red-600 dark:text-red-400"
+   959→          gradientFrom="from-red-400"
+   960→          gradientTo="to-red-500"
+   961→          barColor="bg-red-500"
+   962→        />
+   963→      </div>
+   964→
+   965→      {/* ── Statistics Panel ─────────────────────────────────────────────── */}
+   966→      <StatisticsPanel incidencias={incidencias} />
+   967→
+   968→      {/* ── Quick Filter Tabs + Advanced Filter Panel ────────────────────── */}
+   969→      <Card className="shadow-sm dark:bg-slate-900 dark:border-slate-800">
+   970→        <CardContent className="p-4 space-y-3">
+   971→          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+   972→            <Tabs value={quickTab} onValueChange={handleQuickTabChange}>
+   973→              <TabsList className="bg-slate-100 dark:bg-slate-800">
+   974→                <TabsTrigger value="all" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-600 dark:data-[state=active]:text-emerald-400">
+   975→                  Todas
+   976→                </TabsTrigger>
+   977→                <TabsTrigger value="PENDIENTE" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-amber-600 dark:data-[state=active]:text-amber-400">
+   978→                  <Clock className="h-3.5 w-3.5 mr-1" /> Pendientes
+   979→                </TabsTrigger>
+   980→                <TabsTrigger value="APROBADA" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-emerald-600 dark:data-[state=active]:text-emerald-400">
+   981→                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Aprobadas
+   982→                </TabsTrigger>
+   983→                <TabsTrigger value="RECHAZADA" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-red-600 dark:data-[state=active]:text-red-400">
+   984→                  <XCircle className="h-3.5 w-3.5 mr-1" /> Rechazadas
+   985→                </TabsTrigger>
+   986→              </TabsList>
+   987→            </Tabs>
+   988→            <div className="flex items-center gap-2">
+   989→              <Button
+   990→                variant="outline"
+   991→                size="sm"
+   992→                onClick={() => setShowFilters(!showFilters)}
+   993→                className="text-slate-600 dark:text-slate-400 dark:bg-slate-800 dark:border-slate-700"
+   994→              >
+   995→                <Filter className="h-4 w-4 mr-1" /> Filtros
+   996→                {activeFilterCount > 0 && (
+   997→                  <Badge className="ml-1.5 h-5 w-5 p-0 flex items-center justify-center bg-emerald-500 text-white text-[10px]">
+   998→                    {activeFilterCount}
+   999→                  </Badge>
+
+[showing lines 300-999 of 2319; use offset=1000 with limit to continue reading]

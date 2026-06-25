@@ -1,0 +1,602 @@
+  1700→                      <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Descripción</p>
+  1701→                      <p className="text-sm dark:text-slate-300">{inc.descripcion}</p>
+  1702→                    </div>
+  1703→                  )}
+  1704→
+  1705→                  {/* Approval Timeline */}
+  1706→                  <div>
+  1707→                    <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Línea de Tiempo de Aprobación</p>
+  1708→                    <div className="space-y-3">
+  1709→                      {/* Created */}
+  1710→                      <div className="flex items-start gap-3">
+  1711→                        <div className="flex flex-col items-center">
+  1712→                          <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+  1713→                            <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+  1714→                          </div>
+  1715→                          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
+  1716→                        </div>
+  1717→                        <div className="flex-1 min-w-0 pt-0.5">
+  1718→                          <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Creada</p>
+  1719→                          <p className="text-[10px] text-slate-400 dark:text-slate-500">{formatDateTime(inc.fecha_creacion)}</p>
+  1720→                        </div>
+  1721→                      </div>
+  1722→                      {/* Reviewed/In Process */}
+  1723→                      <div className="flex items-start gap-3">
+  1724→                        <div className="flex flex-col items-center">
+  1725→                          <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+  1726→                            inc.estado === 'PENDIENTE' ? 'bg-amber-100 dark:bg-amber-900/40' : 'bg-slate-100 dark:bg-slate-800'
+  1727→                          }`}>
+  1728→                            <UserCheck className={`h-3.5 w-3.5 ${inc.estado === 'PENDIENTE' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`} />
+  1729→                          </div>
+  1730→                          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
+  1731→                        </div>
+  1732→                        <div className="flex-1 min-w-0 pt-0.5">
+  1733→                          <p className={`text-xs font-medium ${inc.estado === 'PENDIENTE' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>
+  1734→                            En Revisión
+  1735→                          </p>
+  1736→                          {inc.estado === 'PENDIENTE' && (
+  1737→                            <p className="text-[10px] text-amber-500 dark:text-amber-400/70">Esperando aprobación</p>
+  1738→                          )}
+  1739→                        </div>
+  1740→                      </div>
+  1741→                      {/* Approved / Rejected */}
+  1742→                      <div className="flex items-start gap-3">
+  1743→                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+  1744→                          inc.estado === 'APROBADA' ? 'bg-emerald-100 dark:bg-emerald-900/40' :
+  1745→                          inc.estado === 'RECHAZADA' ? 'bg-red-100 dark:bg-red-900/40' :
+  1746→                          'bg-slate-100 dark:bg-slate-800'
+  1747→                        }`}>
+  1748→                          {inc.estado === 'RECHAZADA' ? (
+  1749→                            <ThumbsDown className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+  1750→                          ) : (
+  1751→                            <ThumbsUp className={`h-3.5 w-3.5 ${
+  1752→                              inc.estado === 'APROBADA' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'
+  1753→                            }`} />
+  1754→                          )}
+  1755→                        </div>
+  1756→                        <div className="flex-1 min-w-0 pt-0.5">
+  1757→                          <p className={`text-xs font-medium ${
+  1758→                            inc.estado === 'APROBADA' ? 'text-emerald-600 dark:text-emerald-400' :
+  1759→                            inc.estado === 'RECHAZADA' ? 'text-red-600 dark:text-red-400' :
+  1760→                            'text-slate-400 dark:text-slate-500'
+  1761→                          }`}>
+  1762→                            {inc.estado === 'APROBADA' ? 'Aprobada' : inc.estado === 'RECHAZADA' ? 'Rechazada' : 'Pendiente'}
+  1763→                          </p>
+  1764→                          {inc.aprobada_por && (
+  1765→                            <p className="text-[10px] text-slate-400 dark:text-slate-500">
+  1766→                              Por: {inc.aprobada_por.nombre} {inc.aprobada_por.apellido}
+  1767→                            </p>
+  1768→                          )}
+  1769→                          {inc.fecha_actualizacion && inc.estado !== 'PENDIENTE' && (
+  1770→                            <p className="text-[10px] text-slate-400 dark:text-slate-500">
+  1771→                              {formatDateTime(inc.fecha_actualizacion)}
+  1772→                            </p>
+  1773→                          )}
+  1774→                        </div>
+  1775→                      </div>
+  1776→                    </div>
+  1777→                  </div>
+  1778→
+  1779→                  {/* Legal Reference */}
+  1780→                  {legalRef && (
+  1781→                    <div className="flex items-start gap-2 p-3 rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+  1782→                      <Info className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400 mt-0.5 shrink-0" />
+  1783→                      <div>
+  1784→                        <p className="text-[10px] font-medium text-slate-600 dark:text-slate-300">Referencia Legal — {legalRef}</p>
+  1785→                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+  1786→                          {legalRef === 'Art. 169 CT' && 'Máximo 4 horas/día y 147 horas/año de trabajo extraordinario.'}
+  1787→                          {legalRef === 'Art. 170 CT' && 'Horas extra nocturnas y en días de descanso tienen recargo especial.'}
+  1788→                          {legalRef === 'Art. 52 CT' && 'El empleador puede descontar salarios por ausencias injustificadas.'}
+  1789→                          {legalRef === 'Art. 61 Ley ISSS' && 'Incapacidad pagada por ISSS desde el 4to día. Primeros 3 días a cargo del empleador.'}
+  1790→                          {legalRef === 'Art. 177 CT' && 'Todo trabajador tiene derecho a permisos con goce de sueldo conforme la ley.'}
+  1791→                          {legalRef === 'Art. 140 CT' && 'Las comisiones, bonos y descuentos forman parte del salario conforme el Código de Trabajo.'}
+  1792→                        </p>
+  1793→                      </div>
+  1794→                    </div>
+  1795→                  )}
+  1796→
+  1797→                  {/* Action buttons for APROBADOR */}
+  1798→                  {canApprove && inc.estado === 'PENDIENTE' && (
+  1799→                    <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+  1800→                      <div>
+  1801→                        <Label className="text-xs text-slate-500 dark:text-slate-400 mb-1.5 block flex items-center gap-1">
+  1802→                          <MessageSquare className="h-3 w-3" /> Comentario (opcional)
+  1803→                        </Label>
+  1804→                        <Textarea
+  1805→                          value={detailComment}
+  1806→                          onChange={e => setDetailComment(e.target.value)}
+  1807→                          placeholder="Agregar un comentario para la aprobación o rechazo..."
+  1808→                          className="min-h-16 text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+  1809→                        />
+  1810→                      </div>
+  1811→                      <div className="flex gap-2">
+  1812→                        <Button
+  1813→                          variant="outline"
+  1814→                          className="flex-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/20"
+  1815→                          onClick={() => handleApproveReject(inc.id, 'APROBADA', detailComment || undefined)}
+  1816→                        >
+  1817→                          <ThumbsUp className="h-4 w-4 mr-1.5" /> Aprobar
+  1818→                        </Button>
+  1819→                        <Button
+  1820→                          variant="outline"
+  1821→                          className="flex-1 text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
+  1822→                          onClick={() => handleApproveReject(inc.id, 'RECHAZADA', detailComment || undefined)}
+  1823→                        >
+  1824→                          <ThumbsDown className="h-4 w-4 mr-1.5" /> Rechazar
+  1825→                        </Button>
+  1826→                      </div>
+  1827→                    </div>
+  1828→                  )}
+  1829→                </div>
+  1830→              </>
+  1831→            );
+  1832→          })()}
+  1833→        </DialogContent>
+  1834→      </Dialog>
+  1835→
+  1836→      {/* ── New Incidence Dialog (Wizard) ─────────────────────────────────── */}
+  1837→      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+  1838→        <DialogContent className="sm:max-w-2xl dark:bg-slate-900 dark:border-slate-800">
+  1839→          <DialogHeader>
+  1840→            <DialogTitle className="dark:text-slate-100 flex items-center gap-2">
+  1841→              <Plus className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+  1842→              Nueva Incidencia
+  1843→            </DialogTitle>
+  1844→            <DialogDescription className="dark:text-slate-400">
+  1845→              Registrar una incidencia de nómina — Paso {wizardStep} de 4
+  1846→            </DialogDescription>
+  1847→          </DialogHeader>
+  1848→
+  1849→          {/* Wizard Progress Bar */}
+  1850→          <div className="flex items-center gap-1 mb-2">
+  1851→            {WIZARD_STEPS.map((step, idx) => {
+  1852→              const StepIcon = step.icon;
+  1853→              const isActive = wizardStep === step.id;
+  1854→              const isComplete = wizardStep > step.id;
+  1855→              return (
+  1856→                <React.Fragment key={step.id}>
+  1857→                  <button
+  1858→                    onClick={() => { if (isComplete) setWizardStep(step.id); }}
+  1859→                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+  1860→                      isActive
+  1861→                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 shadow-sm'
+  1862→                        : isComplete
+  1863→                        ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+  1864→                        : 'bg-slate-50 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+  1865→                    }`}
+  1866→                  >
+  1867→                    <StepIcon className="h-3.5 w-3.5" />
+  1868→                    <span className="hidden sm:inline">{step.label}</span>
+  1869→                    {isComplete && <CheckCircle2 className="h-3 w-3" />}
+  1870→                  </button>
+  1871→                  {idx < WIZARD_STEPS.length - 1 && (
+  1872→                    <div className={`h-0.5 flex-1 rounded-full transition-colors ${wizardStep > step.id ? 'bg-emerald-400' : 'bg-slate-200 dark:bg-slate-700'}`} />
+  1873→                  )}
+  1874→                </React.Fragment>
+  1875→              );
+  1876→            })}
+  1877→          </div>
+  1878→
+  1879→          {/* Step 1: Select Employee */}
+  1880→          {wizardStep === 1 && (
+  1881→            <div className="space-y-4 animate-in slide-in-from-right-2 duration-200">
+  1882→              <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  1883→                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">Paso 1: Seleccionar Empleado</p>
+  1884→                <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Busque y seleccione el empleado para la incidencia</p>
+  1885→              </div>
+  1886→              <div>
+  1887→                <Label className="dark:text-slate-300 mb-2 block">Buscar empleado *</Label>
+  1888→                <div className="relative">
+  1889→                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+  1890→                  <Input
+  1891→                    placeholder="Buscar por nombre o código..."
+  1892→                    value={searchEmpleado}
+  1893→                    onChange={e => setSearchEmpleado(e.target.value)}
+  1894→                    className="h-10 pl-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 focus:border-emerald-400 focus:ring-emerald-400"
+  1895→                  />
+  1896→                </div>
+  1897→              </div>
+  1898→              <div className="max-h-64 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+  1899→                {filteredEmpleados.slice(0, 20).map(e => {
+  1900→                  const isSelected = form.empleado_id === e.id;
+  1901→                  return (
+  1902→                    <button
+  1903→                      key={e.id}
+  1904→                      type="button"
+  1905→                      onClick={() => setForm(p => ({ ...p, empleado_id: e.id }))}
+  1906→                      className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
+  1907→                        isSelected
+  1908→                          ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700'
+  1909→                          : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+  1910→                      }`}
+  1911→                    >
+  1912→                      <AvatarInitials nombre={e.primer_nombre} apellido={e.primer_apellido} size="sm" />
+  1913→                      <div className="min-w-0 flex-1">
+  1914→                        <p className={`text-sm font-medium truncate ${isSelected ? 'text-emerald-700 dark:text-emerald-300' : 'dark:text-slate-100'}`}>
+  1915→                          {e.primer_nombre} {e.primer_apellido}
+  1916→                        </p>
+  1917→                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{e.codigo_empleado}</p>
+  1918→                      </div>
+  1919→                      {isSelected && <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />}
+  1920→                    </button>
+  1921→                  );
+  1922→                })}
+  1923→                {filteredEmpleados.length === 0 && (
+  1924→                  <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-4">No se encontraron empleados</p>
+  1925→                )}
+  1926→              </div>
+  1927→            </div>
+  1928→          )}
+  1929→
+  1930→          {/* Step 2: Select Type */}
+  1931→          {wizardStep === 2 && (
+  1932→            <div className="space-y-4 animate-in slide-in-from-right-2 duration-200">
+  1933→              <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  1934→                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">Paso 2: Tipo de Incidencia</p>
+  1935→                <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Seleccione el tipo de incidencia a registrar</p>
+  1936→              </div>
+  1937→              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+  1938→                {Object.entries(TIPO_LABELS).map(([key, label]) => {
+  1939→                  const tipoStyle = TIPO_COLORS[key];
+  1940→                  const TipoIcon = TIPO_ICONS[key] || AlertCircle;
+  1941→                  const legal = TIPO_LEGAL_REF[key];
+  1942→                  const isSelected = form.tipo === key;
+  1943→                  return (
+  1944→                    <button
+  1945→                      key={key}
+  1946→                      type="button"
+  1947→                      onClick={() => setForm(p => ({ ...p, tipo: key }))}
+  1948→                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border text-xs transition-all ${
+  1949→                        isSelected
+  1950→                          ? `${tipoStyle.bg} ${tipoStyle.border} ${tipoStyle.icon} ring-2 ring-emerald-400/50 shadow-md dark:ring-offset-slate-900 ring-offset-1`
+  1951→                          : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:shadow-sm'
+  1952→                      }`}
+  1953→                    >
+  1954→                      <div className={`p-2 rounded-lg ${isSelected ? tipoStyle.bg : 'bg-slate-100 dark:bg-slate-800'}`}>
+  1955→                        <TipoIcon className={`h-6 w-6 ${isSelected ? tipoStyle.icon : 'text-slate-500 dark:text-slate-400'}`} />
+  1956→                      </div>
+  1957→                      <span className="font-medium leading-tight text-center">{label}</span>
+  1958→                      {legal && (
+  1959→                        <span className={`text-[9px] ${isSelected ? tipoStyle.icon : 'text-slate-400 dark:text-slate-500'}`}>
+  1960→                          {legal}
+  1961→                        </span>
+  1962→                      )}
+  1963→                    </button>
+  1964→                  );
+  1965→                })}
+  1966→              </div>
+  1967→            </div>
+  1968→          )}
+  1969→
+  1970→          {/* Step 3: Enter Details */}
+  1971→          {wizardStep === 3 && (
+  1972→            <div className="space-y-4 animate-in slide-in-from-right-2 duration-200">
+  1973→              <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  1974→                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">Paso 3: Detalles de Incidencia</p>
+  1975→                <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Ingrese la información específica según el tipo seleccionado</p>
+  1976→              </div>
+  1977→
+  1978→              {/* Date range */}
+  1979→              <div className="grid grid-cols-2 gap-3">
+  1980→                <div>
+  1981→                  <Label className="dark:text-slate-300">Fecha Inicio *</Label>
+  1982→                  <Input type="date" value={form.fecha_inicio} onChange={e => setForm(p => ({ ...p, fecha_inicio: e.target.value }))} className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+  1983→                </div>
+  1984→                <div>
+  1985→                  <Label className="dark:text-slate-300">Fecha Fin</Label>
+  1986→                  <Input type="date" value={form.fecha_fin} onChange={e => setForm(p => ({ ...p, fecha_fin: e.target.value }))} className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+  1987→                </div>
+  1988→              </div>
+  1989→
+  1990→              {/* Conditional: HORAS_EXTRA */}
+  1991→              {form.tipo === 'HORAS_EXTRA' && (
+  1992→                <div className="space-y-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+  1993→                  <div className="flex items-center gap-2 mb-2">
+  1994→                    <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+  1995→                    <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Horas Extra — Art. 169-170 CT</span>
+  1996→                  </div>
+  1997→                  <div className="grid grid-cols-2 gap-3">
+  1998→                    <div>
+  1999→                      <Label className="text-amber-700 dark:text-amber-300">Cantidad de Horas *</Label>
+  2000→                      <Input
+  2001→                        type="number"
+  2002→                        step="0.5"
+  2003→                        value={form.cantidad_horas}
+  2004→                        onChange={e => { setForm(p => ({ ...p, cantidad_horas: e.target.value })); setHorasCalc(h => ({ ...h, hours: e.target.value })); }}
+  2005→                        className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
+  2006→                      />
+  2007→                      <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+  2008→                        <AlertTriangle className="h-3 w-3" /> Máx. 4h/día, 147h/año
+  2009→                      </p>
+  2010→                      {form.cantidad_horas && parseFloat(form.cantidad_horas) > 4 && (
+  2011→                        <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5 flex items-center gap-1">
+  2012→                          <AlertCircle className="h-3 w-3" /> Excede el máximo de 4h/día
+  2013→                        </p>
+  2014→                      )}
+  2015→                    </div>
+  2016→                    <div>
+  2017→                      <Label className="text-amber-700 dark:text-amber-300">Tipo de Horas Extra</Label>
+  2018→                      <Select value={form.tipo_horas_extra} onValueChange={v => { setForm(p => ({ ...p, tipo_horas_extra: v })); setOvertimeRateType(v); }}>
+  2019→                        <SelectTrigger className="h-9 mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue /></SelectTrigger>
+  2020→                        <SelectContent>
+  2021→                          {OVERTIME_RATE_TYPES.map(rt => (
+  2022→                            <SelectItem key={rt.value} value={rt.value}>
+  2023→                              {rt.label} ({rt.multiplier}x)
+  2024→                            </SelectItem>
+  2025→                          ))}
+  2026→                        </SelectContent>
+  2027→                      </Select>
+  2028→                    </div>
+  2029→                  </div>
+  2030→                  {/* Inline Overtime Calculator */}
+  2031→                  <div className="p-3 rounded-md bg-white dark:bg-slate-800 border border-amber-100 dark:border-amber-900/40">
+  2032→                    <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+  2033→                      <Zap className="h-3 w-3" /> Calculadora Rápida
+  2034→                    </p>
+  2035→                    <div className="grid grid-cols-2 gap-2 mb-2">
+  2036→                      <div>
+  2037→                        <Label className="text-[10px] text-slate-500 dark:text-slate-400">Salario Mensual</Label>
+  2038→                        <Input
+  2039→                          type="number"
+  2040→                          step="0.01"
+  2041→                          placeholder="$0.00"
+  2042→                          value={horasCalc.rate}
+  2043→                          onChange={e => setHorasCalc(h => ({ ...h, rate: e.target.value }))}
+  2044→                          className="h-8 text-xs mt-0.5 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200"
+  2045→                        />
+  2046→                      </div>
+  2047→                      <div>
+  2048→                        <Label className="text-[10px] text-slate-500 dark:text-slate-400">Horas</Label>
+  2049→                        <Input
+  2050→                          type="number"
+  2051→                          step="0.5"
+  2052→                          value={horasCalc.hours || form.cantidad_horas}
+  2053→                          onChange={e => { setHorasCalc(h => ({ ...h, hours: e.target.value })); if (!form.cantidad_horas) setForm(p => ({ ...p, cantidad_horas: e.target.value })); }}
+  2054→                          className="h-8 text-xs mt-0.5 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200"
+  2055→                        />
+  2056→                      </div>
+  2057→                    </div>
+  2058→                    {overtimeCalcResult && (
+  2059→                      <div className="p-2.5 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-[10px] space-y-1">
+  2060→                        <div className="flex justify-between">
+  2061→                          <span className="text-slate-500 dark:text-slate-400">Tarifa/hora:</span>
+  2062→                          <span className="font-mono dark:text-slate-200">${overtimeCalcResult.hourlyRate.toFixed(2)}</span>
+  2063→                        </div>
+  2064→                        <div className="flex justify-between">
+  2065→                          <span className="text-slate-500 dark:text-slate-400">Multiplicador:</span>
+  2066→                          <span className="font-mono text-amber-600 dark:text-amber-400">{overtimeCalcResult.multiplier}x</span>
+  2067→                        </div>
+  2068→                        <div className="flex justify-between">
+  2069→                          <span className="text-slate-500 dark:text-slate-400">Pago base diario:</span>
+  2070→                          <span className="font-mono dark:text-slate-200">${overtimeCalcResult.dailyRate.toFixed(2)}</span>
+  2071→                        </div>
+  2072→                        <Separator className="my-1" />
+  2073→                        <div className="flex justify-between font-semibold">
+  2074→                          <span className="text-emerald-600 dark:text-emerald-400">Total estimado:</span>
+  2075→                          <span className="font-mono text-emerald-600 dark:text-emerald-400">${overtimeCalcResult.overtimePay.toFixed(2)}</span>
+  2076→                        </div>
+  2077→                        <p className="text-[9px] text-slate-400 dark:text-slate-500 flex items-center gap-1 pt-1">
+  2078→                          <BookOpen className="h-2.5 w-2.5" /> {OVERTIME_RATE_TYPES.find(r => r.value === overtimeRateType)?.desc}
+  2079→                        </p>
+  2080→                      </div>
+  2081→                    )}
+  2082→                  </div>
+  2083→                </div>
+  2084→              )}
+  2085→
+  2086→              {/* Conditional: INCAPACIDAD_ISSS */}
+  2087→              {form.tipo === 'INCAPACIDAD_ISSS' && (
+  2088→                <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 space-y-2">
+  2089→                  <div className="flex items-center gap-2">
+  2090→                    <HeartPulse className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+  2091→                    <span className="text-sm font-medium text-rose-700 dark:text-rose-300">Incapacidad — Art. 61 Ley ISSS</span>
+  2092→                  </div>
+  2093→                  <Label className="text-rose-700 dark:text-rose-300">Número de Incapacidad *</Label>
+  2094→                  <Input value={form.numero_incapacidad} onChange={e => setForm(p => ({ ...p, numero_incapacidad: e.target.value }))} className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+  2095→                  <p className="text-[10px] text-rose-600 dark:text-rose-400 flex items-center gap-1">
+  2096→                    <Info className="h-3 w-3" /> Primeros 3 días a cargo del empleador, desde el 4° día ISSS
+  2097→                  </p>
+  2098→                </div>
+  2099→              )}
+  2100→
+  2101→              {/* Conditional: PERMISO */}
+  2102→              {form.tipo === 'PERMISO' && (
+  2103→                <div className="p-4 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+  2104→                  <div className="flex items-center gap-2 mb-2">
+  2105→                    <DoorOpen className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+  2106→                    <span className="text-sm font-medium text-teal-700 dark:text-teal-300">Permiso — Art. 177 CT</span>
+  2107→                  </div>
+  2108→                  <p className="text-[10px] text-teal-600 dark:text-teal-400">
+  2109→                    Los permisos con goce de sueldo están sujetos a las disposiciones del empleador y la ley.
+  2110→                  </p>
+  2111→                </div>
+  2112→              )}
+  2113→
+  2114→              {/* Conditional: COMISION/BONO/DESCUENTO_ESPECIAL */}
+  2115→              {['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && (
+  2116→                <div className={`p-4 rounded-lg border space-y-2 ${
+  2117→                  form.tipo === 'BONO'
+  2118→                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+  2119→                    : form.tipo === 'COMISION'
+  2120→                    ? 'bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-800'
+  2121→                    : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+  2122→                }`}>
+  2123→                  <div className="flex items-center gap-2">
+  2124→                    {form.tipo === 'BONO' && <Gift className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+  2125→                    {form.tipo === 'COMISION' && <Percent className="h-4 w-4 text-violet-600 dark:text-violet-400" />}
+  2126→                    {form.tipo === 'DESCUENTO_ESPECIAL' && <Ban className="h-4 w-4 text-red-600 dark:text-red-400" />}
+  2127→                    <span className={`text-sm font-medium ${
+  2128→                      form.tipo === 'BONO' ? 'text-emerald-700 dark:text-emerald-300' :
+  2129→                      form.tipo === 'COMISION' ? 'text-violet-700 dark:text-violet-300' :
+  2130→                      'text-red-700 dark:text-red-300'
+  2131→                    }`}>
+  2132→                      {TIPO_LABELS[form.tipo]} — Art. 140 CT
+  2133→                    </span>
+  2134→                  </div>
+  2135→                  <Label className={`${
+  2136→                    form.tipo === 'BONO' ? 'text-emerald-700 dark:text-emerald-300' :
+  2137→                    form.tipo === 'COMISION' ? 'text-violet-700 dark:text-violet-300' :
+  2138→                    'text-red-700 dark:text-red-300'
+  2139→                  }`}>Monto (USD) *</Label>
+  2140→                  <Input type="number" step="0.01" value={form.monto} onChange={e => setForm(p => ({ ...p, monto: e.target.value }))} className="h-9 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
+  2141→                </div>
+  2142→              )}
+  2143→
+  2144→              {/* Description */}
+  2145→              <div>
+  2146→                <Label className="dark:text-slate-300">Descripción</Label>
+  2147→                <Textarea
+  2148→                  value={form.descripcion}
+  2149→                  onChange={e => setForm(p => ({ ...p, descripcion: e.target.value }))}
+  2150→                  className="mt-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 min-h-20"
+  2151→                  placeholder="Describa el motivo o detalle de la incidencia..."
+  2152→                />
+  2153→              </div>
+  2154→            </div>
+  2155→          )}
+  2156→
+  2157→          {/* Step 4: Review */}
+  2158→          {wizardStep === 4 && (
+  2159→            <div className="space-y-4 animate-in slide-in-from-right-2 duration-200">
+  2160→              <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  2161→                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">Paso 4: Revisión</p>
+  2162→                <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Verifique la información antes de enviar</p>
+  2163→              </div>
+  2164→
+  2165→              <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-4">
+  2166→                {/* Employee */}
+  2167→                <div className="flex items-center gap-3">
+  2168→                  <AvatarInitials
+  2169→                    nombre={selectedEmpleadoName ? selectedEmpleadoName.split(' ')[0] : '?'}
+  2170→                    apellido={selectedEmpleadoName ? selectedEmpleadoName.split(' ').slice(1).join(' ') || selectedEmpleadoName[0] : '?'}
+  2171→                    size="lg"
+  2172→                  />
+  2173→                  <div>
+  2174→                    <p className="font-semibold text-slate-900 dark:text-slate-100">{selectedEmpleadoName || 'Sin empleado'}</p>
+  2175→                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{selectedEmpleadoCode}</p>
+  2176→                  </div>
+  2177→                </div>
+  2178→
+  2179→                <div className="grid grid-cols-2 gap-3">
+  2180→                  {/* Type */}
+  2181→                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+  2182→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Tipo</p>
+  2183→                    <div className="flex items-center gap-2">
+  2184→                      {(() => {
+  2185→                        const TipoIcon = TIPO_ICONS[form.tipo] || AlertCircle;
+  2186→                        const tipoStyle = TIPO_COLORS[form.tipo];
+  2187→                        return (
+  2188→                          <>
+  2189→                            <TipoIcon className={`h-4 w-4 ${tipoStyle.icon}`} />
+  2190→                            <span className="text-sm font-medium dark:text-slate-200">{TIPO_LABELS[form.tipo]}</span>
+  2191→                          </>
+  2192→                        );
+  2193→                      })()}
+  2194→                    </div>
+  2195→                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-1">
+  2196→                      <BookOpen className="h-2.5 w-2.5" /> {TIPO_LEGAL_REF[form.tipo]}
+  2197→                    </p>
+  2198→                  </div>
+  2199→
+  2200→                  {/* Status */}
+  2201→                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+  2202→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Estado</p>
+  2203→                    <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-xs">
+  2204→                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" />
+  2205→                      PENDIENTE
+  2206→                    </Badge>
+  2207→                  </div>
+  2208→
+  2209→                  {/* Dates */}
+  2210→                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+  2211→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Fecha Inicio</p>
+  2212→                    <p className="text-sm font-medium dark:text-slate-200 flex items-center gap-1.5">
+  2213→                      <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
+  2214→                      {form.fecha_inicio ? formatDate(form.fecha_inicio) : '—'}
+  2215→                    </p>
+  2216→                  </div>
+  2217→                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+  2218→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Fecha Fin</p>
+  2219→                    <p className="text-sm font-medium dark:text-slate-200 flex items-center gap-1.5">
+  2220→                      <CalendarCheck className="h-3.5 w-3.5 text-slate-400" />
+  2221→                      {form.fecha_fin ? formatDate(form.fecha_fin) : '—'}
+  2222→                    </p>
+  2223→                  </div>
+  2224→                </div>
+  2225→
+  2226→                {/* Conditional details */}
+  2227→                {form.tipo === 'HORAS_EXTRA' && form.cantidad_horas && (
+  2228→                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+  2229→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Horas Extra</p>
+  2230→                    <div className="flex items-center justify-between">
+  2231→                      <span className="text-lg font-bold text-amber-600 dark:text-amber-400">{form.cantidad_horas}h</span>
+  2232→                      <span className="text-xs text-amber-600 dark:text-amber-400">{OVERTIME_RATE_TYPES.find(r => r.value === form.tipo_horas_extra)?.label || form.tipo_horas_extra} ({OVERTIME_RATE_TYPES.find(r => r.value === form.tipo_horas_extra)?.multiplier}x)</span>
+  2233→                    </div>
+  2234→                    {overtimeCalcResult && (
+  2235→                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">
+  2236→                        Monto estimado: <span className="font-mono">${overtimeCalcResult.overtimePay.toFixed(2)}</span>
+  2237→                      </p>
+  2238→                    )}
+  2239→                  </div>
+  2240→                )}
+  2241→                {['COMISION', 'BONO', 'DESCUENTO_ESPECIAL'].includes(form.tipo) && form.monto && (
+  2242→                  <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+  2243→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Monto</p>
+  2244→                    <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+  2245→                      ${parseFloat(form.monto).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+  2246→                    </p>
+  2247→                  </div>
+  2248→                )}
+  2249→                {form.tipo === 'INCAPACIDAD_ISSS' && form.numero_incapacidad && (
+  2250→                  <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
+  2251→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Incapacidad</p>
+  2252→                    <p className="text-sm font-medium dark:text-slate-200">#{form.numero_incapacidad}</p>
+  2253→                  </div>
+  2254→                )}
+  2255→
+  2256→                {form.descripcion && (
+  2257→                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+  2258→                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Descripción</p>
+  2259→                    <p className="text-sm dark:text-slate-300">{form.descripcion}</p>
+  2260→                  </div>
+  2261→                )}
+  2262→              </div>
+  2263→
+  2264→              {/* Legal Validation Messages */}
+  2265→              {form.tipo === 'HORAS_EXTRA' && form.cantidad_horas && parseFloat(form.cantidad_horas) > 4 && (
+  2266→                <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+  2267→                  <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+  2268→                  <div>
+  2269→                    <p className="text-xs font-medium text-red-700 dark:text-red-300">Excede límite diario</p>
+  2270→                    <p className="text-[10px] text-red-600 dark:text-red-400">Art. 169 CT: Máximo 4 horas extra por día</p>
+  2271→                  </div>
+  2272→                </div>
+  2273→              )}
+  2274→            </div>
+  2275→          )}
+  2276→
+  2277→          {/* ── Wizard Navigation ──────────────────────────────────────────── */}
+  2278→          <div className="flex justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+  2279→            <div>
+  2280→              {wizardStep > 1 && (
+  2281→                <Button
+  2282→                  variant="outline"
+  2283→                  onClick={() => setWizardStep(s => s - 1)}
+  2284→                  className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+  2285→                >
+  2286→                  <ChevronLeft className="h-4 w-4 mr-1" /> Anterior
+  2287→                </Button>
+  2288→              )}
+  2289→            </div>
+  2290→            <div className="flex gap-2">
+  2291→              <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">
+  2292→                Cancelar
+  2293→              </Button>
+  2294→              {wizardStep < 4 ? (
+  2295→                <Button
+  2296→                  className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800"
+  2297→                  disabled={!canAdvanceWizard()}
+  2298→                  onClick={() => setWizardStep(s => s + 1)}
+  2299→                >
+
+[showing lines 1700-2299 of 2319; use offset=2300 with limit to continue reading]
