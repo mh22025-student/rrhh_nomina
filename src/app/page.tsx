@@ -9,7 +9,8 @@ import {
   AlertCircle, Loader2, KeyRound, ArrowLeft, Plus, XCircle,
   Sun, Moon, TrendingUp, TrendingDown, Bell, Info, AlertTriangle,
   PieChart, CalendarDays, Megaphone, Search, Clock, Star, Pin,
-  PanelLeftClose, PanelLeft, ChevronsLeft, ChevronsRight
+  PanelLeftClose, PanelLeft, ChevronsLeft, ChevronsRight,
+  Lightbulb, ArrowRight, FileCheck, Landmark, Building2, Receipt, ShieldCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1599,6 +1600,189 @@ function getMotivationalMessage(compliance: number | undefined): string {
   return 'Alerta: Cumplimiento por debajo del mínimo. Acción inmediata requerida según legislación salvadoreña.';
 }
 
+// Mapping from compliance item name (ISSS/AFP/ISR F-910) to its dashboard view
+// so the user can be redirected directly to the module where the obligation is fulfilled.
+const COMPLIANCE_TARGET_VIEW: Record<string, ViewId> = {
+  ISSS: '05-01',
+  AFP: '05-02',
+  'ISR F-910': '05-03',
+  ISR: '05-03',
+};
+
+// Recommendations per compliance item and state (presentado / pendiente)
+type ComplianceRecommendation = {
+  /** Short headline shown next to the item */
+  headline: string;
+  /** Long actionable description shown below the item */
+  detail: string;
+  /** View to navigate to so the user can fulfill the obligation */
+  viewId: ViewId;
+  /** Label for the action button */
+  cta: string;
+};
+
+function getComplianceRecommendation(nombre: string, presentado: boolean): ComplianceRecommendation {
+  const key = nombre.toUpperCase().trim();
+  const viewId = COMPLIANCE_TARGET_VIEW[key] || COMPLIANCE_TARGET_VIEW[key.replace(' F-910', '')] || '05-01';
+
+  if (presentado) {
+    if (key.includes('ISSS')) {
+      return {
+        headline: 'ISSS presentado correctamente',
+        detail: 'La planilla OIS del período ya fue radicada ante el Seguro Social. Puede descargar el comprobante o revisar historial.',
+        viewId,
+        cta: 'Ver planilla ISSS',
+      };
+    }
+    if (key.includes('AFP')) {
+      return {
+        headline: 'AFP presentado correctamente',
+        detail: 'La planilla SEPP del período fue radicada ante la AFP correspondiente. Verifique el comprobante de recepción.',
+        viewId,
+        cta: 'Ver planilla AFP',
+      };
+    }
+    if (key.includes('ISR')) {
+      return {
+        headline: 'Entero de ISR presentado',
+        detail: 'El Formulario F-910 de retenciones de ISR fue enterado a la DGII. Conserve el número de referencia.',
+        viewId,
+        cta: 'Ver retenciones ISR',
+      };
+    }
+    return {
+      headline: 'Obligación cumplida',
+      detail: 'Esta obligación ya fue presentada. Puede revisar el historial y comprobantes.',
+      viewId,
+      cta: 'Ver reporte',
+    };
+  }
+
+  // Pendiente
+  if (key.includes('ISSS')) {
+    return {
+      headline: 'Genere y radique la planilla OIS del ISSS',
+      detail: 'Calcule el aporte patronal + laboral (3%) sobre los salarios del período y radique la OIS antes del día 15 del mes siguiente. Verifique que todos los empleados activos tengan número de ISSS registrado.',
+      viewId,
+      cta: 'Ir a Planilla ISSS',
+    };
+  }
+  if (key.includes('AFP')) {
+    return {
+      headline: 'Genere y radique la planilla SEPP de AFP',
+      detail: 'Calcule el aporte laboral (7.25%) + patronal (7.75%) sobre salarios y radique la SEPP antes del día 20 del mes siguiente. Confirme que cada empleado tenga AFP asignada (CRECER o CONFÍA).',
+      viewId,
+      cta: 'Ir a Planilla AFP',
+    };
+  }
+  if (key.includes('ISR')) {
+    return {
+      headline: 'Elabore y entere el Formulario F-910 de ISR',
+      detail: 'Totalice las retenciones de ISR del mes aplicando la tabla de 4 tramos y presente el F-910 ante la DGII antes del día 10 del mes siguiente. Verifique el cálculo en el módulo de nómina.',
+      viewId,
+      cta: 'Ir a Retenciones ISR',
+    };
+  }
+  return {
+    headline: 'Cumpla esta obligación pendiente',
+    detail: 'Acceda al módulo de reportes para generar y presentar el documento correspondiente.',
+    viewId,
+    cta: 'Ir al reporte',
+  };
+}
+
+// Recommendations per vencimiento state (dias: 0 = vencido, 1-3 = urgente, 4-7 = próximo, >7 = planificado)
+function getVencimientoRecommendation(nombre: string, dias: number): ComplianceRecommendation {
+  const key = nombre.toUpperCase().trim();
+  const viewId = COMPLIANCE_TARGET_VIEW[key] || COMPLIANCE_TARGET_VIEW[key.replace(' F-910', '')] || '05-01';
+  const vencido = dias <= 0;
+  const urgente = dias > 0 && dias <= 3;
+
+  let prefix = '';
+  if (vencido) prefix = 'VENCIDO. ';
+  else if (urgente) prefix = `URGENTE (${dias} día${dias === 1 ? '' : 's'}). `;
+  else prefix = `Programado (${dias} días). `;
+
+  if (key.includes('ISSS')) {
+    return {
+      headline: `${prefix}Radique la OIS del ISSS`,
+      detail: vencido
+        ? 'La planilla OIS del ISSS está vencida. Riesgo: recargo moratorio del 1% mensual sobre el aporte omitido (Art. 78 Reglamento ISSS). Genere el reporte y radialo inmediatamente.'
+        : urgente
+          ? `Quedan ${dias} día(s) para radicar la OIS ante el ISSS (vence el día 15). Descargue el reporte, fírmelo y presente el archivo en la oficina del Seguro Social.`
+          : `Planifique la generación de la OIS del ISSS. Tendrá lista la planilla con anticipación para el día 15 del mes.`,
+      viewId,
+      cta: 'Ir a Planilla ISSS',
+    };
+  }
+  if (key.includes('AFP')) {
+    return {
+      headline: `${prefix}Radique la SEPP de AFP`,
+      detail: vencido
+        ? 'La planilla SEPP de AFP está vencida. Riesgo: multa de 5 a 50 salarios mínimos (Art. 21 Ley SAP). Genere y radique ante la AFP correspondiente (CRECER o CONFÍA) de inmediato.'
+        : urgente
+          ? `Quedan ${dias} día(s) para radicar la SEPP ante la AFP (vence el día 20). Confirme los aportes laborales (7.25%) y patronales (7.75%) antes de presentar.`
+          : `Planifique la generación de la SEPP de AFP. Verifique asignación de AFP por empleado y prepare la planilla con anticipación.`,
+      viewId,
+      cta: 'Ir a Planilla AFP',
+    };
+  }
+  if (key.includes('ISR')) {
+    return {
+      headline: `${prefix}Entere el Formulario F-910 de ISR`,
+      detail: vencido
+        ? 'El entero de retenciones de ISR está vencido. Riesgo: recargo del 1% mensual + intereses moratorios (Art. 103 Código Tributario). Presente el F-910 ante la DGII inmediatamente.'
+        : urgente
+          ? `Quedan ${dias} día(s) para enterar el F-910 de ISR (vence el día 10). Verifique la suma de retenciones aplicadas en el cálculo de nómina y presente el formulario.`
+          : `Planifique el entero del F-910 de ISR. Tendrá listo el total de retenciones del período para presentarlo antes del día 10 del próximo mes.`,
+      viewId,
+      cta: 'Ir a Retenciones ISR',
+    };
+  }
+  return {
+    headline: `${prefix}Cumpla esta obligación`,
+    detail: 'Acceda al módulo de reportes para generar y presentar el documento correspondiente antes del vencimiento.',
+    viewId,
+    cta: 'Ir al reporte',
+  };
+}
+
+// Overall semaphore recommendation (top-level CTA based on semaforo color)
+function getSemaphoreOverallRecommendation(
+  semaforo: string,
+  cumplimientos: Array<{ nombre: string; presentado: boolean }>
+): { headline: string; detail: string; viewId: ViewId | null; cta: string; tone: 'red' | 'amber' | 'green' } {
+  const pendientes = cumplimientos.filter(c => !c.presentado);
+  const nextPendiente = pendientes[0];
+  const viewId = nextPendiente ? (COMPLIANCE_TARGET_VIEW[nextPendiente.nombre.toUpperCase().trim()] || '05-01') : null;
+
+  if (semaforo === 'rojo') {
+    return {
+      headline: 'Acción inmediata requerida',
+      detail: `Hay ${pendientes.length} obligación(es) previsionales pendientes. Riesgo de sanciones por incumplimiento de obligaciones laborales y tributarias según legislación salvadoreña.`,
+      viewId,
+      cta: nextPendiente ? `Ir a ${nextPendiente.nombre}` : 'Ver reportes',
+      tone: 'red',
+    };
+  }
+  if (semaforo === 'amarillo') {
+    return {
+      headline: 'Atención: cumplimiento parcial',
+      detail: `Falta(n) ${pendientes.length} obligación(es) por presentar. Programe las radicaciones antes de los vencimientos legales para mantener el semáforo en verde.`,
+      viewId,
+      cta: nextPendiente ? `Ir a ${nextPendiente.nombre}` : 'Ver reportes',
+      tone: 'amber',
+    };
+  }
+  return {
+    headline: 'Cumplimiento al día',
+    detail: 'Todas las obligaciones previsionales del período fueron presentadas. Mantenga el ritmo y prepare los reportes del próximo período.',
+    viewId: '05-01' as ViewId,
+    cta: 'Ver reportes',
+    tone: 'green',
+  };
+}
+
 // Audit action-specific icons (create=plus, update=pencil, delete=trash, login=key)
 function getEnhancedAuditIcon(accion: string) {
   const upper = accion.toUpperCase();
@@ -2411,6 +2595,8 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
 
       {/* ═══════════════════════════════════════════════════════════
           5. ENHANCED COMPLIANCE SEMAPHORE & 7. ENHANCED VENCIMIENTOS
+          Each item now shows contextual recommendations and a button
+          that redirects to the corresponding report module (05-01/02/03).
           ═══════════════════════════════════════════════════════════ */}
       {dashboardData && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
@@ -2454,35 +2640,97 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
                   />
                 </div>
               </div>
-              {/* Compliance items grid with progress bars */}
-              <div className="grid grid-cols-1 gap-2">
-                {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => (
-                  <div key={c.nombre} className="p-2.5 rounded-lg bg-slate-50/80 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
-                        {c.presentado ? (
-                          <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-red-500 shrink-0" />
-                        )}
-                        <span className="text-sm text-slate-700 dark:text-slate-300">{c.nombre}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500">Peso: {c.peso}%</span>
-                        <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
-                          {c.presentado ? 'Presentado' : 'Pendiente'}
-                        </Badge>
-                      </div>
-                    </div>
-                    {/* Progress bar for each compliance item */}
-                    <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                      <div
-                        className={`h-1.5 rounded-full transition-all duration-500 ${c.presentado ? 'bg-emerald-500' : 'bg-red-400'}`}
-                        style={{ width: c.presentado ? '100%' : `${Math.max(c.peso * 0.3, 5)}%` }}
-                      />
+
+              {/* Overall contextual recommendation banner based on semaforo color */}
+              {(() => {
+                const overall = getSemaphoreOverallRecommendation(
+                  dashboardData.semaforo,
+                  dashboardData.cumplimientos ?? []
+                );
+                const toneClasses =
+                  overall.tone === 'red'
+                    ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900'
+                    : overall.tone === 'amber'
+                      ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900'
+                      : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900';
+                const iconClasses =
+                  overall.tone === 'red'
+                    ? 'text-red-600 dark:text-red-400'
+                    : overall.tone === 'amber'
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-emerald-600 dark:text-emerald-400';
+                const Icon = overall.tone === 'green' ? ShieldCheck : AlertTriangle;
+                return (
+                  <div className={`p-3 rounded-lg border ${toneClasses} flex items-start gap-3`}>
+                    <Icon className={`h-5 w-5 ${iconClasses} shrink-0 mt-0.5`} />
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-semibold ${iconClasses}`}>{overall.headline}</p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">{overall.detail}</p>
+                      {overall.viewId && (
+                        <button
+                          onClick={() => onNavigate(overall.viewId as ViewId)}
+                          className={`mt-2 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md transition-all hover:scale-[1.02] active:scale-[0.98] ${toneClasses} ${iconClasses} hover:shadow-sm border border-current/20`}
+                        >
+                          {overall.cta}
+                          <ArrowRight className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
                   </div>
-                ))}
+                );
+              })()}
+
+              {/* Compliance items grid with progress bars + per-item recommendations */}
+              <div className="grid grid-cols-1 gap-2">
+                {dashboardData.cumplimientos?.map((c: { nombre: string; presentado: boolean; peso: number }) => {
+                  const rec = getComplianceRecommendation(c.nombre, c.presentado);
+                  return (
+                    <div key={c.nombre} className={`p-2.5 rounded-lg border ${c.presentado ? 'bg-emerald-50/40 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/40' : 'bg-red-50/40 dark:bg-red-900/10 border-red-100 dark:border-red-900/40'}`}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          {c.presentado ? (
+                            <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                          ) : (
+                            <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                          )}
+                          <span className="text-sm text-slate-700 dark:text-slate-300">{c.nombre}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">Peso: {c.peso}%</span>
+                          <Badge className={`text-[10px] ${c.presentado ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+                            {c.presentado ? 'Presentado' : 'Pendiente'}
+                          </Badge>
+                        </div>
+                      </div>
+                      {/* Progress bar for each compliance item */}
+                      <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-1.5 rounded-full transition-all duration-500 ${c.presentado ? 'bg-emerald-500' : 'bg-red-400'}`}
+                          style={{ width: c.presentado ? '100%' : `${Math.max(c.peso * 0.3, 5)}%` }}
+                        />
+                      </div>
+                      {/* Per-item recommendation + redirect button */}
+                      <div className="mt-2 flex items-start gap-2">
+                        <Lightbulb className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${c.presentado ? 'text-emerald-500' : 'text-amber-500'}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 leading-snug">{rec.headline}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">{rec.detail}</p>
+                          <button
+                            onClick={() => onNavigate(rec.viewId)}
+                            className={`mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-all hover:scale-[1.02] active:scale-[0.98] ${
+                              c.presentado
+                                ? 'text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+                                : 'text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30'
+                            }`}
+                          >
+                            {rec.cta}
+                            <ArrowRight className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -2506,6 +2754,7 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
               ) : (
                 dashboardData.vencimientos?.map((v: { nombre: string; fecha: string; dias: number }) => {
                   const urgency = getUrgencyClasses(v.dias);
+                  const rec = getVencimientoRecommendation(v.nombre, v.dias);
                   return (
                     <div key={v.nombre} className={`p-3 rounded-lg border ${urgency.bg} ${urgency.border} transition-all duration-200 hover:shadow-sm`}>
                       <div className="flex items-center justify-between">
@@ -2542,6 +2791,27 @@ function WelcomeDashboard({ user, accessToken, onNavigate }: { user: UserData; a
                           />
                         </div>
                       )}
+                      {/* Per-vencimiento recommendation + redirect button */}
+                      <div className="mt-2.5 flex items-start gap-2 pt-2.5 border-t border-slate-200/60 dark:border-slate-700/60">
+                        <Lightbulb className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${v.dias <= 0 ? 'text-red-500' : v.dias <= 3 ? 'text-red-500' : v.dias <= 7 ? 'text-amber-500' : 'text-emerald-500'}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 leading-snug">{rec.headline}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">{rec.detail}</p>
+                          <button
+                            onClick={() => onNavigate(rec.viewId)}
+                            className={`mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md transition-all hover:scale-[1.02] active:scale-[0.98] ${
+                              v.dias <= 3
+                                ? 'text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30'
+                                : v.dias <= 7
+                                  ? 'text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30'
+                                  : 'text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+                            }`}
+                          >
+                            {rec.cta}
+                            <ArrowRight className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   );
                 })

@@ -3139,3 +3139,37 @@ Stage Summary:
 - Artefactos: /src/app/page.tsx editado (3 funciones/bloques), no se tocaron APIs.
 - Evidencia visual: /home/z/my-project/qa-bug-compliance-1-before.png (vacío) y /home/z/my-project/qa-bug-compliance-2-after.png + qa-bug-compliance-3-cards.png (con datos).
 - Impacto usuario: las obligaciones legales mensuales (ISSS día 15, AFP día 20, ISR F-910 día 10 mes siguiente) ahora son visibles en el dashboard del admin, permitiendo acción correctiva.
+
+---
+Task ID: dash-compliance-recs-1
+Agent: main (Z.ai Code)
+Task: Añadir en "Semáforo de Cumplimiento" y "Próximos Vencimientos" del dashboard principal recomendaciones contextuales según el caso (pendiente/vencido/urgente/programado/presentado) y botones que redirijan al módulo correspondiente para cumplir la obligación.
+
+Work Log:
+- Verifiqué que `onNavigate(viewId)` ya está disponible en `WelcomeDashboard` (lo usan las Quick Actions)
+- Mapeé nombres de items a ViewIds: ISSS → '05-01' (Planilla ISSS), AFP → '05-02' (Planilla AFP), ISR/ISR F-910 → '05-03' (Retenciones ISR). Definí constante `COMPLIANCE_TARGET_VIEW` al inicio del archivo.
+- Añadí imports de iconos: `Lightbulb, ArrowRight, FileCheck, Landmark, Building2, Receipt, ShieldCheck` desde lucide-react
+- Creé 3 funciones helper en page.tsx:
+  1. `getComplianceRecommendation(nombre, presentado)`: devuelve {headline, detail, viewId, cta} para cada item del semáforo. Incluye recomendaciones específicas para ISSS (OIS, 3%, día 15), AFP (SEPP, 7.25%/7.75%, día 20) e ISR (F-910, 4 tramos, día 10), diferenciando estado presentado vs pendiente.
+  2. `getVencimientoRecommendation(nombre, dias)`: devuelve recomendación para cada vencimiento con prefijo VENCIDO/URGENTE(N días)/Programado(N días). Incluye referencias legales específicas: Art. 78 Reglamento ISSS (1% moratorio), Art. 21 Ley SAP (multa 5-50 SML), Art. 103 Código Tributario (1% + intereses).
+  3. `getSemaphoreOverallRecommendation(semaforo, cumplimientos)`: devuelve banner general con tone red/amber/green, viewId del primer pendiente y CTA "Ir a {nombre}".
+- Reescribí la card "Semáforo de Cumplimiento":
+  * Añadí banner general contextual (rojo/amarillo/verde) con icono AlertTriangle/ShieldCheck, headline, detail y botón CTA que redirige al primer pendiente
+  * Cada item ISSS/AFP/ISR ahora muestra debajo del progress bar: icono Lightbulb + headline + detail (2-3 líneas) + botón "Ir a Planilla X" con color según estado (emerald=presentado, red=pendiente)
+- Reescribí la card "Próximos Vencimientos":
+  * Cada vencimiento ahora incluye sección adicional con border-top separador: icono Lightbulb (color según urgencia) + headline (con prefijo VENCIDO/URGENTE/Programado) + detail con riesgo legal específico + botón "Ir a Planilla X" con color según urgencia (red ≤3 días, amber 4-7, emerald >7)
+- `bun run lint` pasa con 0 errores
+- Verificación con agent-browser (login admin@nomina.gob.sv):
+  * Confirmé que se renderizan: "Acción inmediata requerida" (banner rojo), "Genere y radique la planilla OIS del ISSS", "Calcule el aporte patronal + laboral (3%)...", "Elabore y entere el Formulario F-910", "VENCIDO. Radique la OIS del ISSS", "Riesgo: recargo moratorio del 1% mensual", "Riesgo: multa de 5 a 50 salarios mínimos", "Programado (15 días)", "Ir a Planilla ISSS/AFP", "Ir a Retenciones ISR"
+  * Probé clic en botón "Ir a Planilla AFP" (ref=e12) → redirigió correctamente a vista 05-02 (heading "Planilla AFP")
+  * Probé clic en botón del banner "Ir a ISSS" (ref=e10) → redirigió correctamente a vista 05-01 (heading "Planilla ISSS")
+  * Sin errores en consola del navegador ni en dev.log
+- Capturas: qa-feat-recommendations-1-cards.png (full), qa-feat-recommendations-2-semaforo.png (viewport)
+
+Stage Summary:
+- Tipo: Feature enhancement sobre las cards de Cumplimiento y Vencimientos del dashboard admin.
+- UX: cada obligación ahora explica QUÉ hacer, POR QUÉ (riesgo legal con referencia normativa) y DÓNDE (botón que redirige al módulo correcto). El usuario no necesita saber de memoria qué módulo corresponde a ISSS/AFP/ISR.
+- Mapeo de navegación: ISSS→05-01, AFP→05-02, ISR→05-03 (todos en Módulo 05 - Reportes).
+- Artefactos: /src/app/page.tsx (3 funciones helper + 2 cards reescritas), no se tocaron APIs.
+- Cumplimiento legal referenciado en tooltips: Art. 78 Reglamento ISSS, Art. 21 Ley SAP, Art. 103 Código Tributario.
+- Lint: 0 errores. Dev server limpio en :3000.
