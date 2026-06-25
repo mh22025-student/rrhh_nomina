@@ -1047,15 +1047,15 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           SECTION DIVIDER: Indicadores Clave
           ══════════════════════════════════════════════════════ */}
       <div className="flex items-center gap-3 px-1">
-        <div className="h-px flex-1 bg-gradient-to-r from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
         <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600/70 dark:text-emerald-400/70">Indicadores Clave</span>
-        <div className="h-px flex-1 bg-gradient-to-l from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-l from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
       </div>
 
       {/* ── KPI Summary Cards with Sparklines ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Total Nómina del Mes */}
-        <Card className="shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-50 via-teal-50/50 to-transparent dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-transparent pointer-events-none" />
           <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-emerald-500 to-teal-500" />
           <CardContent className="p-5 relative">
@@ -1124,7 +1124,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* KPI 3: Planillas Activas */}
-        <Card className="shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-amber-200/50 dark:ring-amber-800/30">
+        <Card className="shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-amber-200 dark:ring-amber-800/40">
           <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-orange-50/50 to-transparent dark:from-amber-950/30 dark:via-orange-950/20 dark:to-transparent pointer-events-none" />
           <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-amber-500 to-orange-500" />
           <CardContent className="p-5 relative">
@@ -1152,7 +1152,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* KPI 4: Cumplimiento % */}
-        <Card className="shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-lg transition-all duration-300 relative overflow-hidden group border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <div className={`absolute inset-0 pointer-events-none ${
             data.kpis.semaforo === 'verde'
               ? 'bg-gradient-to-br from-emerald-50 via-green-50/50 to-transparent dark:from-emerald-950/30 dark:via-green-950/20 dark:to-transparent'
@@ -1195,7 +1195,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
       {/* ══════════════════════════════════════════════════════
           SECTION: Planilla Status Pipeline
           ══════════════════════════════════════════════════════ */}
-      <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30 overflow-hidden">
+      <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/50 via-teal-50/30 to-transparent dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-transparent pointer-events-none" />
         <CardHeader className="pb-3 relative">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1280,12 +1280,12 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           SECTION: Compliance Progress Tracker
           ══════════════════════════════════════════════════════ */}
       <div className="flex items-center gap-3 px-1">
-        <div className="h-px flex-1 bg-gradient-to-r from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
         <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600/70 dark:text-emerald-400/70">Cumplimiento y Vencimientos</span>
-        <div className="h-px flex-1 bg-gradient-to-l from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-l from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
       </div>
 
-      <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30 overflow-hidden">
+      <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-slate-50/50 via-emerald-50/20 to-slate-50/50 dark:from-slate-900/50 dark:via-emerald-950/10 dark:to-slate-900/50 pointer-events-none rounded-xl" />
         <CardHeader className="pb-3 relative">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1421,14 +1421,14 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           SECTION: Composition Donut + Employee Salary Distribution
           ══════════════════════════════════════════════════════ */}
       <div className="flex items-center gap-3 px-1">
-        <div className="h-px flex-1 bg-gradient-to-r from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
         <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600/70 dark:text-emerald-400/70">Composición y Distribución</span>
-        <div className="h-px flex-1 bg-gradient-to-l from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-l from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Payroll Composition Donut Chart */}
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <PieChart className="h-4 w-4 text-emerald-500" /> Composición de Nómina
@@ -1441,7 +1441,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* Employee Salary Distribution Histogram */}
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="h-4 w-4 text-teal-500" /> Distribución Salarial
@@ -1493,14 +1493,14 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           SECTION: Main content grid - Planillas Table + Status Donut
           ══════════════════════════════════════════════════════ */}
       <div className="flex items-center gap-3 px-1">
-        <div className="h-px flex-1 bg-gradient-to-r from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-r from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
         <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-600/70 dark:text-emerald-400/70">Planillas y Actividad</span>
-        <div className="h-px flex-1 bg-gradient-to-l from-emerald-200 via-teal-200 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
+        <div className="h-px flex-1 bg-gradient-to-l from-emerald-300 via-teal-300 to-transparent dark:from-emerald-800 dark:via-teal-800 dark:to-transparent" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Recent planillas - improved table */}
-        <Card className="shadow-sm lg:col-span-2 hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm lg:col-span-2 hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-emerald-500" /> Planillas Recientes
@@ -1555,7 +1555,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* ── Status Summary Donut Widget ── */}
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <PieChart className="h-4 w-4 text-teal-500" /> Estado de Planillas
@@ -1573,7 +1573,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           ══════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Monthly Comparison Widget */}
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-emerald-500" /> Comparación Mensual
@@ -1645,7 +1645,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* Employee Count Mini-Chart (CSS-only area chart with gradient fill) */}
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="h-4 w-4 text-teal-500" /> Evolución de Empleados
@@ -1716,7 +1716,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           ══════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Monthly Trend Bar Chart */}
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-emerald-500" /> Tendencia Mensual
@@ -1794,7 +1794,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* Department Distribution */}
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Hash className="h-4 w-4 text-teal-500" /> Distribución por Área
@@ -1847,7 +1847,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           ══════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Activity Timeline */}
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Activity className="h-4 w-4 text-emerald-500" /> Actividad Reciente
@@ -1886,7 +1886,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
         </Card>
 
         {/* Expense Breakdown Donut */}
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <PieChart className="h-4 w-4 text-teal-500" /> Desglose de Descuentos
@@ -1936,7 +1936,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
           ══════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Compliance semaphore - Enhanced with SVG ring */}
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Shield className="h-4 w-4 text-emerald-500" /> Semáforo Previsional
@@ -2010,7 +2010,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
 
         {/* ── Planilla Detail Card ── */}
         {data.kpis.planilla_actual ? (
-          <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+          <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <CircleDot className="h-4 w-4 text-emerald-500" /> Detalle de Estado
@@ -2077,7 +2077,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
             </CardContent>
           </Card>
         ) : (
-          <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30">
+          <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-slate-200 dark:ring-slate-700/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <CircleDot className="h-4 w-4 text-emerald-500" /> Flujo de Planilla
@@ -2108,7 +2108,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
 
       {/* Alerts with severity icons */}
       {data.alertas.length > 0 && (
-        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-amber-200/50 dark:ring-amber-800/30">
+        <Card className="shadow-sm hover:shadow-md transition-all duration-300 border-0 ring-1 ring-amber-200 dark:ring-amber-800/40">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2 text-slate-900 dark:text-slate-100">
               <AlertTriangle className="h-4 w-4 text-amber-500" /> Alertas del Sistema
@@ -2155,7 +2155,7 @@ export default function PayrollDashboard({ accessToken, userRole, onNavigate }: 
       {/* ══════════════════════════════════════════════════════
           SECTION: Quick Stats Footer
           ══════════════════════════════════════════════════════ */}
-      <Card className="shadow-sm border-0 ring-1 ring-emerald-200/50 dark:ring-emerald-800/30 bg-gradient-to-r from-emerald-50/50 via-teal-50/30 to-slate-50/50 dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-slate-900/50">
+      <Card className="shadow-sm border-0 ring-1 ring-slate-200 dark:ring-slate-700/50 bg-gradient-to-r from-emerald-50/50 via-teal-50/30 to-slate-50/50 dark:from-emerald-950/20 dark:via-teal-950/10 dark:to-slate-900/50">
         <CardContent className="p-3 sm:p-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
