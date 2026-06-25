@@ -1,0 +1,900 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useCallback, useMemo } from 'react';
+     4→import {
+     5→  Inbox, Search, Filter, CheckCircle, XCircle, Clock, X, Eye,
+     6→  Plane, FileBadge, Receipt, FileText, Edit3, AlertCircle,
+     7→  User, Mail, Phone, Building2, Calendar, MessageSquare, ChevronLeft, ChevronRight,
+     8→  CheckCheck, Loader2, CircleDot,
+     9→} from 'lucide-react';
+    10→import { Button } from '@/components/ui/button';
+    11→import { Input } from '@/components/ui/input';
+    12→import { Badge } from '@/components/ui/badge';
+    13→import { Card } from '@/components/ui/card';
+    14→import {
+    15→  Select,
+    16→  SelectContent,
+    17→  SelectItem,
+    18→  SelectTrigger,
+    19→  SelectValue,
+    20→} from '@/components/ui/select';
+    21→import {
+    22→  Dialog,
+    23→  DialogContent,
+    24→  DialogDescription,
+    25→  DialogFooter,
+    26→  DialogHeader,
+    27→  DialogTitle,
+    28→} from '@/components/ui/dialog';
+    29→import { Textarea } from '@/components/ui/textarea';
+    30→import { ScrollArea } from '@/components/ui/scroll-area';
+    31→import { Separator } from '@/components/ui/separator';
+    32→import { Toaster } from '@/components/ui/toaster';
+    33→import { toast } from 'sonner';
+    34→import { cn } from '@/lib/utils';
+    35→
+    36→// ============================================================
+    37→// Types
+    38→// ============================================================
+    39→type SolicitudEstado = 'PENDIENTE' | 'APROBADA' | 'RECHAZADA' | 'CANCELADA';
+    40→
+    41→interface SolicitudBandeja {
+    42→  id: string;
+    43→  tipo: string;
+    44→  estado: SolicitudEstado;
+    45→  detalle: string | null;
+    46→  fecha_solicitud: string;
+    47→  fecha_resolucion: string | null;
+    48→  empleado: {
+    49→    id: string;
+    50→    codigo_empleado: string;
+    51→    primer_nombre: string;
+    52→    segundo_nombre: string | null;
+    53→    primer_apellido: string;
+    54→    segundo_apellido: string | null;
+    55→    email_personal: string | null;
+    56→    telefono: string | null;
+    57→    perfil_puesto: { nombre_puesto: string } | null;
+    58→    area: { nombre: string } | null;
+    59→  };
+    60→  aprobada_por: { nombre: string; apellido: string; email: string } | null;
+    61→}
+    62→
+    63→interface BandejaStats {
+    64→  total: number;
+    65→  pendientes: number;
+    66→  aprobadas: number;
+    67→  rechazadas: number;
+    68→  canceladas: number;
+    69→  byTipo: Record<string, number>;
+    70→}
+    71→
+    72→interface SolicitudesBandejaProps {
+    73→  accessToken: string;
+    74→  userRole: string;
+    75→}
+    76→
+    77→// ============================================================
+    78→// Constants
+    79→// ============================================================
+    80→const TIPO_CONFIG: Record<string, {
+    81→  label: string;
+    82→  icon: React.ElementType;
+    83→  color: string;
+    84→  bg: string;
+    85→  border: string;
+    86→}> = {
+    87→  VACACION: {
+    88→    label: 'Vacaciones',
+    89→    icon: Plane,
+    90→    color: 'text-teal-700',
+    91→    bg: 'bg-teal-50 dark:bg-teal-900/30',
+    92→    border: 'border-teal-200 dark:border-teal-800',
+    93→  },
+    94→  CONSTANCIA_EMPLEO: {
+    95→    label: 'Constancia de Empleo',
+    96→    icon: FileBadge,
+    97→    color: 'text-emerald-700',
+    98→    bg: 'bg-emerald-50 dark:bg-emerald-900/30',
+    99→    border: 'border-emerald-200 dark:border-emerald-800',
+   100→  },
+   101→  CONSTANCIA_SALARIAL: {
+   102→    label: 'Constancia Salarial',
+   103→    icon: Receipt,
+   104→    color: 'text-amber-700',
+   105→    bg: 'bg-amber-50 dark:bg-amber-900/30',
+   106→    border: 'border-amber-200 dark:border-amber-800',
+   107→  },
+   108→  CONSTANCIA_ISR: {
+   109→    label: 'Constancia ISR',
+   110→    icon: FileText,
+   111→    color: 'text-rose-700',
+   112→    bg: 'bg-rose-50 dark:bg-rose-900/30',
+   113→    border: 'border-rose-200 dark:border-rose-800',
+   114→  },
+   115→  CAMBIO_DATOS: {
+   116→    label: 'Cambio de Datos',
+   117→    icon: Edit3,
+   118→    color: 'text-sky-700',
+   119→    bg: 'bg-sky-50 dark:bg-sky-900/30',
+   120→    border: 'border-sky-200 dark:border-sky-800',
+   121→  },
+   122→};
+   123→
+   124→const ESTADO_CONFIG: Record<SolicitudEstado, {
+   125→  label: string;
+   126→  icon: React.ElementType;
+   127→  color: string;
+   128→  bg: string;
+   129→}> = {
+   130→  PENDIENTE: { label: 'Pendiente', icon: Clock, color: 'text-amber-700', bg: 'bg-amber-100 dark:bg-amber-900/40' },
+   131→  APROBADA: { label: 'Aprobada', icon: CheckCircle, color: 'text-emerald-700', bg: 'bg-emerald-100 dark:bg-emerald-900/40' },
+   132→  RECHAZADA: { label: 'Rechazada', icon: XCircle, color: 'text-rose-700', bg: 'bg-rose-100 dark:bg-rose-900/40' },
+   133→  CANCELADA: { label: 'Cancelada', icon: X, color: 'text-slate-600', bg: 'bg-slate-100 dark:bg-slate-800/60' },
+   134→};
+   135→
+   136→function formatDate(dateStr: string): string {
+   137→  return new Date(dateStr).toLocaleDateString('es-SV', {
+   138→    day: '2-digit',
+   139→    month: 'short',
+   140→    year: 'numeric',
+   141→    hour: '2-digit',
+   142→    minute: '2-digit',
+   143→  });
+   144→}
+   145→
+   146→function timeAgo(dateStr: string): string {
+   147→  const now = new Date();
+   148→  const date = new Date(dateStr);
+   149→  const diffMs = now.getTime() - date.getTime();
+   150→  const diffMin = Math.floor(diffMs / 60000);
+   151→  const diffHr = Math.floor(diffMin / 60);
+   152→  const diffDay = Math.floor(diffHr / 24);
+   153→  if (diffMin < 60) return `hace ${diffMin} min`;
+   154→  if (diffHr < 24) return `hace ${diffHr}h`;
+   155→  if (diffDay < 30) return `hace ${diffDay}d`;
+   156→  return date.toLocaleDateString('es-SV', { day: '2-digit', month: 'short' });
+   157→}
+   158→
+   159→// ============================================================
+   160→// Component
+   161→// ============================================================
+   162→export default function SolicitudesBandeja({ accessToken, userRole }: SolicitudesBandejaProps) {
+   163→  const [data, setData] = useState<SolicitudBandeja[]>([]);
+   164→  const [stats, setStats] = useState<BandejaStats | null>(null);
+   165→  const [loading, setLoading] = useState(true);
+   166→  const [error, setError] = useState<string | null>(null);
+   167→
+   168→  // Filters
+   169→  const [estadoFilter, setEstadoFilter] = useState<string>('PENDIENTE');
+   170→  const [tipoFilter, setTipoFilter] = useState<string>('');
+   171→  const [search, setSearch] = useState('');
+   172→  const [debouncedSearch, setDebouncedSearch] = useState('');
+   173→
+   174→  // Pagination
+   175→  const [page, setPage] = useState(1);
+   176→  const [totalPages, setTotalPages] = useState(1);
+   177→  const [total, setTotal] = useState(0);
+   178→
+   179→  // Detail dialog
+   180→  const [selected, setSelected] = useState<SolicitudBandeja | null>(null);
+   181→  const [detalleOpen, setDetalleOpen] = useState(false);
+   182→
+   183→  // Approve/reject dialog
+   184→  const [resolveDialog, setResolveDialog] = useState<{
+   185→    solicitud: SolicitudBandeja;
+   186→    action: 'APROBADA' | 'RECHAZADA';
+   187→  } | null>(null);
+   188→  const [comentario, setComentario] = useState('');
+   189→  const [submitting, setSubmitting] = useState(false);
+   190→
+   191→  // -------------------------------------------------------
+   192→  // Debounce search
+   193→  // -------------------------------------------------------
+   194→  useEffect(() => {
+   195→    const t = setTimeout(() => setDebouncedSearch(search), 400);
+   196→    return () => clearTimeout(t);
+   197→  }, [search]);
+   198→
+   199→  // -------------------------------------------------------
+   200→  // Fetch bandeja
+   201→  // -------------------------------------------------------
+   202→  const fetchData = useCallback(async () => {
+   203→    setLoading(true);
+   204→    setError(null);
+   205→    try {
+   206→      const params = new URLSearchParams({
+   207→        page: String(page),
+   208→        pageSize: '20',
+   209→      });
+   210→      // "_TODOS" sentinel means "no filter"
+   211→      if (estadoFilter && estadoFilter !== '_TODOS') params.set('estado', estadoFilter);
+   212→      if (tipoFilter && tipoFilter !== '_TODOS') params.set('tipo', tipoFilter);
+   213→      if (debouncedSearch) params.set('q', debouncedSearch);
+   214→
+   215→      const res = await fetch(`/api/selfservice/bandeja?${params.toString()}`, {
+   216→        headers: { Authorization: `Bearer ${accessToken}` },
+   217→      });
+   218→
+   219→      if (!res.ok) {
+   220→        const err = await res.json().catch(() => ({}));
+   221→        throw new Error(err.error || `HTTP ${res.status}`);
+   222→      }
+   223→
+   224→      const json = await res.json();
+   225→      setData(json.data || []);
+   226→      setStats(json.stats || null);
+   227→      setTotal(json.pagination?.total || 0);
+   228→      setTotalPages(json.pagination?.totalPages || 1);
+   229→    } catch (err) {
+   230→      const msg = err instanceof Error ? err.message : 'Error desconocido';
+   231→      setError(msg);
+   232→      toast.error('Error al cargar solicitudes', { description: msg });
+   233→    } finally {
+   234→      setLoading(false);
+   235→    }
+   236→  }, [accessToken, page, estadoFilter, tipoFilter, debouncedSearch]);
+   237→
+   238→  useEffect(() => {
+   239→    fetchData();
+   240→  }, [fetchData]);
+   241→
+   242→  // Reset to page 1 when filters change
+   243→  useEffect(() => {
+   244→    setPage(1);
+   245→  }, [estadoFilter, tipoFilter, debouncedSearch]);
+   246→
+   247→  // -------------------------------------------------------
+   248→  // Approve / reject handler
+   249→  // -------------------------------------------------------
+   250→  const handleResolve = async () => {
+   251→    if (!resolveDialog) return;
+   252→    setSubmitting(true);
+   253→    try {
+   254→      const res = await fetch(`/api/selfservice/${encodeURIComponent(resolveDialog.solicitud.id)}`, {
+   255→        method: 'PATCH',
+   256→        headers: {
+   257→          Authorization: `Bearer ${accessToken}`,
+   258→          'Content-Type': 'application/json',
+   259→        },
+   260→        body: JSON.stringify({
+   261→          estado: resolveDialog.action,
+   262→          comentario: comentario.trim() || undefined,
+   263→        }),
+   264→      });
+   265→
+   266→      if (!res.ok) {
+   267→        const err = await res.json().catch(() => ({}));
+   268→        throw new Error(err.error || `HTTP ${res.status}`);
+   269→      }
+   270→
+   271→      toast.success(
+   272→        resolveDialog.action === 'APROBADA'
+   273→          ? 'Solicitud aprobada'
+   274→          : 'Solicitud rechazada',
+   275→        {
+   276→          description:
+   277→            resolveDialog.action === 'APROBADA'
+   278→              ? 'Se ha notificado al empleado.'
+   279→              : 'Se ha notificado al empleado del rechazo.',
+   280→        }
+   281→      );
+   282→
+   283→      setResolveDialog(null);
+   284→      setComentario('');
+   285→      // Refresh list
+   286→      fetchData();
+   287→    } catch (err) {
+   288→      const msg = err instanceof Error ? err.message : 'Error desconocido';
+   289→      toast.error('Error al procesar solicitud', { description: msg });
+   290→    } finally {
+   291→      setSubmitting(false);
+   292→    }
+   293→  };
+   294→
+   295→  // -------------------------------------------------------
+   296→  // Render helpers
+   297→  // -------------------------------------------------------
+   298→  const fullName = (s: SolicitudBandeja) =>
+   299→    `${s.empleado.primer_nombre}${s.empleado.segundo_nombre ? ' ' + s.empleado.segundo_nombre : ''} ${s.empleado.primer_apellido}${s.empleado.segundo_apellido ? ' ' + s.empleado.segundo_apellido : ''}`;
+   300→
+   301→  const parseDetalle = (detalle: string | null, tipo: string) => {
+   302→    if (!detalle) return null;
+   303→    if (tipo === 'VACACION') {
+   304→      try {
+   305→        const parsed = JSON.parse(detalle);
+   306→        return {
+   307→          tipo: 'vacacion' as const,
+   308→          fecha_inicio: parsed.fecha_inicio,
+   309→          fecha_fin: parsed.fecha_fin,
+   310→          dias: parsed.dias,
+   311→          motivo: parsed.motivo,
+   312→        };
+   313→      } catch {
+   314→        return { tipo: 'text' as const, text: detalle };
+   315→      }
+   316→    }
+   317→    return { tipo: 'text' as const, text: detalle };
+   318→  };
+   319→
+   320→  // -------------------------------------------------------
+   321→  // KPI cards
+   322→  // -------------------------------------------------------
+   323→  const KpiCards = useMemo(() => {
+   324→    if (!stats) return null;
+   325→    const cards = [
+   326→      { label: 'Total', value: stats.total, icon: Inbox, color: 'text-slate-700', bg: 'bg-slate-100 dark:bg-slate-800/60' },
+   327→      { label: 'Pendientes', value: stats.pendientes, icon: Clock, color: 'text-amber-700', bg: 'bg-amber-100 dark:bg-amber-900/40' },
+   328→      { label: 'Aprobadas', value: stats.aprobadas, icon: CheckCircle, color: 'text-emerald-700', bg: 'bg-emerald-100 dark:bg-emerald-900/40' },
+   329→      { label: 'Rechazadas', value: stats.rechazadas, icon: XCircle, color: 'text-rose-700', bg: 'bg-rose-100 dark:bg-rose-900/40' },
+   330→    ];
+   331→    return (
+   332→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+   333→        {cards.map((c) => {
+   334→          const Icon = c.icon;
+   335→          return (
+   336→            <Card
+   337→              key={c.label}
+   338→              className={cn(
+   339→                'p-4 sm:p-5 border-0 shadow-sm hover:shadow-md transition-all',
+   340→                'bg-white dark:bg-slate-900/60',
+   341→                'ring-1 ring-slate-200/60 dark:ring-slate-800/60'
+   342→              )}
+   343→            >
+   344→              <div className="flex items-start justify-between gap-2">
+   345→                <div>
+   346→                  <p className="text-[11px] sm:text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+   347→                    {c.label}
+   348→                  </p>
+   349→                  <p className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">
+   350→                    {c.value}
+   351→                  </p>
+   352→                </div>
+   353→                <div className={cn('flex-shrink-0 h-9 w-9 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center', c.bg)}>
+   354→                  <Icon className={cn('h-5 w-5', c.color)} />
+   355→                </div>
+   356→              </div>
+   357→            </Card>
+   358→          );
+   359→        })}
+   360→      </div>
+   361→    );
+   362→  }, [stats]);
+   363→
+   364→  return (
+   365→    <div className="space-y-5 sm:space-y-6">
+   366→      <Toaster richColors position="top-right" />
+   367→
+   368→      {/* Header */}
+   369→      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   370→        <div className="flex items-center gap-3">
+   371→          <div className="flex-shrink-0 h-11 w-11 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center shadow-md shadow-emerald-600/20">
+   372→            <Inbox className="h-6 w-6 text-white" />
+   373→          </div>
+   374→          <div>
+   375→            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
+   376→              Bandeja de Solicitudes
+   377→            </h2>
+   378→            <p className="text-sm text-slate-500 dark:text-slate-400">
+   379→              Gestión de solicitudes de empleados (vacaciones, constancias, cambio de datos)
+   380→            </p>
+   381→          </div>
+   382→        </div>
+   383→      </div>
+   384→
+   385→      {/* KPI Cards */}
+   386→      {KpiCards}
+   387→
+   388→      {/* Filters */}
+   389→      <Card className="p-4 border-0 shadow-sm bg-white dark:bg-slate-900/60 ring-1 ring-slate-200/60 dark:ring-slate-800/60">
+   390→        <div className="flex flex-col md:flex-row gap-3">
+   391→          {/* Search */}
+   392→          <div className="flex-1 relative">
+   393→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+   394→            <Input
+   395→              placeholder="Buscar por nombre o código de empleado..."
+   396→              value={search}
+   397→              onChange={(e) => setSearch(e.target.value)}
+   398→              className="pl-9 h-10 bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+   399→            />
+   400→          </div>
+   401→
+   402→          {/* Estado filter */}
+   403→          <Select value={estadoFilter} onValueChange={setEstadoFilter}>
+   404→            <SelectTrigger className="w-full md:w-44 h-10 bg-slate-50 dark:bg-slate-800/50">
+   405→              <Filter className="h-4 w-4 mr-1.5 text-slate-400" />
+   406→              <SelectValue placeholder="Estado" />
+   407→            </SelectTrigger>
+   408→            <SelectContent>
+   409→              <SelectItem value="PENDIENTE">Pendientes</SelectItem>
+   410→              <SelectItem value="APROBADA">Aprobadas</SelectItem>
+   411→              <SelectItem value="RECHAZADA">Rechazadas</SelectItem>
+   412→              <SelectItem value="CANCELADA">Canceladas</SelectItem>
+   413→              <SelectItem value="_TODOS">Todos los estados</SelectItem>
+   414→            </SelectContent>
+   415→          </Select>
+   416→
+   417→          {/* Tipo filter */}
+   418→          <Select value={tipoFilter} onValueChange={setTipoFilter}>
+   419→            <SelectTrigger className="w-full md:w-52 h-10 bg-slate-50 dark:bg-slate-800/50">
+   420→              <SelectValue placeholder="Tipo de solicitud" />
+   421→            </SelectTrigger>
+   422→            <SelectContent>
+   423→              <SelectItem value="_TODOS">Todos los tipos</SelectItem>
+   424→              {Object.entries(TIPO_CONFIG).map(([value, cfg]) => (
+   425→                <SelectItem key={value} value={value}>{cfg.label}</SelectItem>
+   426→              ))}
+   427→            </SelectContent>
+   428→          </Select>
+   429→        </div>
+   430→      </Card>
+   431→
+   432→      {/* List */}
+   433→      {loading ? (
+   434→        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+   435→          <Loader2 className="h-8 w-8 animate-spin mb-3 text-emerald-600" />
+   436→          <p className="text-sm">Cargando solicitudes...</p>
+   437→        </div>
+   438→      ) : error ? (
+   439→        <Card className="p-8 text-center border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30">
+   440→          <AlertCircle className="h-10 w-10 mx-auto mb-3 text-rose-500" />
+   441→          <p className="font-medium text-rose-800 dark:text-rose-200">Error al cargar</p>
+   442→          <p className="text-sm text-rose-600 dark:text-rose-300 mt-1">{error}</p>
+   443→          <Button onClick={fetchData} variant="outline" className="mt-4">
+   444→            Reintentar
+   445→          </Button>
+   446→        </Card>
+   447→      ) : data.length === 0 ? (
+   448→        <Card className="p-12 text-center border-0 shadow-sm bg-white dark:bg-slate-900/60 ring-1 ring-slate-200/60 dark:ring-slate-800/60">
+   449→          <CircleDot className="h-12 w-12 mx-auto mb-3 text-slate-300" />
+   450→          <p className="font-medium text-slate-700 dark:text-slate-200">Sin solicitudes</p>
+   451→          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+   452→            No hay solicitudes que coincidan con los filtros seleccionados.
+   453→          </p>
+   454→        </Card>
+   455→      ) : (
+   456→        <>
+   457→          <div className="grid gap-3 sm:gap-4">
+   458→            {data.map((s) => {
+   459→              const tipoCfg = TIPO_CONFIG[s.tipo] || {
+   460→                label: s.tipo,
+   461→                icon: AlertCircle,
+   462→                color: 'text-slate-700',
+   463→                bg: 'bg-slate-50 dark:bg-slate-800/60',
+   464→                border: 'border-slate-200 dark:border-slate-700',
+   465→              };
+   466→              const estadoCfg = ESTADO_CONFIG[s.estado];
+   467→              const TipoIcon = tipoCfg.icon;
+   468→              const EstadoIcon = estadoCfg.icon;
+   469→
+   470→              return (
+   471→                <Card
+   472→                  key={s.id}
+   473→                  className={cn(
+   474→                    'p-4 sm:p-5 border-0 shadow-sm hover:shadow-md transition-all cursor-pointer',
+   475→                    'bg-white dark:bg-slate-900/60',
+   476→                    'ring-1 ring-slate-200/60 dark:ring-slate-800/60 hover:ring-emerald-300/60 dark:hover:ring-emerald-700/60'
+   477→                  )}
+   478→                  onClick={() => {
+   479→                    setSelected(s);
+   480→                    setDetalleOpen(true);
+   481→                  }}
+   482→                >
+   483→                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+   484→                    {/* Left: tipo icon + name */}
+   485→                    <div className="flex items-start gap-3 flex-1 min-w-0">
+   486→                      <div className={cn('flex-shrink-0 h-10 w-10 rounded-lg flex items-center justify-center border', tipoCfg.bg, tipoCfg.border)}>
+   487→                        <TipoIcon className={cn('h-5 w-5', tipoCfg.color)} />
+   488→                      </div>
+   489→                      <div className="flex-1 min-w-0">
+   490→                        <div className="flex flex-wrap items-center gap-2">
+   491→                          <h3 className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+   492→                            {fullName(s)}
+   493→                          </h3>
+   494→                          <Badge variant="outline" className="text-[10px] font-medium border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300">
+   495→                            {s.empleado.codigo_empleado}
+   496→                          </Badge>
+   497→                        </div>
+   498→                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5 truncate">
+   499→                          {tipoCfg.label}
+   500→                          {s.empleado.perfil_puesto?.nombre_puesto && (
+   501→                            <span className="text-slate-400 dark:text-slate-500"> · {s.empleado.perfil_puesto.nombre_puesto}</span>
+   502→                          )}
+   503→                        </p>
+   504→                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
+   505→                          <span className="flex items-center gap-1">
+   506→                            <Calendar className="h-3 w-3" />
+   507→                            {timeAgo(s.fecha_solicitud)}
+   508→                          </span>
+   509→                          {s.empleado.area?.nombre && (
+   510→                            <span className="flex items-center gap-1">
+   511→                              <Building2 className="h-3 w-3" />
+   512→                              {s.empleado.area.nombre}
+   513→                            </span>
+   514→                          )}
+   515→                        </div>
+   516→                      </div>
+   517→                    </div>
+   518→
+   519→                    {/* Right: estado + actions */}
+   520→                    <div className="flex items-center gap-2 sm:gap-3 sm:flex-shrink-0">
+   521→                      <Badge className={cn('text-[11px] font-medium', estadoCfg.bg, estadoCfg.color)}>
+   522→                        <EstadoIcon className="h-3 w-3 mr-1" />
+   523→                        {estadoCfg.label}
+   524→                      </Badge>
+   525→                      {s.estado === 'PENDIENTE' && (
+   526→                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+   527→                          <Button
+   528→                            size="sm"
+   529→                            variant="outline"
+   530→                            className="h-8 px-2 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+   531→                            onClick={() => {
+   532→                              setResolveDialog({ solicitud: s, action: 'APROBADA' });
+   533→                              setComentario('');
+   534→                            }}
+   535→                          >
+   536→                            <CheckCircle className="h-3.5 w-3.5 mr-1" />
+   537→                            Aprobar
+   538→                          </Button>
+   539→                          <Button
+   540→                            size="sm"
+   541→                            variant="outline"
+   542→                            className="h-8 px-2 text-xs border-rose-300 text-rose-700 hover:bg-rose-50 hover:border-rose-400 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40"
+   543→                            onClick={() => {
+   544→                              setResolveDialog({ solicitud: s, action: 'RECHAZADA' });
+   545→                              setComentario('');
+   546→                            }}
+   547→                          >
+   548→                            <XCircle className="h-3.5 w-3.5 mr-1" />
+   549→                            Rechazar
+   550→                          </Button>
+   551→                        </div>
+   552→                      )}
+   553→                      <Button
+   554→                        size="sm"
+   555→                        variant="ghost"
+   556→                        className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"
+   557→                        onClick={(e) => {
+   558→                          e.stopPropagation();
+   559→                          setSelected(s);
+   560→                          setDetalleOpen(true);
+   561→                        }}
+   562→                      >
+   563→                        <Eye className="h-4 w-4" />
+   564→                      </Button>
+   565→                    </div>
+   566→                  </div>
+   567→                </Card>
+   568→              );
+   569→            })}
+   570→          </div>
+   571→
+   572→          {/* Pagination */}
+   573→          {totalPages > 1 && (
+   574→            <div className="flex items-center justify-between gap-2 pt-2">
+   575→              <p className="text-xs text-slate-500 dark:text-slate-400">
+   576→                Página {page} de {totalPages} · {total} solicitudes
+   577→              </p>
+   578→              <div className="flex items-center gap-1">
+   579→                <Button
+   580→                  variant="outline"
+   581→                  size="sm"
+   582→                  className="h-8 w-8 p-0"
+   583→                  disabled={page <= 1}
+   584→                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+   585→                >
+   586→                  <ChevronLeft className="h-4 w-4" />
+   587→                </Button>
+   588→                <Button
+   589→                  variant="outline"
+   590→                  size="sm"
+   591→                  className="h-8 w-8 p-0"
+   592→                  disabled={page >= totalPages}
+   593→                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+   594→                >
+   595→                  <ChevronRight className="h-4 w-4" />
+   596→                </Button>
+   597→              </div>
+   598→            </div>
+   599→          )}
+   600→        </>
+   601→      )}
+   602→
+   603→      {/* ── Detail Dialog ────────────────────────────────── */}
+   604→      <Dialog open={detalleOpen} onOpenChange={setDetalleOpen}>
+   605→        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+   606→          <DialogHeader>
+   607→            <DialogTitle className="flex items-center gap-2">
+   608→              {selected && (() => {
+   609→                const cfg = TIPO_CONFIG[selected.tipo] || TIPO_CONFIG.CAMBIO_DATOS;
+   610→                const Icon = cfg.icon;
+   611→                return <Icon className={cn('h-5 w-5', cfg.color)} />;
+   612→              })()}
+   613→              Detalle de Solicitud
+   614→            </DialogTitle>
+   615→            <DialogDescription>
+   616→              Información completa de la solicitud y el empleado.
+   617→            </DialogDescription>
+   618→          </DialogHeader>
+   619→
+   620→          {selected && (
+   621→            <ScrollArea className="flex-1 -mx-6 px-6">
+   622→              <div className="space-y-5 pb-2">
+   623→                {/* Status badge */}
+   624→                <div className="flex items-center justify-between">
+   625→                  <Badge className={cn('text-xs', ESTADO_CONFIG[selected.estado].bg, ESTADO_CONFIG[selected.estado].color)}>
+   626→                    {ESTADO_CONFIG[selected.estado].label}
+   627→                  </Badge>
+   628→                  <p className="text-xs text-slate-500 dark:text-slate-400">
+   629→                    Solicitada el {formatDate(selected.fecha_solicitud)}
+   630→                  </p>
+   631→                </div>
+   632→
+   633→                {/* Employee info */}
+   634→                <div>
+   635→                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+   636→                    Empleado
+   637→                  </h4>
+   638→                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-lg bg-slate-50 dark:bg-slate-800/40">
+   639→                    <div className="flex items-center gap-2">
+   640→                      <User className="h-4 w-4 text-slate-400" />
+   641→                      <div>
+   642→                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Nombre</p>
+   643→                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{fullName(selected)}</p>
+   644→                      </div>
+   645→                    </div>
+   646→                    <div className="flex items-center gap-2">
+   647→                      <CircleDot className="h-4 w-4 text-slate-400" />
+   648→                      <div>
+   649→                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Código</p>
+   650→                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{selected.empleado.codigo_empleado}</p>
+   651→                      </div>
+   652→                    </div>
+   653→                    {selected.empleado.email_personal && (
+   654→                      <div className="flex items-center gap-2">
+   655→                        <Mail className="h-4 w-4 text-slate-400" />
+   656→                        <div className="min-w-0">
+   657→                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Email</p>
+   658→                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{selected.empleado.email_personal}</p>
+   659→                        </div>
+   660→                      </div>
+   661→                    )}
+   662→                    {selected.empleado.telefono && (
+   663→                      <div className="flex items-center gap-2">
+   664→                        <Phone className="h-4 w-4 text-slate-400" />
+   665→                        <div>
+   666→                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Teléfono</p>
+   667→                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{selected.empleado.telefono}</p>
+   668→                        </div>
+   669→                      </div>
+   670→                    )}
+   671→                    {selected.empleado.perfil_puesto?.nombre_puesto && (
+   672→                      <div className="flex items-center gap-2">
+   673→                        <FileText className="h-4 w-4 text-slate-400" />
+   674→                        <div>
+   675→                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Puesto</p>
+   676→                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{selected.empleado.perfil_puesto.nombre_puesto}</p>
+   677→                        </div>
+   678→                      </div>
+   679→                    )}
+   680→                    {selected.empleado.area?.nombre && (
+   681→                      <div className="flex items-center gap-2">
+   682→                        <Building2 className="h-4 w-4 text-slate-400" />
+   683→                        <div>
+   684→                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Área</p>
+   685→                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{selected.empleado.area.nombre}</p>
+   686→                        </div>
+   687→                      </div>
+   688→                    )}
+   689→                  </div>
+   690→                </div>
+   691→
+   692→                {/* Solicitud detalle */}
+   693→                <div>
+   694→                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+   695→                    Detalle de la Solicitud
+   696→                  </h4>
+   697→                  <div className="p-4 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40">
+   698→                    {(() => {
+   699→                      const parsed = parseDetalle(selected.detalle, selected.tipo);
+   700→                      if (!parsed) {
+   701→                        return <p className="text-sm text-slate-500 dark:text-slate-400 italic">Sin detalle adicional.</p>;
+   702→                      }
+   703→                      if (parsed.tipo === 'vacacion') {
+   704→                        return (
+   705→                          <div className="space-y-2">
+   706→                            <div className="grid grid-cols-2 gap-3">
+   707→                              <div>
+   708→                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Fecha inicio</p>
+   709→                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+   710→                                  {new Date(parsed.fecha_inicio).toLocaleDateString('es-SV', { day: '2-digit', month: 'long', year: 'numeric' })}
+   711→                                </p>
+   712→                              </div>
+   713→                              <div>
+   714→                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Fecha fin</p>
+   715→                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+   716→                                  {new Date(parsed.fecha_fin).toLocaleDateString('es-SV', { day: '2-digit', month: 'long', year: 'numeric' })}
+   717→                                </p>
+   718→                              </div>
+   719→                              <div>
+   720→                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Días solicitados</p>
+   721→                                <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{parsed.dias} día{parsed.dias !== 1 ? 's' : ''}</p>
+   722→                              </div>
+   723→                            </div>
+   724→                            {parsed.motivo && (
+   725→                              <div>
+   726→                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Motivo</p>
+   727→                                <p className="text-sm text-slate-700 dark:text-slate-300">{parsed.motivo}</p>
+   728→                              </div>
+   729→                            )}
+   730→                          </div>
+   731→                        );
+   732→                      }
+   733→                      return <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{parsed.text}</p>;
+   734→                    })()}
+   735→                  </div>
+   736→                </div>
+   737→
+   738→                {/* Resolution info */}
+   739→                {selected.estado !== 'PENDIENTE' && (
+   740→                  <div>
+   741→                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+   742→                      Resolución
+   743→                    </h4>
+   744→                    <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/40 space-y-2">
+   745→                      <div className="flex items-center gap-2">
+   746→                        <span className="text-[11px] text-slate-500 dark:text-slate-400">Resuelta por:</span>
+   747→                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+   748→                          {selected.aprobada_por
+   749→                            ? `${selected.aprobada_por.nombre} ${selected.aprobada_por.apellido}`
+   750→                            : 'N/A'}
+   751→                        </span>
+   752→                      </div>
+   753→                      {selected.fecha_resolucion && (
+   754→                        <div className="flex items-center gap-2">
+   755→                          <span className="text-[11px] text-slate-500 dark:text-slate-400">Fecha:</span>
+   756→                          <span className="text-sm text-slate-900 dark:text-slate-100">{formatDate(selected.fecha_resolucion)}</span>
+   757→                        </div>
+   758→                      )}
+   759→                    </div>
+   760→                  </div>
+   761→                )}
+   762→              </div>
+   763→            </ScrollArea>
+   764→          )}
+   765→
+   766→          <DialogFooter className="gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+   767→            {selected?.estado === 'PENDIENTE' && (
+   768→              <>
+   769→                <Button
+   770→                  variant="outline"
+   771→                  className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300"
+   772→                  onClick={() => {
+   773→                    setResolveDialog({ solicitud: selected, action: 'RECHAZADA' });
+   774→                    setComentario('');
+   775→                    setDetalleOpen(false);
+   776→                  }}
+   777→                >
+   778→                  <XCircle className="h-4 w-4 mr-2" />
+   779→                  Rechazar
+   780→                </Button>
+   781→                <Button
+   782→                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   783→                  onClick={() => {
+   784→                    setResolveDialog({ solicitud: selected, action: 'APROBADA' });
+   785→                    setComentario('');
+   786→                    setDetalleOpen(false);
+   787→                  }}
+   788→                >
+   789→                  <CheckCircle className="h-4 w-4 mr-2" />
+   790→                  Aprobar
+   791→                </Button>
+   792→              </>
+   793→            )}
+   794→            {selected?.estado !== 'PENDIENTE' && (
+   795→              <Button variant="outline" onClick={() => setDetalleOpen(false)}>
+   796→                Cerrar
+   797→              </Button>
+   798→            )}
+   799→          </DialogFooter>
+   800→        </DialogContent>
+   801→      </Dialog>
+   802→
+   803→      {/* ── Resolve Dialog (approve/reject) ─────────────── */}
+   804→      <Dialog open={!!resolveDialog} onOpenChange={(o) => !o && !submitting && setResolveDialog(null)}>
+   805→        <DialogContent className="max-w-md">
+   806→          <DialogHeader>
+   807→            <DialogTitle className="flex items-center gap-2">
+   808→              {resolveDialog?.action === 'APROBADA' ? (
+   809→                <>
+   810→                  <CheckCircle className="h-5 w-5 text-emerald-600" />
+   811→                  Aprobar Solicitud
+   812→                </>
+   813→              ) : (
+   814→                <>
+   815→                  <XCircle className="h-5 w-5 text-rose-600" />
+   816→                  Rechazar Solicitud
+   817→                </>
+   818→              )}
+   819→            </DialogTitle>
+   820→            <DialogDescription>
+   821→              {resolveDialog?.action === 'APROBADA'
+   822→                ? 'La solicitud será aprobada y se notificará al empleado.'
+   823→                : 'La solicitud será rechazada y se notificará al empleado. Se recomienda agregar un motivo.'}
+   824→            </DialogDescription>
+   825→          </DialogHeader>
+   826→
+   827→          {resolveDialog && (
+   828→            <div className="space-y-3 py-2">
+   829→              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/40 text-sm">
+   830→                <p className="text-[11px] text-slate-500 dark:text-slate-400">Empleado</p>
+   831→                <p className="font-medium text-slate-900 dark:text-slate-100">{fullName(resolveDialog.solicitud)}</p>
+   832→                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+   833→                  {TIPO_CONFIG[resolveDialog.solicitud.tipo]?.label || resolveDialog.solicitud.tipo}
+   834→                </p>
+   835→              </div>
+   836→
+   837→              <div>
+   838→                <label className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-1.5">
+   839→                  <MessageSquare className="h-3.5 w-3.5" />
+   840→                  Comentario {resolveDialog.action === 'RECHAZADA' && <span className="text-rose-600">*</span>}
+   841→                </label>
+   842→                <Textarea
+   843→                  placeholder={
+   844→                    resolveDialog.action === 'APROBADA'
+   845→                      ? 'Comentario opcional para el empleado...'
+   846→                      : 'Explica el motivo del rechazo (obligatorio)...'
+   847→                  }
+   848→                  value={comentario}
+   849→                  onChange={(e) => setComentario(e.target.value)}
+   850→                  rows={3}
+   851→                  maxLength={500}
+   852→                  className="bg-slate-50 dark:bg-slate-800/50 resize-none"
+   853→                />
+   854→                <p className="text-[10px] text-slate-400 mt-1 text-right">
+   855→                  {comentario.length}/500
+   856→                </p>
+   857→              </div>
+   858→            </div>
+   859→          )}
+   860→
+   861→          <DialogFooter className="gap-2">
+   862→            <Button
+   863→              variant="outline"
+   864→              onClick={() => !submitting && setResolveDialog(null)}
+   865→              disabled={submitting}
+   866→            >
+   867→              Cancelar
+   868→            </Button>
+   869→            <Button
+   870→              className={
+   871→                resolveDialog?.action === 'APROBADA'
+   872→                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+   873→                  : 'bg-rose-600 hover:bg-rose-700 text-white'
+   874→              }
+   875→              onClick={handleResolve}
+   876→              disabled={
+   877→                submitting ||
+   878→                (resolveDialog?.action === 'RECHAZADA' && !comentario.trim())
+   879→              }
+   880→            >
+   881→              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+   882→              {resolveDialog?.action === 'APROBADA' ? (
+   883→                <>
+   884→                  <CheckCircle className="h-4 w-4 mr-2" />
+   885→                  Confirmar Aprobación
+   886→                </>
+   887→              ) : (
+   888→                <>
+   889→                  <XCircle className="h-4 w-4 mr-2" />
+   890→                  Confirmar Rechazo
+   891→                </>
+   892→              )}
+   893→            </Button>
+   894→          </DialogFooter>
+   895→        </DialogContent>
+   896→      </Dialog>
+   897→    </div>
+   898→  );
+   899→}
+   900→

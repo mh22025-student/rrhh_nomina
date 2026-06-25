@@ -329,102 +329,130 @@ export default function PayrollSummary({
         : '—';
 
       printContainer.innerHTML = `
-        <div style="font-family: 'Inter', Arial, sans-serif; color: #1a1a1a; max-width: 100%; padding: 20px;">
-          <div style="text-align: center; margin-bottom: 24px; border-bottom: 3px solid #059669; padding-bottom: 16px;">
-            <h1 style="font-size: 16pt; margin: 0 0 4px 0; color: #065f46; letter-spacing: 0.5px;">Ministerio de Hacienda — República de El Salvador</h1>
-            <h2 style="font-size: 13pt; margin: 0 0 8px 0; color: #047857;">Resumen de Planilla de Nómina</h2>
+        <div style="font-family: 'Inter', Arial, Helvetica, sans-serif; color: #1a1a1a; width: 100%; padding: 8px 12px; box-sizing: border-box;">
+          <!-- Header -->
+          <div style="text-align: center; margin-bottom: 18px; border-bottom: 3px solid #059669; padding-bottom: 14px;">
+            <h1 style="font-size: 15pt; margin: 0 0 4px 0; color: #065f46; letter-spacing: 0.3px; font-weight: 700;">Ministerio de Hacienda — República de El Salvador</h1>
+            <h2 style="font-size: 12pt; margin: 0 0 6px 0; color: #047857; font-weight: 600;">Resumen de Planilla de Nómina</h2>
             <p style="font-size: 9pt; color: #6b7280; margin: 0;">Generado: ${formatDateTimeSV(new Date())}</p>
           </div>
 
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt;">
+          <!-- Planilla Details: 4-column grid using a table for layout reliability in print -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 9.5pt; table-layout: fixed;">
+            <colgroup>
+              <col style="width: 25%;"><col style="width: 25%;"><col style="width: 25%;"><col style="width: 25%;">
+            </colgroup>
             <tr>
-              <td style="padding: 4px 8px; width: 25%;"><strong>Código:</strong> ${detalle.codigo_planilla}</td>
-              <td style="padding: 4px 8px; width: 25%;"><strong>Tipo:</strong> ${detalle.tipo === 'MENSUAL' ? 'Mensual' : 'Quincenal'}</td>
-              <td style="padding: 4px 8px; width: 25%;"><strong>Estado:</strong> ${estadoLabels[detalle.estado] || detalle.estado}</td>
-              <td style="padding: 4px 8px; width: 25%;"><strong>Empleados:</strong> ${detalle.total_empleados}</td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Código:</strong> <span style="color: #111827;">${detalle.codigo_planilla}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Tipo:</strong> <span style="color: #111827;">${detalle.tipo === 'MENSUAL' ? 'Mensual' : 'Quincenal'}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Estado:</strong> <span style="color: #111827;">${estadoLabels[detalle.estado] || detalle.estado}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Empleados:</strong> <span style="color: #111827;">${detalle.total_empleados}</span></td>
             </tr>
             <tr>
-              <td style="padding: 4px 8px;"><strong>Período:</strong> ${formatDateSV(detalle.fecha_inicio_periodo)} — ${formatDateSV(detalle.fecha_fin_periodo)}</td>
-              <td style="padding: 4px 8px;"><strong>Fecha Cálculo:</strong> ${formatDateSV(detalle.fecha_calculo)}</td>
-              <td style="padding: 4px 8px;"><strong>Calculada por:</strong> ${calculadaPor}</td>
-              <td style="padding: 4px 8px;"><strong>Aprobada por:</strong> ${aprobadaPor}</td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Período:</strong> <span style="color: #111827;">${formatDateSV(detalle.fecha_inicio_periodo)} — ${formatDateSV(detalle.fecha_fin_periodo)}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Fecha Cálculo:</strong> <span style="color: #111827;">${formatDateSV(detalle.fecha_calculo)}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Calculada por:</strong> <span style="color: #111827;">${calculadaPor}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Aprobada por:</strong> <span style="color: #111827;">${aprobadaPor}</span></td>
             </tr>
           </table>
 
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt;">
+          <!-- Employee Table with FIXED column widths to prevent overlap -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 8.5pt; table-layout: fixed;">
+            <colgroup>
+              <col style="width: 4%;">
+              <col style="width: 28%;">
+              <col style="width: 16%;">
+              <col style="width: 13%;">
+              <col style="width: 9%;">
+              <col style="width: 9%;">
+              <col style="width: 9%;">
+              <col style="width: 12%;">
+            </colgroup>
             <thead>
-              <tr style="background-color: #059669 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: center; width: 30px; color: white !important;">#</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: left; color: white !important;">Nombre</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: left; color: white !important;">Puesto</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">Salario Bruto</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">ISSS</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">AFP</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">ISR</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">Salario Neto</th>
+              <tr style="background-color: #059669 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <th style="padding: 7px 4px; border: 1px solid #047857; text-align: center; color: #ffffff !important; font-weight: 600;">#</th>
+                <th style="padding: 7px 6px; border: 1px solid #047857; text-align: left; color: #ffffff !important; font-weight: 600;">Nombre</th>
+                <th style="padding: 7px 6px; border: 1px solid #047857; text-align: left; color: #ffffff !important; font-weight: 600;">Puesto</th>
+                <th style="padding: 7px 6px; border: 1px solid #047857; text-align: right; color: #ffffff !important; font-weight: 600;">Salario Bruto</th>
+                <th style="padding: 7px 4px; border: 1px solid #047857; text-align: right; color: #ffffff !important; font-weight: 600;">ISSS</th>
+                <th style="padding: 7px 4px; border: 1px solid #047857; text-align: right; color: #ffffff !important; font-weight: 600;">AFP</th>
+                <th style="padding: 7px 4px; border: 1px solid #047857; text-align: right; color: #ffffff !important; font-weight: 600;">ISR</th>
+                <th style="padding: 7px 6px; border: 1px solid #047857; text-align: right; color: #ffffff !important; font-weight: 600;">Salario Neto</th>
               </tr>
             </thead>
             <tbody>
               ${detalles.map((d, i) => {
                 const nombre = getNombreCompleto(d);
-                return `<tr style="background-color: ${i % 2 === 0 ? '#ffffff' : '#f0fdf4'} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: center;">${i + 1}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db;">${nombre}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db;">${d.empleado.area?.nombre || '—'}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPlain(d.salario_bruto)}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPlain(d.isss_laboral)}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPlain(d.afp_laboral)}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPlain(d.isr_retenido)}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace; font-weight: 700;">${fmtPlain(d.salario_neto)}</td>
+                const rowBg = i % 2 === 0 ? '#ffffff' : '#f0fdf4';
+                return `<tr style="background-color: ${rowBg} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                  <td style="padding: 5px 4px; border: 1px solid #d1d5db; text-align: center; color: #6b7280;">${i + 1}</td>
+                  <td style="padding: 5px 6px; border: 1px solid #d1d5db; color: #111827; word-wrap: break-word; overflow-wrap: break-word;">${nombre}</td>
+                  <td style="padding: 5px 6px; border: 1px solid #d1d5db; color: #374151;">${d.empleado.area?.nombre || '—'}</td>
+                  <td style="padding: 5px 6px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #111827;">${fmtPlain(d.salario_bruto)}</td>
+                  <td style="padding: 5px 4px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #b91c1c;">${fmtPlain(d.isss_laboral)}</td>
+                  <td style="padding: 5px 4px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #c2410c;">${fmtPlain(d.afp_laboral)}</td>
+                  <td style="padding: 5px 4px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #b45309;">${fmtPlain(d.isr_retenido)}</td>
+                  <td style="padding: 5px 6px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPlain(d.salario_neto)}</td>
                 </tr>`;
               }).join('')}
-              <tr style="background-color: #ecfdf5 !important; font-weight: 700 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                <td style="padding: 8px; border: 1px solid #047857;" colspan="3">TOTALES</td>
-                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPlain(totals.bruto)}</td>
-                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPlain(totalIsssLaboral)}</td>
-                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPlain(totalAfpLaboral)}</td>
-                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPlain(totalIsr)}</td>
-                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPlain(totals.neto)}</td>
+              <tr style="background-color: #ecfdf5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <td style="padding: 7px 4px; border: 1px solid #047857; color: #065f46;" colspan="3"><strong>TOTALES</strong></td>
+                <td style="padding: 7px 6px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPlain(totals.bruto)}</td>
+                <td style="padding: 7px 4px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPlain(totalIsssLaboral)}</td>
+                <td style="padding: 7px 4px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPlain(totalAfpLaboral)}</td>
+                <td style="padding: 7px 4px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPlain(totalIsr)}</td>
+                <td style="padding: 7px 6px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPlain(totals.neto)}</td>
               </tr>
             </tbody>
           </table>
 
-          <div style="margin-bottom: 20px;">
-            <h3 style="font-size: 11pt; color: #065f46; margin: 0 0 8px 0; border-bottom: 1px solid #059669; padding-bottom: 4px;">Cargas Patronales</h3>
-            <table style="width: 60%; border-collapse: collapse; font-size: 10pt;">
-              <tr style="background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                <td style="padding: 6px 10px; border: 1px solid #d1d5db;">ISSS Patronal (7.5%)</td>
-                <td style="padding: 6px 10px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPlain(totalIsssPatronal)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 10px; border: 1px solid #d1d5db;">AFP Patronal (7.75%)</td>
-                <td style="padding: 6px 10px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPlain(totalAfpPatronal)}</td>
-              </tr>
-              <tr style="background-color: #ecfdf5 !important; font-weight: 700 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                <td style="padding: 6px 10px; border: 1px solid #047857;">Total Cargas Patronales</td>
-                <td style="padding: 6px 10px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPlain(cargasPatronales)}</td>
-              </tr>
-            </table>
-          </div>
+          <!-- Cargas Patronales: side-by-side with summary box for better space use -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; table-layout: fixed;">
+            <colgroup>
+              <col style="width: 50%;"><col style="width: 50%;">
+            </colgroup>
+            <tr>
+              <!-- Cargas Patronales (left) -->
+              <td style="vertical-align: top; padding-right: 8px;">
+                <h3 style="font-size: 10pt; color: #065f46; margin: 0 0 6px 0; border-bottom: 2px solid #059669; padding-bottom: 3px; font-weight: 700;">Cargas Patronales</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                  <tr style="background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; color: #374151;">ISSS Patronal (7.5%)</td>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #111827; width: 40%;">${fmtPlain(totalIsssPatronal)}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; color: #374151;">AFP Patronal (7.75%)</td>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #111827;">${fmtPlain(totalAfpPatronal)}</td>
+                  </tr>
+                  <tr style="background-color: #ecfdf5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <td style="padding: 6px 8px; border: 1px solid #047857; color: #065f46; font-weight: 700;">Total Cargas Patronales</td>
+                    <td style="padding: 6px 8px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPlain(cargasPatronales)}</td>
+                  </tr>
+                </table>
+              </td>
+              <!-- Resumen Final (right) -->
+              <td style="vertical-align: top; padding-left: 8px;">
+                <h3 style="font-size: 10pt; color: #065f46; margin: 0 0 6px 0; border-bottom: 2px solid #059669; padding-bottom: 3px; font-weight: 700;">Resumen Final</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                  <tr style="background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; color: #374151;">Total Salarios Brutos</td>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #111827; width: 40%;">${fmtPlain(totals.bruto)}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; color: #374151;">Total Deducciones</td>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #b91c1c;">${fmtPlain(deducciones)}</td>
+                  </tr>
+                  <tr style="background-color: #ecfdf5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <td style="padding: 6px 8px; border: 1px solid #047857; color: #065f46; font-weight: 700;">Total Neto a Pagar</td>
+                    <td style="padding: 6px 8px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46; font-size: 11pt;">${fmtPlain(totals.neto)}</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
 
-          <div style="margin-bottom: 20px; padding: 12px; border: 2px solid #059669; border-radius: 4px; background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-            <table style="width: 100%; font-size: 11pt;">
-              <tr>
-                <td style="padding: 4px;"><strong>Total Salarios Brutos:</strong></td>
-                <td style="padding: 4px; text-align: right; font-family: monospace;">${fmtPlain(totals.bruto)}</td>
-                <td style="padding: 4px; padding-left: 20px;"><strong>Total Deducciones:</strong></td>
-                <td style="padding: 4px; text-align: right; font-family: monospace;">${fmtPlain(deducciones)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 4px;"><strong>Total Neto a Pagar:</strong></td>
-                <td style="padding: 4px; text-align: right; font-family: monospace; font-size: 13pt; color: #065f46;">${fmtPlain(totals.neto)}</td>
-                <td style="padding: 4px; padding-left: 20px;"><strong>Cargas Patronales:</strong></td>
-                <td style="padding: 4px; text-align: right; font-family: monospace;">${fmtPlain(cargasPatronales)}</td>
-              </tr>
-            </table>
-          </div>
-
-          <div style="text-align: center; margin-top: 24px; padding-top: 12px; border-top: 1px solid #d1d5db; font-size: 8pt; color: #6b7280;">
+          <!-- Legal Footer -->
+          <div style="text-align: center; margin-top: 18px; padding-top: 10px; border-top: 1px solid #d1d5db; font-size: 8pt; color: #6b7280;">
             <p style="margin: 0;">Documento generado conforme a la legislación laboral de El Salvador</p>
             <p style="margin: 2px 0 0 0;">Código de Trabajo, Ley del ISSS, Ley del Sistema de Ahorro para Pensiones — Ministerio de Hacienda</p>
           </div>
@@ -894,13 +922,13 @@ export default function PayrollSummary({
             </CardContent>
           </Card>
 
-          {/* Hidden print container (shared with other views) */}
-          {!document.getElementById('print-container') && (
-            <div
-              id="print-container"
-              style={{ display: 'none', position: 'fixed', top: 0, left: 0, width: '100%', background: 'white', zIndex: 9999, padding: '20px' }}
-            />
-          )}
+          {/* Hidden print container — always rendered in this view.
+              The @media print CSS in globals.css isolates it so only
+              this container's content appears in the printed PDF. */}
+          <div
+            id="print-container"
+            style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100%', background: 'white', zIndex: 9999 }}
+          />
         </>
       )}
     </div>

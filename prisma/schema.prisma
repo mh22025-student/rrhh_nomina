@@ -118,6 +118,7 @@ model Usuario {
   permisos_granulares         PermisoGranularUsuario[]
   historial_contrasenas       HistorialContrasena[]
   bitacora_auditoria          BitacoraAuditoria[]
+  notificaciones_recibidas    Notificacion[]
 }
 
 // ============================================================
@@ -751,4 +752,30 @@ model BitacoraAuditoria {
   fecha_accion        DateTime @default(now())
 
   usuario             Usuario? @relation(fields: [usuario_id], references: [id])
+}
+
+// ============================================================
+// Table 36: notificaciones
+// Persistent notifications targeted at a specific user (inbox model).
+// Created when an employee submits a solicitud/incidencia (targets RRHH/ADMIN)
+// or when RRHH/ADMIN approves/rejects (targets the employee).
+// ============================================================
+model Notificacion {
+  id             String   @id @default(cuid())
+  usuario_id     String                          // target user (who receives it)
+  tipo           String                          // 'SOLICITUD' | 'INCIDENCIA' | 'MENSAJE' | 'VENCIMIENTO' | 'PLANILLA' | 'SISTEMA'
+  titulo         String
+  mensaje        String
+  link           String?                         // optional viewId to navigate to
+  entidad_tipo   String?                         // 'SolicitudSelfService' | 'IncidenciaNomina' | ...
+  entidad_id     String?                         // ID of the related entity
+  leida          Boolean  @default(false)
+  prioridad      String   @default("MEDIA")      // 'BAJA' | 'MEDIA' | 'ALTA'
+  fecha_creacion DateTime @default(now())
+  fecha_leida    DateTime?
+
+  usuario        Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade)
+
+  @@index([usuario_id, leida])
+  @@index([fecha_creacion])
 }

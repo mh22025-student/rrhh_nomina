@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyAuth, requireRoles } from '@/lib/auth-middleware';
 import type { UserRole } from '@/lib/auth';
+import { notifyByRole } from '@/lib/notifications';
 
 // GET /api/incidencias - List incidencias with filters
 export async function GET(request: NextRequest) {
@@ -297,6 +298,34 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // ── Notify RRHH/ADMIN that a new incidencia needs review ──
+    if (result?.empleado) {
+      const empleadoNombre = `${result.empleado.primer_nombre} ${result.empleado.primer_apellido}`;
+      const tipoLabels: Record<string, string> = {
+        HORAS_EXTRA: 'Horas Extra',
+        AUSENCIA: 'Ausencia',
+        INCAPACIDAD_ISSS: 'Incapacidad ISSS',
+        PERMISO: 'Permiso',
+        COMISION: 'Comisión',
+        BONO: 'Bono',
+        DESCUENTO_ESPECIAL: 'Descuento Especial',
+      };
+      const tipoLabel = tipoLabels[body.tipo] || body.tipo;
+      const prioridad = ['HORAS_EXTRA', 'INCAPACIDAD_ISSS', 'DESCUENTO_ESPECIAL'].includes(body.tipo)
+        ? 'ALTA'
+        : 'MEDIA';
+
+      await notifyByRole(['ADMIN', 'ANALISTA', 'APROBADOR'], {
+        tipo: 'INCIDENCIA',
+        titulo: `Nueva incidencia: ${tipoLabel}`,
+        mensaje: `${empleadoNombre} (${result.empleado.codigo_empleado}) ha registrado una incidencia de ${tipoLabel}. Requiere revisión.`,
+        link: '02-04',
+        entidad_tipo: 'IncidenciaNomina',
+        entidad_id: incidencia.id,
+        prioridad,
+      });
+    }
 
     return NextResponse.json({ data: result }, { status: 201 });
   } catch (error) {

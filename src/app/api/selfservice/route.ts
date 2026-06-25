@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyAuth, requireRoles } from '@/lib/auth-middleware';
+import { notifyByRole } from '@/lib/notifications';
 
 // GET /api/selfservice - Get self-service data for current employee
 export async function GET(request: NextRequest) {
@@ -222,6 +223,28 @@ export async function POST(request: NextRequest) {
         nivel_criticidad: 'NORMAL',
         detalle_adicional: `Solicitud creada: ${tipo}`,
       },
+    });
+
+    // ── Notify RRHH/ADMIN that a new solicitud is waiting for review ──
+    const empleadoNombre = `${usuario.empleado.primer_nombre} ${usuario.empleado.primer_apellido}`;
+    const tipoLabels: Record<string, string> = {
+      VACACION: 'Vacaciones',
+      CONSTANCIA_EMPLEO: 'Constancia de Empleo',
+      CONSTANCIA_SALARIAL: 'Constancia Salarial',
+      CONSTANCIA_ISR: 'Constancia ISR',
+      CAMBIO_DATOS: 'Cambio de Datos',
+    };
+    const tipoLabel = tipoLabels[tipo] || tipo;
+    const prioridad = tipo === 'VACACION' ? 'ALTA' : 'MEDIA';
+
+    await notifyByRole(['ADMIN', 'ANALISTA', 'APROBADOR'], {
+      tipo: 'SOLICITUD',
+      titulo: `Nueva solicitud de ${tipoLabel}`,
+      mensaje: `${empleadoNombre} (${usuario.empleado.codigo_empleado}) ha enviado una solicitud de ${tipoLabel}. Requiere revisión.`,
+      link: '06-06',
+      entidad_tipo: 'SolicitudSelfService',
+      entidad_id: solicitud.id,
+      prioridad,
     });
 
     return NextResponse.json(solicitud, { status: 201 });

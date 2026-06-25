@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Bell, CheckCircle, AlertTriangle, Clock, FileText, X
+  Bell, CheckCircle, AlertTriangle, Clock, FileText, X, Inbox, MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,13 @@ import {
 // ============================================================
 // Types
 // ============================================================
-type NotificationTipo = 'VENCIMIENTO' | 'PLANILLA' | 'INCIDENCIA' | 'SISTEMA';
+type NotificationTipo =
+  | 'SOLICITUD'
+  | 'INCIDENCIA'
+  | 'MENSAJE'
+  | 'VENCIMIENTO'
+  | 'PLANILLA'
+  | 'SISTEMA';
 
 interface Notificacion {
   id: string;
@@ -27,6 +33,9 @@ interface Notificacion {
   fecha: string;
   leida: boolean;
   link?: string;
+  prioridad?: string;
+  entidad_tipo?: string | null;
+  entidad_id?: string | null;
 }
 
 interface NotificationBellProps {
@@ -38,10 +47,18 @@ interface NotificationBellProps {
 // Helpers
 // ============================================================
 const TIPO_CONFIG: Record<NotificationTipo, { icon: React.ElementType; color: string; bg: string; border: string }> = {
-  VENCIMIENTO: { icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-l-amber-500' },
-  PLANILLA: { icon: FileText, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-l-emerald-500' },
-  INCIDENCIA: { icon: AlertTriangle, color: 'text-sky-600', bg: 'bg-sky-50', border: 'border-l-sky-500' },
-  SISTEMA: { icon: CheckCircle, color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-l-slate-400' },
+  SOLICITUD: { icon: Inbox, color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-l-emerald-600' },
+  INCIDENCIA: { icon: AlertTriangle, color: 'text-sky-700', bg: 'bg-sky-50', border: 'border-l-sky-500' },
+  MENSAJE: { icon: MessageSquare, color: 'text-teal-700', bg: 'bg-teal-50', border: 'border-l-teal-500' },
+  VENCIMIENTO: { icon: Clock, color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-l-amber-500' },
+  PLANILLA: { icon: FileText, color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-l-emerald-500' },
+  SISTEMA: { icon: CheckCircle, color: 'text-slate-700', bg: 'bg-slate-50', border: 'border-l-slate-400' },
+};
+
+const PRIORIDAD_CONFIG: Record<string, { ring: string; dot: string; label: string }> = {
+  ALTA: { ring: 'ring-red-200', dot: 'bg-red-500', label: 'Alta' },
+  MEDIA: { ring: 'ring-amber-200', dot: 'bg-amber-500', label: 'Media' },
+  BAJA: { ring: 'ring-slate-200', dot: 'bg-slate-400', label: 'Baja' },
 };
 
 function timeAgo(dateStr: string): string {
@@ -137,8 +154,9 @@ export default function NotificationBell({ accessToken, onNavigate }: Notificati
     }
   };
 
-  // Mark all as read
+  // Mark all as read — uses a single bulk endpoint for persistence
   const markAllRead = async () => {
+    // Optimistic: clear local unread state immediately
     const newReadIds = new Set(readIds);
     for (const n of notifications) {
       newReadIds.add(n.id);
@@ -146,8 +164,16 @@ export default function NotificationBell({ accessToken, onNavigate }: Notificati
     setReadIds(newReadIds);
     saveReadIds(newReadIds);
 
-    // Mark all on server
+    // Also update server-side state for both persistent + dynamic notifications
     try {
+      // 1. Bulk-update persistent notifications via the POST route
+      await fetch('/api/notificaciones', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'marcar_todas_leidas' }),
+      }).catch(() => {});
+
+      // 2. Fall back to per-id PUT for any remaining dynamic notifications
       await Promise.all(
         notifications.map(n =>
           fetch(`/api/notificaciones/${encodeURIComponent(n.id)}`, {
@@ -160,6 +186,9 @@ export default function NotificationBell({ accessToken, onNavigate }: Notificati
     } catch {
       // ignore
     }
+
+    // Refresh from server to get the true state
+    fetchNotifications();
   };
 
   // Compute unread count
@@ -253,6 +282,7 @@ export default function NotificationBell({ accessToken, onNavigate }: Notificati
                 const config = TIPO_CONFIG[notif.tipo] || TIPO_CONFIG.SISTEMA;
                 const Icon = config.icon;
                 const isUnread = !readIds.has(notif.id) && !notif.leida;
+                const prioridad = PRIORIDAD_CONFIG[notif.prioridad || 'MEDIA'] || PRIORIDAD_CONFIG.MEDIA;
 
                 return (
                   <React.Fragment key={notif.id}>
@@ -271,16 +301,31 @@ export default function NotificationBell({ accessToken, onNavigate }: Notificati
                             <p className={`text-[13px] truncate ${isUnread ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'}`}>
                               {notif.titulo}
                             </p>
-                            {isUnread && (
-                              <span className="flex-shrink-0 h-2 w-2 rounded-full bg-emerald-500" />
-                            )}
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              {notif.prioridad && notif.prioridad !== 'MEDIA' && (
+                                <span className={`inline-flex items-center gap-0.5 text-[9px] font-medium px-1 py-0.5 rounded ${notif.prioridad === 'ALTA' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full ${prioridad.dot}`} />
+                                  {prioridad.label}
+                                </span>
+                              )}
+                              {isUnread && (
+                                <span className="flex-shrink-0 h-2 w-2 rounded-full bg-emerald-500" />
+                              )}
+                            </div>
                           </div>
                           <p className="text-[12px] text-slate-500 mt-0.5 line-clamp-2 leading-snug">
                             {notif.mensaje}
                           </p>
-                          <p className="text-[10px] text-slate-400 mt-1">
-                            {timeAgo(notif.fecha)}
-                          </p>
+                          <div className="flex items-center justify-between gap-2 mt-1">
+                            <p className="text-[10px] text-slate-400">
+                              {timeAgo(notif.fecha)}
+                            </p>
+                            {notif.link && (
+                              <span className="text-[10px] text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity font-medium">
+                                Ver →
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </button>

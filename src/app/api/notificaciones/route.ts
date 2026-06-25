@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyAuth } from '@/lib/auth-middleware';
 
-// In-memory set tracking read notification IDs (per server instance)
+// In-memory set tracking read notification IDs (per server instance) —
+// retained for backward compatibility with dynamic (non-persisted) notifications.
 const readNotificationIds = new Set<string>();
 
 /**
@@ -19,9 +20,32 @@ export function markRead(notifId: string): void {
   readNotificationIds.add(notifId);
 }
 
+type NotificationTipo =
+  | 'SOLICITUD'
+  | 'INCIDENCIA'
+  | 'MENSAJE'
+  | 'VENCIMIENTO'
+  | 'PLANILLA'
+  | 'SISTEMA';
+
+interface NotifItem {
+  id: string;
+  tipo: NotificationTipo;
+  titulo: string;
+  mensaje: string;
+  fecha: string;
+  leida: boolean;
+  link?: string;
+  prioridad?: string;
+  entidad_tipo?: string | null;
+  entidad_id?: string | null;
+}
+
 // ============================================================
 // GET /api/notificaciones
-// Generate dynamic notifications based on real data
+// Returns a merged list of:
+//   1. Persistent notifications (from `Notificacion` table, targeted to this user)
+//   2. Dynamic notifications (generated from real DB state)
 // ============================================================
 export async function GET(request: NextRequest) {
   const user = verifyAuth(request);
@@ -33,24 +57,39 @@ export async function GET(request: NextRequest) {
   const soloNoLeidas = searchParams.get('solo_no_leidas') === 'true';
 
   try {
-    const notificaciones: Array<{
-      id: string;
-      tipo: 'VENCIMIENTO' | 'PLANILLA' | 'INCIDENCIA' | 'SISTEMA';
-      titulo: string;
-      mensaje: string;
-      fecha: string;
-      leida: boolean;
-      link?: string;
-    }> = [];
+    const notificaciones: NotifItem[] = [];
+
+    // -------------------------------------------------------
+    // 1. PERSISTENT NOTIFICATIONS (targeted to this user)
+    // -------------------------------------------------------
+    const persistent = await db.notificacion.findMany({
+      where: { usuario_id: user.userId },
+      orderBy: { fecha_creacion: 'desc' },
+      take: 50,
+    });
+
+    for (const n of persistent) {
+      notificaciones.push({
+        id: n.id,
+        tipo: (n.tipo as NotificationTipo) || 'MENSAJE',
+        titulo: n.titulo,
+        mensaje: n.mensaje,
+        fecha: n.fecha_creacion.toISOString(),
+        leida: n.leida,
+        link: n.link || undefined,
+        prioridad: n.prioridad,
+        entidad_tipo: n.entidad_tipo,
+        entidad_id: n.entidad_id,
+      });
+    }
 
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
     // -------------------------------------------------------
-    // 1. VENCIMIENTOS (compliance deadlines)
+    // 2. DYNAMIC VENCIMIENTOS (compliance deadlines)
     // -------------------------------------------------------
-    // Check ISSS presentation status
     const isssPresentado = await db.historialPresentacionISSS.findFirst({
       where: { periodo_mes: currentMonth, periodo_anio: currentYear, estado: 'PRESENTADO' },
     });
@@ -85,7 +124,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Check AFP presentation status
     const afpPresentado = await db.historialPresentacionAFP.findFirst({
       where: { periodo_mes: currentMonth, periodo_anio: currentYear, estado: 'PRESENTADO' },
     });
@@ -120,7 +158,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Check ISR presentation status
     const isrEntero = await db.historialEnteroISR.findFirst({
       where: { periodo_mes: currentMonth, periodo_anio: currentYear, estado: 'ENTERADO' },
     });
@@ -156,11 +193,9 @@ export async function GET(request: NextRequest) {
     }
 
     // -------------------------------------------------------
-    // 2. PLANILLA Status Changes
+    // 3. DYNAMIC PLANILLA + INCIDENCIA + SISTEMA (role-gated)
     // -------------------------------------------------------
-    // Only show for roles that handle planillas
     if (['ADMIN', 'ANALISTA', 'APROBADOR', 'GERENCIA', 'AUDITOR'].includes(user.rol)) {
-      // Planillas in CALCULADA state (pending approval)
       const planillasCalculadas = await db.planilla.findMany({
         where: { estado: 'CALCULADA' },
         orderBy: { fecha_creacion: 'desc' },
@@ -180,7 +215,6 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // Planillas recently approved (in last 7 days)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -207,9 +241,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // -------------------------------------------------------
-    // 3. INCIDENCIAS Pendientes
-    // -------------------------------------------------------
     if (['ADMIN', 'ANALISTA', 'APROBADOR'].includes(user.rol)) {
       const incidenciasPendientes = await db.incidenciaNomina.count({
         where: { estado: 'PENDIENTE' },
@@ -224,15 +255,11 @@ export async function GET(request: NextRequest) {
           mensaje: `Hay ${incidenciasPendientes} incidencia${incidenciasPendientes > 1 ? 's' : ''} pendiente${incidenciasPendientes > 1 ? 's' : ''} de revisión`,
           fecha: new Date(now.getTime() - 1800000).toISOString(),
           leida: isNotifRead,
-          link: '02-04',
+          link: '06-06',
         });
       }
     }
 
-    // -------------------------------------------------------
-    // 4. SISTEMA Alerts
-    // -------------------------------------------------------
-    // Employees missing ISSS number
     if (['ADMIN', 'ANALISTA'].includes(user.rol)) {
       const sinISSS = await db.empleado.count({ where: { estado: 'ACTIVO', numero_isss: null } });
       if (sinISSS > 0) {
@@ -248,7 +275,6 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // Employees missing AFP number
       const sinAFP = await db.empleado.count({ where: { estado: 'ACTIVO', numero_afp: null } });
       if (sinAFP > 0) {
         const isNotifRead = isRead(`sys-sin-afp`);
@@ -263,7 +289,6 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // Employees without active contract
       const sinContrato = await db.empleado.count({
         where: {
           estado: 'ACTIVO',
@@ -298,5 +323,34 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error getting notifications:', error);
     return NextResponse.json({ error: 'Error al obtener notificaciones' }, { status: 500 });
+  }
+}
+
+// ============================================================
+// POST /api/notificaciones  — mark ALL as read for this user
+// Body: { accion: 'marcar_todas_leidas' }
+// ============================================================
+export async function POST(request: NextRequest) {
+  const user = verifyAuth(request);
+  if (!user) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json().catch(() => ({}));
+    if (body?.accion === 'marcar_todas_leidas') {
+      const result = await db.notificacion.updateMany({
+        where: { usuario_id: user.userId, leida: false },
+        data: { leida: true, fecha_leida: new Date() },
+      });
+      return NextResponse.json({
+        success: true,
+        marcadas: result.count,
+      });
+    }
+    return NextResponse.json({ error: 'Acción no reconocida' }, { status: 400 });
+  } catch (error) {
+    console.error('Error in POST /api/notificaciones:', error);
+    return NextResponse.json({ error: 'Error al actualizar notificaciones' }, { status: 500 });
   }
 }

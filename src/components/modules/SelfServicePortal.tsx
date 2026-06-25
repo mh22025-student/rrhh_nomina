@@ -113,6 +113,37 @@ function calcTenure(fechaIngreso: string): { years: number; months: number } {
   return { years: Math.max(0, years), months: Math.max(0, months) };
 }
 
+// Format solicitud detalle for display. For VACACION, parses the JSON and
+// returns a human-readable summary ("15 Jul → 20 Jul · 5 días") plus the motivo.
+// For other tipos, returns the text as-is.
+function formatSolicitudDetalle(
+  detalle: string | null,
+  tipo: string
+): { summary: string; motivo?: string } | null {
+  if (!detalle) return null;
+  if (tipo === 'VACACION') {
+    try {
+      const parsed = JSON.parse(detalle);
+      const inicio = new Date(parsed.fecha_inicio).toLocaleDateString('es-SV', {
+        day: '2-digit',
+        month: 'short',
+      });
+      const fin = new Date(parsed.fecha_fin).toLocaleDateString('es-SV', {
+        day: '2-digit',
+        month: 'short',
+      });
+      const dias = parsed.dias || 0;
+      return {
+        summary: `${inicio} → ${fin} · ${dias} día${dias !== 1 ? 's' : ''}`,
+        motivo: parsed.motivo,
+      };
+    } catch {
+      return { summary: detalle };
+    }
+  }
+  return { summary: detalle };
+}
+
 // Circular Progress Component
 function CircularProgress({ value, size = 80, strokeWidth = 8, colorClass = 'text-emerald-500', trackClass = 'text-slate-100 dark:text-slate-700', children }: {
   value: number; size?: number; strokeWidth?: number;
@@ -317,6 +348,7 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
   const [showIncidenceDialog, setShowIncidenceDialog] = useState(false);
   const [showCertDialog, setShowCertDialog] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadingSolicitudId, setDownloadingSolicitudId] = useState<string | null>(null);
   const [requestType, setRequestType] = useState('');
   const [requestDetail, setRequestDetail] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -382,6 +414,32 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
     if (solicitudesFilter === 'TODAS') return data.solicitudes;
     return data.solicitudes.filter(s => s.estado === solicitudesFilter);
   }, [data, solicitudesFilter]);
+
+  // Check if employee is currently on vacation (any approved VACACION solicitud covering today)
+  const currentlyOnVacation = useMemo(() => {
+    if (!data) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (const s of data.solicitudes) {
+      if (s.tipo !== 'VACACION' || s.estado !== 'APROBADA' || !s.detalle) continue;
+      try {
+        const parsed = JSON.parse(s.detalle);
+        const start = new Date(parsed.fecha_inicio);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(parsed.fecha_fin);
+        end.setHours(23, 59, 59, 999);
+        if (today >= start && today <= end) {
+          return {
+            start: parsed.fecha_inicio as string,
+            end: parsed.fecha_fin as string,
+            dias: parsed.dias as number,
+            motivo: (parsed.motivo as string) || '',
+          };
+        }
+      } catch { /* skip malformed */ }
+    }
+    return null;
+  }, [data]);
 
   // Salary trend data (last 6 months) for bar chart
   const salaryTrend = useMemo(() => {
@@ -641,6 +699,38 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
     }
   };
 
+  const handleDownloadConstancia = async (solicitudId: string) => {
+    try {
+      setDownloadingSolicitudId(solicitudId);
+      const res = await fetch(`/api/selfservice/${solicitudId}/descargar`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error((errData as { error?: string }).error || 'Error al generar el documento');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Extract filename from Content-Disposition header if present
+      const disposition = res.headers.get('Content-Disposition');
+      const filenameMatch = disposition?.match(/filename=?"([^"]+)"?/);
+      a.download = filenameMatch ? filenameMatch[1] : `constancia-${solicitudId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: 'Documento descargado', description: 'El PDF de su constancia ha sido descargado' });
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'No se pudo generar el documento',
+        variant: 'destructive',
+      });
+    } finally {
+      setDownloadingSolicitudId(null);
+    }
+  };
+
   const handleCancelSolicitud = async (solicitudId: string) => {
     try {
       const res = await fetch('/api/selfservice', {
@@ -860,9 +950,19 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
                   <CheckCircle className="h-3 w-3 mr-1" />
                   ACTIVO
                 </Badge>
+                {currentlyOnVacation && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-amber-400/70 text-white border-amber-300/40 text-[11px] animate-pulse shadow-sm"
+                    title={`De vacaciones del ${fmtDateLong(currentlyOnVacation.start)} al ${fmtDateLong(currentlyOnVacation.end)}`}
+                  >
+                    <Plane className="h-3 w-3 mr-1" />
+                    EN VACACIONES
+                  </Badge>
+                )}
               </div>
               {/* Tenure info */}
-              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/15">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-white/15">
                 <div className="flex items-center gap-1.5 text-emerald-100 text-xs">
                   <CalendarDays className="h-3.5 w-3.5" />
                   <span>Desde {fmtDateLong(emp.fecha_ingreso)}</span>
@@ -871,11 +971,45 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
                   <Award className="h-3.5 w-3.5" />
                   <span>{tenure.years} año{tenure.years !== 1 ? 's' : ''} {tenure.months} mes{tenure.months !== 1 ? 'es' : ''} de servicio</span>
                 </div>
+                {currentlyOnVacation && (
+                  <div className="flex items-center gap-1.5 text-amber-100 text-xs font-medium ml-auto">
+                    <Plane className="h-3.5 w-3.5" />
+                    <span>De vacaciones: {fmtDate(currentlyOnVacation.start)} → {fmtDate(currentlyOnVacation.end)} ({currentlyOnVacation.dias} días)</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       </AnimatedCard>
+
+      {/* ========== VACATION BANNER (when currently on vacation) ========== */}
+      {currentlyOnVacation && (
+        <AnimatedCard delay={75}>
+          <div className="bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 rounded-xl p-4 text-white shadow-lg shadow-amber-500/20 relative overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_90%_30%,rgba(255,255,255,0.18),transparent_50%)]" />
+            <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/3" />
+            <div className="flex items-center gap-3 relative z-10">
+              <div className="flex-shrink-0 h-10 w-10 rounded-xl bg-white/25 backdrop-blur-sm flex items-center justify-center">
+                <Plane className="h-5 w-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-sm sm:text-base">Actualmente de vacaciones</h3>
+                  <span className="text-[10px] bg-white/25 px-2 py-0.5 rounded-full font-medium">EN CURSO</span>
+                </div>
+                <p className="text-amber-50 text-xs mt-0.5">
+                  Del {fmtDateLong(currentlyOnVacation.start)} al {fmtDateLong(currentlyOnVacation.end)}
+                  <span className="text-white/80 ml-1">· {currentlyOnVacation.dias} día{currentlyOnVacation.dias !== 1 ? 's' : ''}</span>
+                  {currentlyOnVacation.motivo && (
+                    <span className="text-white/80 italic ml-2">“{currentlyOnVacation.motivo}”</span>
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        </AnimatedCard>
+      )}
 
       {/* ========== QUICK STATS ROW ========== */}
       <AnimatedCard delay={100}>
@@ -1664,9 +1798,18 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
                                 <div className="min-w-0">
                                   <p className="font-medium text-slate-800 dark:text-slate-200 text-xs">{sol.tipo.replace(/_/g, ' ')}</p>
                                   <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{fmtDate(sol.fecha_solicitud)}</p>
-                                  {sol.detalle && (
-                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 line-clamp-2">{sol.detalle}</p>
-                                  )}
+                                  {(() => {
+                                    const det = formatSolicitudDetalle(sol.detalle, sol.tipo);
+                                    if (!det) return null;
+                                    return (
+                                      <div className="mt-0.5">
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2">{det.summary}</p>
+                                        {det.motivo && (
+                                          <p className="text-[9px] text-slate-400 dark:text-slate-500 italic line-clamp-1 mt-0.5">“{det.motivo}”</p>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                   {sol.fecha_resolucion && (
                                     <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1">
                                       <CheckCircle className="h-2.5 w-2.5" />
@@ -1679,6 +1822,22 @@ export default function SelfServicePortal({ accessToken }: SelfServicePortalProp
                                 <Badge className={`text-[10px] border ${getSolicitudBadge(sol.estado)}`}>
                                   {sol.estado}
                                 </Badge>
+                                {sol.estado === 'APROBADA' && ['CONSTANCIA_EMPLEO', 'CONSTANCIA_SALARIAL', 'CONSTANCIA_ISR'].includes(sol.tipo) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20 min-h-[44px] min-w-[44px]"
+                                    onClick={() => handleDownloadConstancia(sol.id)}
+                                    disabled={downloadingSolicitudId === sol.id}
+                                    title="Descargar documento PDF"
+                                  >
+                                    {downloadingSolicitudId === sol.id ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Download className="h-3.5 w-3.5" />
+                                    )}
+                                  </Button>
+                                )}
                                 {sol.estado === 'PENDIENTE' && (
                                   <Button
                                     variant="ghost"

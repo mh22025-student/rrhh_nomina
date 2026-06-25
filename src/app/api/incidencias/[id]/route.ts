@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyAuth, requireRoles } from '@/lib/auth-middleware';
 import type { UserRole } from '@/lib/auth';
+import { notifyEmpleado } from '@/lib/notifications';
 
 // PUT /api/incidencias/[id] - Update incidencia (approve, reject, edit)
 export async function PUT(
@@ -83,6 +84,39 @@ export async function PUT(
           aprobada_por: { select: { nombre: true, apellido: true } },
         },
       });
+
+      // ── Notify the employee that their incidencia was resolved ──
+      if (resultWithRelations?.empleado) {
+        const tipoLabels: Record<string, string> = {
+          HORAS_EXTRA: 'Horas Extra',
+          AUSENCIA: 'Ausencia',
+          INCAPACIDAD_ISSS: 'Incapacidad ISSS',
+          PERMISO: 'Permiso',
+          COMISION: 'Comisión',
+          BONO: 'Bono',
+          DESCUENTO_ESPECIAL: 'Descuento Especial',
+        };
+        const tipoLabel = tipoLabels[existing.tipo] || existing.tipo;
+        const empleadoNombre = `${resultWithRelations.empleado.primer_nombre} ${resultWithRelations.empleado.primer_apellido}`;
+        const titulo =
+          body.estado === 'APROBADA'
+            ? `Incidencia de ${tipoLabel} aprobada`
+            : `Incidencia de ${tipoLabel} rechazada`;
+        const mensaje =
+          body.estado === 'APROBADA'
+            ? `Hola ${empleadoNombre}, tu incidencia de ${tipoLabel.toLowerCase()} ha sido aprobada.`
+            : `Hola ${empleadoNombre}, tu incidencia de ${tipoLabel.toLowerCase()} ha sido rechazada.${comment ? ` Motivo: ${comment}` : ' Sin comentario adicional.'}`;
+
+        await notifyEmpleado(resultWithRelations.empleado.id, {
+          tipo: 'INCIDENCIA',
+          titulo,
+          mensaje,
+          link: '06-05',
+          entidad_tipo: 'IncidenciaNomina',
+          entidad_id: id,
+          prioridad: body.estado === 'APROBADA' ? 'MEDIA' : 'ALTA',
+        });
+      }
 
       return NextResponse.json({ data: resultWithRelations, comentario: comment || null });
     }

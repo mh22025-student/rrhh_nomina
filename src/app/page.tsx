@@ -10,7 +10,8 @@ import {
   Sun, Moon, TrendingUp, TrendingDown, Bell, Info, AlertTriangle,
   PieChart, CalendarDays, Megaphone, Search, Clock, Star, Pin,
   PanelLeftClose, PanelLeft, ChevronsLeft, ChevronsRight,
-  Lightbulb, ArrowRight, FileCheck, Landmark, Building2, Receipt, ShieldCheck
+  Lightbulb, ArrowRight, FileCheck, Landmark, Building2, Receipt, ShieldCheck,
+  Inbox
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +53,7 @@ import OrgChart from '@/components/modules/OrgChart';
 import Integrations from '@/components/modules/Integrations';
 import AuditLog from '@/components/modules/AuditLog';
 import SelfServicePortal from '@/components/modules/SelfServicePortal';
+import SolicitudesBandeja from '@/components/modules/SolicitudesBandeja';
 import ProfileDescriptiveForm from '@/components/modules/ProfileDescriptiveForm';
 import ChangePasswordDialog from '@/components/ChangePasswordDialog';
 import NotificationBell from '@/components/NotificationBell';
@@ -101,7 +103,7 @@ type ViewId =
   | '03-01' | '03-02' | '03-03'
   | '04-01' | '04-02' | '04-03' | '04-04' | '04-05' | '04-06' | '04-07' | '04-08'
   | '05-01' | '05-02' | '05-03' | '05-04'
-  | '06-01' | '06-02' | '06-03' | '06-04' | '06-05'
+  | '06-01' | '06-02' | '06-03' | '06-04' | '06-05' | '06-06'
   | '01-03';
 
 interface NavItem {
@@ -178,12 +180,13 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Módulo 06 - Admin',
     icon: Settings,
-    roles: ['ADMIN', 'APROBADOR'],
+    roles: ['ADMIN', 'APROBADOR', 'ANALISTA'],
     items: [
       { id: '06-01', label: 'Parámetros Legales', icon: ScaleIcon },
       { id: '06-02', label: 'Organigrama', icon: GitBranch },
       { id: '06-03', label: 'Integraciones', icon: Plug },
       { id: '06-04', label: 'Bitácora', icon: ScrollText },
+      { id: '06-06', label: 'Bandeja Solicitudes', icon: Inbox },
     ],
   },
   {
@@ -205,18 +208,19 @@ function getVisibleItems(group: NavGroup, role: UserRole): NavItem[] {
       'Módulo 03 - Perfiles': ['03-01', '03-02', '03-03'],
       'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-04', '04-05', '04-06', '04-07', '04-08'],
       'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
-      'Módulo 06 - Admin': ['06-01', '06-02', '06-03', '06-04'],
+      'Módulo 06 - Admin': ['06-01', '06-02', '06-03', '06-04', '06-06'],
       'Vista Empleado': [],
     },
     ANALISTA: {
       'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
       'Módulo 03 - Perfiles': ['03-01', '03-02'],
       'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-06', '04-08'],
+      'Módulo 06 - Admin': ['06-06'],
     },
     APROBADOR: {
       'Módulo 03 - Perfiles': ['03-03'],
       'Módulo 04 - Nómina': ['04-04', '04-05', '04-07', '04-08'],
-      'Módulo 06 - Admin': ['06-01'],
+      'Módulo 06 - Admin': ['06-01', '06-06'],
     },
     GERENCIA: {
       'Módulo 04 - Nómina': ['04-01', '04-08'],
@@ -291,6 +295,7 @@ const VIEW_LABELS: Record<ViewId, string> = {
   '06-03': 'Integraciones',
   '06-04': 'Bitácora',
   '06-05': 'Mi Portal',
+  '06-06': 'Bandeja de Solicitudes',
 };
 
 // ============================================================
@@ -3094,6 +3099,8 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
         return <AuditLog accessToken={accessToken || ''} userRole={user.rol} />;
       case '06-05':
         return <SelfServicePortal accessToken={accessToken || ''} userRole={user.rol} />;
+      case '06-06':
+        return <SolicitudesBandeja accessToken={accessToken || ''} userRole={user.rol} />;
       default:
         return <PlaceholderView viewId={currentView} />;
     }

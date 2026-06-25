@@ -1100,76 +1100,85 @@
    9. PRINT STYLES
    ======================================================================== */
 
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
 @media print {
-  /* Hide non-essential UI */
-  aside,
-  nav,
-  header,
-  .sidebar,
-  .header-bar,
-  .glass-sidebar,
-  .glass-header,
-  button:not(.print-button),
-  [role="navigation"],
-  [data-print-hide],
-  .no-print {
-    display: none !important;
+  /* ============================================================
+     PRINT ISOLATION STRATEGY
+     Hide ALL page content, then show ONLY the print container.
+     This prevents the app UI (sidebar, KPIs, module headers,
+     tables) from overlapping with the print document.
+     ============================================================ */
+
+  /* Hide every descendant of body by default */
+  body * {
+    visibility: hidden !important;
   }
 
-  /* Reset main content layout */
-  main {
+  /* Show only the dedicated print containers and their content */
+  #print-container,
+  #print-container *,
+  #employee-print-container,
+  #employee-print-container * {
+    visibility: visible !important;
+  }
+
+  /* Position print containers at the top-left of the page, full width.
+     position: absolute (not fixed) so the content flows naturally
+     across multiple printed pages instead of repeating on each page. */
+  #print-container,
+  #employee-print-container {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+    display: block !important;
+    z-index: 99999 !important;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Preserve colors inside print containers.
+     The previous global rule `* { background: transparent !important }`
+     stripped all backgrounds. We override it here for print containers
+     so the green headers, alternating rows, and totals boxes render
+     correctly in the PDF. */
+  #print-container *,
+  #employee-print-container * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Body and html reset for clean print */
+  html, body {
     margin: 0 !important;
     padding: 0 !important;
+    background: white !important;
     width: 100% !important;
+  }
+
+  /* Disable the "show URL after links" behavior — it pollutes the
+     printed document with long preview URLs that don't belong. */
+  a[href]::after {
+    content: none !important;
+  }
+
+  /* Ensure images don't overflow the page */
+  img {
     max-width: 100% !important;
-    background: white !important;
-    color: black !important;
+    page-break-inside: avoid;
   }
 
-  /* Print-friendly body */
-  body {
-    background: white !important;
-    color: black !important;
-    font-size: 12pt !important;
-    line-height: 1.5 !important;
-  }
-
-  /* Print-friendly table styles */
-  table {
-    border-collapse: collapse !important;
-    width: 100% !important;
-  }
-  table th,
-  table td {
-    border: 1px solid #333 !important;
-    padding: 6px 8px !important;
-    text-align: left !important;
-    font-size: 10pt !important;
-    color: black !important;
-    background: transparent !important;
-  }
-  table th {
-    background: #f0f0f0 !important;
-    font-weight: 600 !important;
-  }
-
-  /* Remove backgrounds and shadows */
-  *,
-  *::before,
-  *::after {
-    background: transparent !important;
-    color: black !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-  }
-
-  /* Restore minimal borders for structure */
-  .card, .glass-card {
-    border: 1px solid #ccc !important;
-    break-inside: avoid;
-  }
-
-  /* Page break hints */
+  /* Page break hints (used by some print documents) */
   .page-break-before {
     page-break-before: always;
     break-before: page;
@@ -1183,20 +1192,20 @@
     break-inside: avoid;
   }
 
-  /* Links - show URL in print */
-  a[href]::after {
-    content: " (" attr(href) ")";
-    font-size: 9pt;
-    color: #666;
-  }
-  a[href^="#"]::after {
-    content: none;
-  }
-
-  /* Ensure images don't overflow */
-  img {
-    max-width: 100% !important;
+  /* Force table rows to not break across pages */
+  #print-container table tr,
+  #employee-print-container table tr {
     page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  /* Repeat table headers on each printed page */
+  #print-container table thead,
+  #employee-print-container table thead {
+    display: table-header-group;
+  }
+  #print-container table tfoot,
+  #employee-print-container table tfoot {
+    display: table-footer-group;
   }
 }
 

@@ -276,109 +276,131 @@ export default function PayrollPeriods({ accessToken, userRole, onNavigateToSumm
       if (!printContainer) return;
 
       printContainer.innerHTML = `
-        <div style="font-family: 'Inter', Arial, sans-serif; color: #1a1a1a; max-width: 100%; padding: 20px;">
+        <div style="font-family: 'Inter', Arial, Helvetica, sans-serif; color: #1a1a1a; width: 100%; padding: 8px 12px; box-sizing: border-box;">
           <!-- Header -->
-          <div style="text-align: center; margin-bottom: 24px; border-bottom: 3px solid #059669; padding-bottom: 16px;">
-            <h1 style="font-size: 16pt; margin: 0 0 4px 0; color: #065f46; letter-spacing: 0.5px;">Ministerio de Hacienda — República de El Salvador</h1>
-            <h2 style="font-size: 13pt; margin: 0 0 8px 0; color: #047857;">Resumen de Planilla de Nómina</h2>
+          <div style="text-align: center; margin-bottom: 18px; border-bottom: 3px solid #059669; padding-bottom: 14px;">
+            <h1 style="font-size: 15pt; margin: 0 0 4px 0; color: #065f46; letter-spacing: 0.3px; font-weight: 700;">Ministerio de Hacienda — República de El Salvador</h1>
+            <h2 style="font-size: 12pt; margin: 0 0 6px 0; color: #047857; font-weight: 600;">Resumen de Planilla de Nómina</h2>
             <p style="font-size: 9pt; color: #6b7280; margin: 0;">Generado: ${new Date().toLocaleDateString('es-SV', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
           </div>
 
-          <!-- Planilla Details -->
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt;">
+          <!-- Planilla Details: 4-column grid using a table for layout reliability in print -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 9.5pt; table-layout: fixed;">
+            <colgroup>
+              <col style="width: 25%;"><col style="width: 25%;"><col style="width: 25%;"><col style="width: 25%;">
+            </colgroup>
             <tr>
-              <td style="padding: 4px 8px; width: 25%;"><strong>Código:</strong> ${planilla.codigo_planilla}</td>
-              <td style="padding: 4px 8px; width: 25%;"><strong>Tipo:</strong> ${planilla.tipo === 'MENSUAL' ? 'Mensual' : 'Quincenal'}</td>
-              <td style="padding: 4px 8px; width: 25%;"><strong>Estado:</strong> ${estadoLabels[planilla.estado] || planilla.estado}</td>
-              <td style="padding: 4px 8px; width: 25%;"><strong>Empleados:</strong> ${planilla.total_empleados}</td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Código:</strong> <span style="color: #111827;">${planilla.codigo_planilla}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Tipo:</strong> <span style="color: #111827;">${planilla.tipo === 'MENSUAL' ? 'Mensual' : 'Quincenal'}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Estado:</strong> <span style="color: #111827;">${estadoLabels[planilla.estado] || planilla.estado}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Empleados:</strong> <span style="color: #111827;">${planilla.total_empleados}</span></td>
             </tr>
             <tr>
-              <td style="padding: 4px 8px;"><strong>Período:</strong> ${new Date(planilla.fecha_inicio_periodo).toLocaleDateString('es-SV')} — ${new Date(planilla.fecha_fin_periodo).toLocaleDateString('es-SV')}</td>
-              <td style="padding: 4px 8px;"><strong>Fecha Cálculo:</strong> ${planilla.fecha_calculo ? new Date(planilla.fecha_calculo).toLocaleDateString('es-SV') : '—'}</td>
-              <td style="padding: 4px 8px;"><strong>Calculada por:</strong> ${planilla.calculada_por || '—'}</td>
-              <td style="padding: 4px 8px;"><strong>Aprobada por:</strong> ${planilla.aprobada_por || '—'}</td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Período:</strong> <span style="color: #111827;">${new Date(planilla.fecha_inicio_periodo).toLocaleDateString('es-SV')} — ${new Date(planilla.fecha_fin_periodo).toLocaleDateString('es-SV')}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Fecha Cálculo:</strong> <span style="color: #111827;">${planilla.fecha_calculo ? new Date(planilla.fecha_calculo).toLocaleDateString('es-SV') : '—'}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Calculada por:</strong> <span style="color: #111827;">${planilla.calculada_por || '—'}</span></td>
+              <td style="padding: 5px 8px; vertical-align: top;"><strong style="color: #374151;">Aprobada por:</strong> <span style="color: #111827;">${planilla.aprobada_por || '—'}</span></td>
             </tr>
           </table>
 
-          <!-- Employee Table -->
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt;">
+          <!-- Employee Table with FIXED column widths to prevent overlap -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 8.5pt; table-layout: fixed;">
+            <colgroup>
+              <col style="width: 4%;">
+              <col style="width: 28%;">
+              <col style="width: 16%;">
+              <col style="width: 13%;">
+              <col style="width: 9%;">
+              <col style="width: 9%;">
+              <col style="width: 9%;">
+              <col style="width: 12%;">
+            </colgroup>
             <thead>
-              <tr style="background-color: #059669 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: center; width: 30px; color: white !important;">#</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: left; color: white !important;">Nombre</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: left; color: white !important;">Puesto</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">Salario Bruto</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">ISSS</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">AFP</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">ISR</th>
-                <th style="padding: 8px 6px; border: 1px solid #047857; text-align: right; color: white !important;">Salario Neto</th>
+              <tr style="background-color: #059669 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <th style="padding: 7px 4px; border: 1px solid #047857; text-align: center; color: #ffffff !important; font-weight: 600;">#</th>
+                <th style="padding: 7px 6px; border: 1px solid #047857; text-align: left; color: #ffffff !important; font-weight: 600;">Nombre</th>
+                <th style="padding: 7px 6px; border: 1px solid #047857; text-align: left; color: #ffffff !important; font-weight: 600;">Puesto</th>
+                <th style="padding: 7px 6px; border: 1px solid #047857; text-align: right; color: #ffffff !important; font-weight: 600;">Salario Bruto</th>
+                <th style="padding: 7px 4px; border: 1px solid #047857; text-align: right; color: #ffffff !important; font-weight: 600;">ISSS</th>
+                <th style="padding: 7px 4px; border: 1px solid #047857; text-align: right; color: #ffffff !important; font-weight: 600;">AFP</th>
+                <th style="padding: 7px 4px; border: 1px solid #047857; text-align: right; color: #ffffff !important; font-weight: 600;">ISR</th>
+                <th style="padding: 7px 6px; border: 1px solid #047857; text-align: right; color: #ffffff !important; font-weight: 600;">Salario Neto</th>
               </tr>
             </thead>
             <tbody>
               ${detalles.map((d: { empleado: { primer_nombre: string; segundo_nombre: string | null; primer_apellido: string; segundo_apellido: string | null; area: { nombre: string } | null }; salario_bruto: number; isss_laboral: number; afp_laboral: number; isr_retenido: number; salario_neto: number }, i: number) => {
                 const nombre = `${d.empleado.primer_nombre}${d.empleado.segundo_nombre ? ' ' + d.empleado.segundo_nombre : ''} ${d.empleado.primer_apellido}${d.empleado.segundo_apellido ? ' ' + d.empleado.segundo_apellido : ''}`;
-                return `<tr style="background-color: ${i % 2 === 0 ? '#ffffff' : '#f0fdf4'} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: center;">${i + 1}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db;">${nombre}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db;">${d.empleado.area?.nombre || '—'}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(d.salario_bruto)}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(d.isss_laboral)}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(d.afp_laboral)}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(d.isr_retenido)}</td>
-                  <td style="padding: 6px; border: 1px solid #d1d5db; text-align: right; font-family: monospace; font-weight: 700;">${fmtPrint(d.salario_neto)}</td>
+                const rowBg = i % 2 === 0 ? '#ffffff' : '#f0fdf4';
+                return `<tr style="background-color: ${rowBg} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                  <td style="padding: 5px 4px; border: 1px solid #d1d5db; text-align: center; color: #6b7280;">${i + 1}</td>
+                  <td style="padding: 5px 6px; border: 1px solid #d1d5db; color: #111827; word-wrap: break-word; overflow-wrap: break-word;">${nombre}</td>
+                  <td style="padding: 5px 6px; border: 1px solid #d1d5db; color: #374151;">${d.empleado.area?.nombre || '—'}</td>
+                  <td style="padding: 5px 6px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #111827;">${fmtPrint(d.salario_bruto)}</td>
+                  <td style="padding: 5px 4px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #b91c1c;">${fmtPrint(d.isss_laboral)}</td>
+                  <td style="padding: 5px 4px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #c2410c;">${fmtPrint(d.afp_laboral)}</td>
+                  <td style="padding: 5px 4px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #b45309;">${fmtPrint(d.isr_retenido)}</td>
+                  <td style="padding: 5px 6px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPrint(d.salario_neto)}</td>
                 </tr>`;
               }).join('')}
               <!-- Totals Row -->
-              <tr style="background-color: #ecfdf5 !important; font-weight: 700 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                <td style="padding: 8px; border: 1px solid #047857;" colspan="3">TOTALES</td>
-                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(planilla.total_salarios_brutos)}</td>
-                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(totalIsssLaboral)}</td>
-                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(totalAfpLaboral)}</td>
-                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(totalIsr)}</td>
-                <td style="padding: 8px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(planilla.total_neto_a_pagar)}</td>
+              <tr style="background-color: #ecfdf5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <td style="padding: 7px 4px; border: 1px solid #047857; color: #065f46;" colspan="3"><strong>TOTALES</strong></td>
+                <td style="padding: 7px 6px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPrint(planilla.total_salarios_brutos)}</td>
+                <td style="padding: 7px 4px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPrint(totalIsssLaboral)}</td>
+                <td style="padding: 7px 4px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPrint(totalAfpLaboral)}</td>
+                <td style="padding: 7px 4px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPrint(totalIsr)}</td>
+                <td style="padding: 7px 6px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPrint(planilla.total_neto_a_pagar)}</td>
               </tr>
             </tbody>
           </table>
 
-          <!-- Cargas Patronales Summary -->
-          <div style="margin-bottom: 20px;">
-            <h3 style="font-size: 11pt; color: #065f46; margin: 0 0 8px 0; border-bottom: 1px solid #059669; padding-bottom: 4px;">Cargas Patronales</h3>
-            <table style="width: 60%; border-collapse: collapse; font-size: 10pt;">
-              <tr style="background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                <td style="padding: 6px 10px; border: 1px solid #d1d5db;">ISSS Patronal (7.5%)</td>
-                <td style="padding: 6px 10px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(totalIsssPatronal)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 10px; border: 1px solid #d1d5db;">AFP Patronal (7.75%)</td>
-                <td style="padding: 6px 10px; border: 1px solid #d1d5db; text-align: right; font-family: monospace;">${fmtPrint(totalAfpPatronal)}</td>
-              </tr>
-              <tr style="background-color: #ecfdf5 !important; font-weight: 700 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                <td style="padding: 6px 10px; border: 1px solid #047857;">Total Cargas Patronales</td>
-                <td style="padding: 6px 10px; border: 1px solid #047857; text-align: right; font-family: monospace;">${fmtPrint(cargasPatronales)}</td>
-              </tr>
-            </table>
-          </div>
-
-          <!-- Summary Box -->
-          <div style="margin-bottom: 20px; padding: 12px; border: 2px solid #059669; border-radius: 4px; background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-            <table style="width: 100%; font-size: 11pt;">
-              <tr>
-                <td style="padding: 4px;"><strong>Total Salarios Brutos:</strong></td>
-                <td style="padding: 4px; text-align: right; font-family: monospace;">${fmtPrint(planilla.total_salarios_brutos)}</td>
-                <td style="padding: 4px; padding-left: 20px;"><strong>Total Deducciones:</strong></td>
-                <td style="padding: 4px; text-align: right; font-family: monospace;">${fmtPrint(deducciones)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 4px;"><strong>Total Neto a Pagar:</strong></td>
-                <td style="padding: 4px; text-align: right; font-family: monospace; font-size: 13pt; color: #065f46;">${fmtPrint(planilla.total_neto_a_pagar)}</td>
-                <td style="padding: 4px; padding-left: 20px;"><strong>Cargas Patronales:</strong></td>
-                <td style="padding: 4px; text-align: right; font-family: monospace;">${fmtPrint(cargasPatronales)}</td>
-              </tr>
-            </table>
-          </div>
+          <!-- Cargas Patronales + Resumen Final: side-by-side for better space use -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; table-layout: fixed;">
+            <colgroup>
+              <col style="width: 50%;"><col style="width: 50%;">
+            </colgroup>
+            <tr>
+              <!-- Cargas Patronales (left) -->
+              <td style="vertical-align: top; padding-right: 8px;">
+                <h3 style="font-size: 10pt; color: #065f46; margin: 0 0 6px 0; border-bottom: 2px solid #059669; padding-bottom: 3px; font-weight: 700;">Cargas Patronales</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                  <tr style="background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; color: #374151;">ISSS Patronal (7.5%)</td>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #111827; width: 40%;">${fmtPrint(totalIsssPatronal)}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; color: #374151;">AFP Patronal (7.75%)</td>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #111827;">${fmtPrint(totalAfpPatronal)}</td>
+                  </tr>
+                  <tr style="background-color: #ecfdf5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <td style="padding: 6px 8px; border: 1px solid #047857; color: #065f46; font-weight: 700;">Total Cargas Patronales</td>
+                    <td style="padding: 6px 8px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46;">${fmtPrint(cargasPatronales)}</td>
+                  </tr>
+                </table>
+              </td>
+              <!-- Resumen Final (right) -->
+              <td style="vertical-align: top; padding-left: 8px;">
+                <h3 style="font-size: 10pt; color: #065f46; margin: 0 0 6px 0; border-bottom: 2px solid #059669; padding-bottom: 3px; font-weight: 700;">Resumen Final</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                  <tr style="background-color: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; color: #374151;">Total Salarios Brutos</td>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #111827; width: 40%;">${fmtPrint(planilla.total_salarios_brutos)}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; color: #374151;">Total Deducciones</td>
+                    <td style="padding: 5px 8px; border: 1px solid #d1d5db; text-align: right; font-family: 'Courier New', monospace; color: #b91c1c;">${fmtPrint(deducciones)}</td>
+                  </tr>
+                  <tr style="background-color: #ecfdf5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <td style="padding: 6px 8px; border: 1px solid #047857; color: #065f46; font-weight: 700;">Total Neto a Pagar</td>
+                    <td style="padding: 6px 8px; border: 1px solid #047857; text-align: right; font-family: 'Courier New', monospace; font-weight: 700; color: #065f46; font-size: 11pt;">${fmtPrint(planilla.total_neto_a_pagar)}</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
 
           <!-- Legal Footer -->
-          <div style="text-align: center; margin-top: 24px; padding-top: 12px; border-top: 1px solid #d1d5db; font-size: 8pt; color: #6b7280;">
+          <div style="text-align: center; margin-top: 18px; padding-top: 10px; border-top: 1px solid #d1d5db; font-size: 8pt; color: #6b7280;">
             <p style="margin: 0;">Documento generado conforme a la legislación laboral de El Salvador</p>
             <p style="margin: 2px 0 0 0;">Código de Trabajo, Ley del ISSS, Ley del Sistema de Ahorro para Pensiones — Ministerio de Hacienda</p>
           </div>
@@ -1001,10 +1023,12 @@ export default function PayrollPeriods({ accessToken, userRole, onNavigateToSumm
         </div>
       )}
 
-      {/* Hidden Print Container */}
+      {/* Hidden Print Container — content injected by handlePrintSummary.
+          The @media print CSS in globals.css isolates it so only this
+          container's content appears in the printed PDF. */}
       <div
         id="print-container"
-        style={{ display: 'none', position: 'fixed', top: 0, left: 0, width: '100%', background: 'white', zIndex: 9999, padding: '20px' }}
+        style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100%', background: 'white', zIndex: 9999 }}
       />
     </div>
   );
