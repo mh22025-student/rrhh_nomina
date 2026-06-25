@@ -3441,3 +3441,31 @@ Stage Summary:
 - Solución: la API ahora devuelve `stats` pre-agregados sobre el universo filtrado (sin `estado`, sin paginación). El frontend consume esos `stats` para KPIs y `StatisticsPanel`, garantizando que suma de estados = total = suma del gráfico de torta.
 - Beneficio adicional: el gráfico de torta, tendencia mensual, tiempo promedio y tasa de aprobación ahora también reflejan el universo real, no solo la página visible.
 - Filosofía: los KPIs/gráficos muestran el panorama completo (universo filtrado sin estado); la lista paginada muestra lo filtrado (incluido estado). Así el usuario ve el contexto global mientras navega.
+
+---
+Task ID: perfil-catalog-nuevo-redirect-1
+Agent: main (Z.ai Code)
+Task: En el Catálogo de Perfiles de Puesto, el botón "Nuevo Perfil" debe redirigir al Formulario de Perfil (vista 03-02, más completo) en lugar de abrir el diálogo reducido de creación.
+
+Work Log:
+- Identificación de componentes: `ProfileCatalog.tsx` (vista 03-01) tenía un botón "Nuevo Perfil" que abría un `<Dialog>` con un formulario reducido (código, nombre, área, banda, sector, puntos, propósito, funciones, requisitos, responsabilidades, condiciones). `ProfileDescriptiveForm.tsx` (vista 03-02) es el formulario completo con valoración por puntos, secciones expandibles (A, B, C, D, valuación), historial de versiones, etc.
+- Navegación existente en `page.tsx`: `setCurrentView('03-02')` renderiza `ProfileDescriptiveForm`. El componente ya arranca en `isNewMode=true` por defecto, así que navegar a esa vista sin parámetro = modo creación nueva. Perfecto para el caso de uso.
+- Cambios en `src/components/modules/ProfileCatalog.tsx`:
+  * Añadida prop `onNavigateToNew?: () => void` a `ProfileCatalogProps`.
+  * Signature actualizada para recibir `onNavigateToNew`.
+  * Botón "Nuevo Perfil": `onClick` cambiado de `setShowCreateDialog(true)` a `onNavigateToNew?.()`.
+  * Eliminado código muerto: estado `showCreateDialog`, `creating`, `form`/`setForm`; función `handleCreate`; bloque JSX completo del `<Dialog>` de creación.
+  * Limpieza de imports sin usar: `Label`, `Textarea`, `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription`. (Se conservan `Select*` e `Input` porque se usan en los filtros del catálogo.)
+- Cambios en `src/app/page.tsx`: en el `case '03-01'` se pasó `onNavigateToNew={() => setCurrentView('03-02')}` a `<ProfileCatalog>`.
+- Lint: `bun run lint` → 0 errores.
+- Verificación con agent-browser + VLM:
+  * Navegué a Catálogo de Perfiles → VLM confirmó "página Catálogo de Perfiles de Puesto, botón verde Nuevo Perfil visible".
+  * Clic en "Nuevo Perfil" → navegó a la vista 03-02.
+  * VLM confirmó: "Formulario de Perfil completa (no diálogo/modal), título 'Perfil Descriptivo de Puesto', estado 'Creando nuevo perfil', secciones Identificación del Puesto + Propósito y Funciones visibles".
+
+Stage Summary:
+- Tipo: Mejor UX — unificar el flujo de creación de perfiles en el formulario completo (03-02) en lugar del diálogo reducido del catálogo (03-01).
+- Antes: "Nuevo Perfil" abría un modal con campos básicos, duplicando lógica y siendo menos completo que el formulario dedicado.
+- Después: "Nuevo Perfil" navega al Formulario de Perfil (03-02) en modo creación nueva, que incluye valoración por puntos, secciones A/B/C/D, historial de versiones y todos los campos del esquema.
+- Se eliminó ~90 líneas de código muerto (diálogo + handler + state + imports) del ProfileCatalog, reduciendo complejidad.
+- El diálogo de DETALLE (ProfileDetailDialog) se conserva intacto — solo se eliminó el diálogo de CREACIÓN.

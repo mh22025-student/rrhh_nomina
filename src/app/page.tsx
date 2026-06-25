@@ -3065,7 +3065,7 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
       case '04-07':
         return <LiquidationView accessToken={accessToken || ''} userRole={user.rol} />;
       case '03-01':
-        return <ProfileCatalog accessToken={accessToken || ''} userRole={user.rol} />;
+        return <ProfileCatalog accessToken={accessToken || ''} userRole={user.rol} onNavigateToNew={() => setCurrentView('03-02')} />;
       case '03-02':
         return <ProfileDescriptiveForm accessToken={accessToken || ''} userRole={user.rol} />;
       case '03-03':

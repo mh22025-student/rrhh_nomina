@@ -8,11 +8,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import ProfileDetailDialog, { type Perfil } from './ProfileDetailDialog';
@@ -20,6 +17,9 @@ import ProfileDetailDialog, { type Perfil } from './ProfileDetailDialog';
 interface ProfileCatalogProps {
   accessToken: string;
   userRole: string;
+  // Al pulsar "Nuevo Perfil" se navega al Formulario de Perfil (vista 03-02),
+  // que es más completo que el diálogo reducido que tenía este catálogo.
+  onNavigateToNew?: () => void;
 }
 
 interface Area { id: string; nombre: string; codigo: string; }
@@ -92,7 +92,7 @@ function SalaryRangeBar({ min, max }: { min: number; max: number }) {
   );
 }
 
-export default function ProfileCatalog({ accessToken, userRole }: ProfileCatalogProps) {
+export default function ProfileCatalog({ accessToken, userRole, onNavigateToNew }: ProfileCatalogProps) {
   const { toast } = useToast();
   const [perfiles, setPerfiles] = useState<Perfil[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -103,17 +103,7 @@ export default function ProfileCatalog({ accessToken, userRole }: ProfileCatalog
   const [filterEstado, setFilterEstado] = useState('all');
   const [filterBanda, setFilterBanda] = useState('all');
   const [selectedPerfil, setSelectedPerfil] = useState<Perfil | null>(null);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
-  const [creating, setCreating] = useState(false);
-
-  // New profile form
-  const [form, setForm] = useState({
-    codigo: '', nombre_puesto: '', area_id: '', banda_salarial_id: '',
-    sector_laboral: 'COMERCIO', proposito: '', funciones_esenciales: '',
-    requisitos_educacion: '', requisitos_experiencia: '', requisitos_habilidades: '',
-    responsabilidades: '', condiciones_trabajo: '', puntos_total: 0,
-  });
 
   const fetchPerfiles = useCallback(async () => {
     setLoading(true);
@@ -171,34 +161,6 @@ export default function ProfileCatalog({ accessToken, userRole }: ProfileCatalog
     return { totalPerfiles, vigentes, avgPuntos, uniqueBandas };
   }, [perfiles]);
 
-  const handleCreate = async () => {
-    if (!form.codigo || !form.nombre_puesto || !form.area_id) {
-      toast({ title: 'Error', description: 'Código, nombre y área son requeridos', variant: 'destructive' });
-      return;
-    }
-    setCreating(true);
-    try {
-      const res = await fetch('/api/perfiles', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      if (res.ok) {
-        toast({ title: 'Perfil creado', description: 'El perfil se ha creado exitosamente' });
-        setShowCreateDialog(false);
-        setForm({ codigo: '', nombre_puesto: '', area_id: '', banda_salarial_id: '', sector_laboral: 'COMERCIO', proposito: '', funciones_esenciales: '', requisitos_educacion: '', requisitos_experiencia: '', requisitos_habilidades: '', responsabilidades: '', condiciones_trabajo: '', puntos_total: 0 });
-        fetchPerfiles();
-      } else {
-        const data = await res.json();
-        toast({ title: 'Error', description: data.error || 'Error al crear perfil', variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Error de conexión', variant: 'destructive' });
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const handleViewDetail = async (id: string) => {
     try {
       const res = await fetch(`/api/perfiles/${id}`, {
@@ -241,7 +203,7 @@ export default function ProfileCatalog({ accessToken, userRole }: ProfileCatalog
           <p className="text-sm text-slate-500 dark:text-slate-400">Gestión de descripciones y valoraciones de puestos</p>
         </div>
         {canCreate && (
-          <Button onClick={() => setShowCreateDialog(true)} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800">
+          <Button onClick={() => onNavigateToNew?.()} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800">
             <Plus className="h-4 w-4 mr-2" /> Nuevo Perfil
           </Button>
         )}
@@ -448,96 +410,6 @@ export default function ProfileCatalog({ accessToken, userRole }: ProfileCatalog
           ))}
         </div>
       )}
-
-      {/* Create Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-slate-900 dark:border-slate-800">
-          <DialogHeader>
-            <DialogTitle className="dark:text-slate-100">Nuevo Perfil de Puesto</DialogTitle>
-            <DialogDescription className="dark:text-slate-400">Complete la información para crear un nuevo perfil</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
-            <div className="space-y-2">
-              <Label className="dark:text-slate-300">Código *</Label>
-              <Input placeholder="PP-001" value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
-            </div>
-            <div className="space-y-2">
-              <Label className="dark:text-slate-300">Nombre del Puesto *</Label>
-              <Input placeholder="Nombre del puesto" value={form.nombre_puesto} onChange={(e) => setForm({ ...form, nombre_puesto: e.target.value })} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
-            </div>
-            <div className="space-y-2">
-              <Label className="dark:text-slate-300">Área *</Label>
-              <Select value={form.area_id} onValueChange={(v) => setForm({ ...form, area_id: v })}>
-                <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Seleccionar área" /></SelectTrigger>
-                <SelectContent>
-                  {Array.isArray(areas) && areas.map((a) => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="dark:text-slate-300">Banda Salarial</Label>
-              <Select value={form.banda_salarial_id || 'none'} onValueChange={(v) => setForm({ ...form, banda_salarial_id: v === 'none' ? '' : v })}>
-                <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue placeholder="Seleccionar banda" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sin banda</SelectItem>
-                  {bandas.map((b) => <SelectItem key={b.id} value={b.id}>{b.nombre} (G{b.grado})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="dark:text-slate-300">Sector Laboral</Label>
-              <Select value={form.sector_laboral} onValueChange={(v) => setForm({ ...form, sector_laboral: v })}>
-                <SelectTrigger className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="COMERCIO">Comercio</SelectItem>
-                  <SelectItem value="INDUSTRIA">Industria</SelectItem>
-                  <SelectItem value="SERVICIOS">Servicios</SelectItem>
-                  <SelectItem value="AGROPECUARIO">Agropecuario</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="dark:text-slate-300">Puntos Total</Label>
-              <Input type="number" value={form.puntos_total} onChange={(e) => setForm({ ...form, puntos_total: parseInt(e.target.value) || 0 })} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
-            </div>
-            <div className="sm:col-span-2 space-y-2">
-              <Label className="dark:text-slate-300">Propósito</Label>
-              <Textarea placeholder="Describa el propósito del puesto..." value={form.proposito} onChange={(e) => setForm({ ...form, proposito: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
-            </div>
-            <div className="sm:col-span-2 space-y-2">
-              <Label className="dark:text-slate-300">Funciones Esenciales</Label>
-              <Textarea placeholder="Describa las funciones esenciales..." value={form.funciones_esenciales} onChange={(e) => setForm({ ...form, funciones_esenciales: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
-            </div>
-            <div className="sm:col-span-2 space-y-2">
-              <Label className="dark:text-slate-300">Requisitos de Educación</Label>
-              <Textarea placeholder="Describa los requisitos educativos..." value={form.requisitos_educacion} onChange={(e) => setForm({ ...form, requisitos_educacion: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
-            </div>
-            <div className="sm:col-span-2 space-y-2">
-              <Label className="dark:text-slate-300">Requisitos de Experiencia</Label>
-              <Textarea placeholder="Describa los requisitos de experiencia..." value={form.requisitos_experiencia} onChange={(e) => setForm({ ...form, requisitos_experiencia: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
-            </div>
-            <div className="sm:col-span-2 space-y-2">
-              <Label className="dark:text-slate-300">Requisitos de Habilidades</Label>
-              <Textarea placeholder="Describa las habilidades requeridas..." value={form.requisitos_habilidades} onChange={(e) => setForm({ ...form, requisitos_habilidades: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
-            </div>
-            <div className="sm:col-span-2 space-y-2">
-              <Label className="dark:text-slate-300">Responsabilidades</Label>
-              <Textarea placeholder="Describa las responsabilidades..." value={form.responsabilidades} onChange={(e) => setForm({ ...form, responsabilidades: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
-            </div>
-            <div className="sm:col-span-2 space-y-2">
-              <Label className="dark:text-slate-300">Condiciones de Trabajo</Label>
-              <Textarea placeholder="Describa las condiciones de trabajo..." value={form.condiciones_trabajo} onChange={(e) => setForm({ ...form, condiciones_trabajo: e.target.value })} rows={2} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200" />
-            </div>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)} className="dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300">Cancelar</Button>
-            <Button onClick={handleCreate} disabled={creating} className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800">
-              {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Crear Perfil
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Detail Dialog - Comprehensive view */}
       <ProfileDetailDialog
