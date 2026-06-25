@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 interface PayrollPeriodsProps {
   accessToken: string;
   userRole: string;
+  onNavigateToSummary?: (planillaId: string) => void;
 }
 
 interface Planilla {
@@ -98,7 +99,7 @@ function getFirstDayOfMonth(year: number, month: number): number {
   return day === 0 ? 6 : day - 1; // Monday = 0
 }
 
-export default function PayrollPeriods({ accessToken, userRole }: PayrollPeriodsProps) {
+export default function PayrollPeriods({ accessToken, userRole, onNavigateToSummary }: PayrollPeriodsProps) {
   const { toast } = useToast();
   const [planillas, setPlanillas] = useState<Planilla[]>([]);
   const [loading, setLoading] = useState(true);
@@ -964,6 +965,17 @@ export default function PayrollPeriods({ accessToken, userRole }: PayrollPeriods
                       {printLoading === p.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Printer className="h-3 w-3 mr-1" />}
                       Imprimir Resumen
                     </Button>
+                    {onNavigateToSummary && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-[10px] px-2 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 no-print font-medium"
+                        onClick={(e) => { e.stopPropagation(); onNavigateToSummary(p.id); }}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        Ver Resumen
+                      </Button>
+                    )}
                   </div>
 
                   {/* Expanded detail */}

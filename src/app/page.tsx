@@ -40,6 +40,7 @@ import PayrollApproval from '@/components/modules/PayrollApproval';
 import BankDispersion from '@/components/modules/BankDispersion';
 import AguinaldoView from '@/components/modules/AguinaldoView';
 import LiquidationView from '@/components/modules/LiquidationView';
+import PayrollSummary from '@/components/modules/PayrollSummary';
 import ProfileCatalog from '@/components/modules/ProfileCatalog';
 import SalaryBands from '@/components/modules/SalaryBands';
 import IsssReport from '@/components/modules/IsssReport';
@@ -98,7 +99,7 @@ type ViewId =
   | 'dashboard'
   | '02-01' | '02-02' | '02-03' | '02-04'
   | '03-01' | '03-02' | '03-03'
-  | '04-01' | '04-02' | '04-03' | '04-04' | '04-05' | '04-06' | '04-07'
+  | '04-01' | '04-02' | '04-03' | '04-04' | '04-05' | '04-06' | '04-07' | '04-08'
   | '05-01' | '05-02' | '05-03' | '05-04'
   | '06-01' | '06-02' | '06-03' | '06-04' | '06-05'
   | '01-03';
@@ -160,6 +161,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: '04-05', label: 'Dispersión', icon: Send },
       { id: '04-06', label: 'Aguinaldo', icon: Gift },
       { id: '04-07', label: 'Liquidaciones', icon: ClipboardList },
+      { id: '04-08', label: 'Resumen de Planilla', icon: FileText },
     ],
   },
   {
@@ -201,7 +203,7 @@ function getVisibleItems(group: NavGroup, role: UserRole): NavItem[] {
       'Seguridad': ['01-03'],
       'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
       'Módulo 03 - Perfiles': ['03-01', '03-02', '03-03'],
-      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-04', '04-05', '04-06', '04-07'],
+      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-04', '04-05', '04-06', '04-07', '04-08'],
       'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
       'Módulo 06 - Admin': ['06-01', '06-02', '06-03', '06-04'],
       'Vista Empleado': [],
@@ -209,21 +211,21 @@ function getVisibleItems(group: NavGroup, role: UserRole): NavItem[] {
     ANALISTA: {
       'Módulo 02 - Empleados': ['02-01', '02-03', '02-04'],
       'Módulo 03 - Perfiles': ['03-01', '03-02'],
-      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-06'],
+      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-06', '04-08'],
     },
     APROBADOR: {
       'Módulo 03 - Perfiles': ['03-03'],
-      'Módulo 04 - Nómina': ['04-04', '04-05', '04-07'],
+      'Módulo 04 - Nómina': ['04-04', '04-05', '04-07', '04-08'],
       'Módulo 06 - Admin': ['06-01'],
     },
     GERENCIA: {
-      'Módulo 04 - Nómina': ['04-01'],
+      'Módulo 04 - Nómina': ['04-01', '04-08'],
       'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
     },
     AUDITOR: {
       'Módulo 02 - Empleados': ['02-01'],
       'Módulo 03 - Perfiles': ['03-01'],
-      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03'],
+      'Módulo 04 - Nómina': ['04-01', '04-02', '04-03', '04-08'],
       'Módulo 05 - Reportes': ['05-01', '05-02', '05-03', '05-04'],
       'Módulo 06 - Admin': ['06-04'],
     },
@@ -279,6 +281,7 @@ const VIEW_LABELS: Record<ViewId, string> = {
   '04-05': 'Dispersión de Pago',
   '04-06': 'Aguinaldo',
   '04-07': 'Liquidaciones',
+  '04-08': 'Resumen de Planilla',
   '05-01': 'Planilla ISSS',
   '05-02': 'Planilla AFP',
   '05-03': 'Retenciones ISR',
@@ -2971,6 +2974,7 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [selectedPlanillaId, setSelectedPlanillaId] = useState<string | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   // Dynamic sidebar badge counts (real pending counts from API).
@@ -3053,7 +3057,7 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
       case '04-01':
         return <PayrollDashboard accessToken={accessToken || ''} userRole={user.rol} onNavigate={setCurrentView} />;
       case '04-02':
-        return <PayrollPeriods accessToken={accessToken || ''} userRole={user.rol} />;
+        return <PayrollPeriods accessToken={accessToken || ''} userRole={user.rol} onNavigateToSummary={(planillaId) => { setSelectedPlanillaId(planillaId); setCurrentView('04-08'); }} />;
       case '04-03':
         return <PayrollCalculation accessToken={accessToken || ''} userRole={user.rol} />;
       case '04-04':
@@ -3064,6 +3068,8 @@ function AppLayout({ user, accessToken, onLogout }: AppLayoutProps) {
         return <AguinaldoView accessToken={accessToken || ''} userRole={user.rol} />;
       case '04-07':
         return <LiquidationView accessToken={accessToken || ''} userRole={user.rol} />;
+      case '04-08':
+        return <PayrollSummary accessToken={accessToken || ''} userRole={user.rol} initialPlanillaId={selectedPlanillaId} onBack={() => setCurrentView('04-02')} />;
       case '03-01':
         return <ProfileCatalog accessToken={accessToken || ''} userRole={user.rol} onNavigateToNew={() => setCurrentView('03-02')} />;
       case '03-02':

@@ -3660,3 +3660,81 @@ Stage Summary:
 - Resultado: calificación VLM de viveza subió de 3/10 → 9/10, contraste 8/10. El VLM confirma que ahora los colores son "vivos y atractivos, dinámicos, sin monotonía".
 - Modo oscuro preservado: 8/10, sin regresiones. Todos los cambios mantuvieron las variantes `dark:`.
 - El dashboard ahora se ve "profesional y atractivo para un entorno corporativo" con colores vivos que facilitan la lectura y distinguibilidad de secciones.
+
+---
+Task ID: payroll-summary-view-1
+Agent: main (Z.ai Code)
+Task: El usuario solicitó una vista nueva que se vea similar al "imprimir resumen" que existe en Periodos Nómina (04-02), donde se pueda ver el resumen de la planilla según el período que se desee consultar.
+
+Work Log:
+- Analicé con VLM (glm-4.6v) la imagen de referencia enviada por el usuario: documento "Resumen de Planilla de Nómina" del Ministerio de Hacienda — República de El Salvador con encabezado verde, datos generales, tabla de empleados (8 columnas), fila de totales, sección Cargas Patronales (ISSS 7.5%, AFP 7.75%, Total) y resumen final.
+- Revisé la implementación actual del "imprimir resumen" en `src/components/modules/PayrollPeriods.tsx` (líneas 256-401): es una función `handlePrintSummary` que genera HTML inline y dispara `window.print()`. NO es una vista en pantalla, solo un documento de impresión.
+- Estudié el sistema de navegación de `src/app/page.tsx`: ViewId type, NAV_GROUPS con RBAC por rol, roleItemMap, VIEW_LABELS, y el switch en `renderView()`.
+- Diseñé una nueva vista (ViewId `04-08`) "Resumen de Planilla" que replica el diseño del documento de impresión PERO renderizada en pantalla como una vista normal, con:
+  * Selector de período (dropdown) para elegir cualquier planilla disponible
+  * Botón "Imprimir Resumen" para imprimir desde la vista
+  * Header oficial "Ministerio de Hacienda — República de El Salvador"
+  * Datos generales de la planilla (Código, Tipo, Estado, Empleados, Período, Fecha Cálculo, Calculada por, Aprobada por) en grid responsive
+  * Tabla de empleados con columnas #, Nombre, Puesto, Salario Bruto, ISSS, AFP, ISR, Salario Neto + fila de totales
+  * Búsqueda y sort por columna (click en header)
+  * Sección Cargas Patronales con 3 cards (ISSS Patronal 7.5%, AFP Patronal 7.75%, Total)
+  * Resumen Final box con 4 totales (Salarios Brutos, Deducciones, Neto a Pagar, Cargas Patronales)
+  * Footer legal
+- Creé el componente `src/components/modules/PayrollSummary.tsx` (~640 líneas) con:
+  * Props: `accessToken`, `userRole`, `initialPlanillaId?`, `onBack?`
+  * Fetch de lista de planillas (`/api/nomina/planillas?limit=100`)
+  * Fetch de detalle al cambiar selección (`/api/nomina/planillas/[id]`)
+  * Cálculo de totales con useMemo (bruto, isss, afp, isr, neto, cargas patronales)
+  * Sub-componentes `DetailItem` y `SummaryBox` con paleta emerald/teal/amber/cyan
+  * Variantes dark: para modo oscuro
+  * Print handler que reutiliza el patrón del `handlePrintSummary` existente (HTML inline + window.print())
+- Conecté la nueva vista en `src/app/page.tsx`:
+  * Añadí `'04-08'` al type `ViewId`
+  * Añadí import `PayrollSummary`
+  * Añadí entrada en `NAV_GROUPS` Módulo 04 - Nómina: `{ id: '04-08', label: 'Resumen de Planilla', icon: FileText }`
+  * Añadí `'04-08'` al roleItemMap para ADMIN, ANALISTA, APROBADOR, GERENCIA, AUDITOR (no EMPLEADO)
+  * Añadí entry en `VIEW_LABELS`: `'04-08': 'Resumen de Planilla'`
+  * Añadí estado `selectedPlanillaId` en el componente principal
+  * Añadí case `'04-08'` en el switch de `renderView()` con `initialPlanillaId={selectedPlanillaId}` y `onBack={() => setCurrentView('04-02')}`
+- Modifiqué `src/components/modules/PayrollPeriods.tsx` para:
+  * Añadir prop opcional `onNavigateToSummary?: (planillaId: string) => void`
+  * Añadir botón "Ver Resumen" (con icono `Eye`) junto al "Imprimir Resumen" existente en cada card de planilla
+- Actualicé el case `'04-02'` en page.tsx para pasar `onNavigateToSummary={(planillaId) => { setSelectedPlanillaId(planillaId); setCurrentView('04-08'); }}`
+- Lint: `bun run lint` → 0 errores, 0 warnings.
+- Verificación con agent-browser (login como ADMIN):
+  * Navegación directa vía sidebar: clic en "Resumen de Planilla" → vista carga correctamente con selector preseleccionado en NOM-2026-0002 (Julio 2026, 7 empleados, $9,720.15).
+  * Cambio de período: abrí dropdown, seleccioné NOM-2026-0001 (Junio 2026) → vista se actualiza con nuevos datos.
+  * Navegación desde Períodos (04-02): cada card de planilla muestra botón "Ver Resumen" → clic navega a vista 04-08 con planilla preseleccionada.
+  * Botón "Volver" → regresa a vista 04-02 (Períodos).
+  * Botón "Imprimir Resumen" → ejecuta window.print() sin errores.
+  * Dev log: 0 errores, todas las APIs responden 200 OK (`/api/nomina/planillas?limit=100`, `/api/nomina/planillas/{id}`).
+- Verificación VLM (glm-4.6v) con captura combined (1280×1731, 3 viewports):
+  * Similitud con imagen de referencia: **8/10**
+  * Profesionalismo: **9/10**
+  * VLM confirma: "vista se renderiza correctamente, elementos estructurales presentes y organizados lógicamente, datos visibles y consistentes, sin errores de renderizado".
+  * Elementos coincidentes identificados: encabezado verde del Ministerio, datos generales, tabla de empleados con 7 filas + totales, Cargas Patronales (ISSS 7.5%, AFP 7.75%, Total), Resumen Final con 4 totales.
+- Verificación VLM adicional sobre captura 1280px:
+  * Claridad visual: 8/10
+  * Jerarquía de información: 7/10
+  * Uso de color: 7/10
+  * Legibilidad: 8/10
+  * Profesionalismo: 8/10
+  * "Diseño claro y profesional, con buena legibilidad y uso de color coherente (verde institucional)".
+
+Stage Summary:
+- Tipo: Nueva feature — vista de pantalla "Resumen de Planilla de Nómina" (ViewId 04-08) que replica el diseño del documento de impresión existente.
+- Componente creado: `src/components/modules/PayrollSummary.tsx` (~640 líneas).
+- Cambios en `src/app/page.tsx`: 6 ediciones (ViewId type, import, NAV_GROUPS, roleItemMap x5 roles, VIEW_LABELS, switch case x2: 04-02 + 04-08, estado selectedPlanillaId).
+- Cambios en `src/components/modules/PayrollPeriods.tsx`: prop `onNavigateToSummary?` + botón "Ver Resumen" por card.
+- Características clave:
+  1. Selector de período con todas las planillas disponibles (ordenadas por fecha desc).
+  2. Vista en pantalla (no impresión) con diseño profesional emerald/teal.
+  3. Tabla de empleados con búsqueda y sort por columna.
+  4. Cargas Patronales con 3 cards (ISSS, AFP, Total).
+  5. Resumen final con 4 totales.
+  6. Botón "Imprimir Resumen" para impresión física.
+  7. Botón "Volver" a Períodos.
+  8. Navegación bidireccional: sidebar → vista, y Períodos → vista con planilla preseleccionada.
+- RBAC: visible para ADMIN, ANALISTA, APROBADOR, GERENCIA, AUDITOR. No visible para EMPLEADO.
+- Modo oscuro: soportado con variantes `dark:` en todos los componentes.
+- Resultado VLM: Similitud 8/10 con imagen de referencia, Profesionalismo 9/10. El usuario puede ahora consultar el resumen de cualquier período sin tener que imprimirlo.
