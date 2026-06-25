@@ -5,13 +5,17 @@ import {
   FileText, Download, Calendar, Loader2, CheckCircle, Clock, AlertCircle,
   Users, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Landmark,
   ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Eye, Building2,
-  AlertTriangle, Timer
+  AlertTriangle, Timer, CheckCircle2, RotateCcw, Send
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 
 interface AfpReportProps {
@@ -66,6 +70,14 @@ export default function AfpReport({ accessToken }: AfpReportProps) {
   const [sortField, setSortField] = useState<SortField>('nombre');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [showPreview, setShowPreview] = useState(false);
+
+  // Presentation registration state
+  const [showPresentacionDialog, setShowPresentacionDialog] = useState(false);
+  const [presentacionSaving, setPresentacionSaving] = useState(false);
+  const [revertingId, setRevertingId] = useState<string | null>(null);
+  const [formAdmin, setFormAdmin] = useState<string>('CRECER');
+  const [formFecha, setFormFecha] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [formObservaciones, setFormObservaciones] = useState<string>('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -122,6 +134,86 @@ export default function AfpReport({ accessToken }: AfpReportProps) {
     toast({ title: 'CSV exportado', description: 'Planilla AFP exportada correctamente' });
   };
 
+  // Find the most recent planilla whose period matches the selected mes/anio
+  const resolvePlanillaId = async (): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/nomina/planillas?limit=10', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return null;
+      const payload = await res.json();
+      const planillas = payload.data || payload.planillas || payload || [];
+      if (!Array.isArray(planillas) || planillas.length === 0) return null;
+      const matching = planillas.find((p: { fecha_inicio_periodo?: string; fecha_fin_periodo?: string }) => {
+        const d = new Date(p.fecha_fin_periodo || p.fecha_inicio_periodo || '');
+        return d.getMonth() + 1 === parseInt(mes) && d.getFullYear() === parseInt(anio);
+      });
+      return (matching || planillas[0]).id;
+    } catch {
+      return null;
+    }
+  };
+
+  const registrarPresentacion = async () => {
+    if (!formFecha || !formAdmin) {
+      toast({ title: 'Datos requeridos', description: 'Seleccione AFP y fecha', variant: 'destructive' });
+      return;
+    }
+    const planilla_id = await resolvePlanillaId();
+    if (!planilla_id) {
+      toast({ title: 'Sin planilla', description: 'No se encontró una planilla para asociar', variant: 'destructive' });
+      return;
+    }
+    setPresentacionSaving(true);
+    try {
+      const res = await fetch('/api/reportes/afp/presentacion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          planilla_id,
+          administradora: formAdmin,
+          fecha_presentacion: formFecha,
+          observaciones: formObservaciones || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al registrar');
+      }
+      toast({
+        title: 'Presentación registrada',
+        description: `SEPP de ${formAdmin} marcada como PRESENTADO el ${new Date(formFecha).toLocaleDateString('es-SV')}.`,
+      });
+      setShowPresentacionDialog(false);
+      setFormObservaciones('');
+      fetchData();
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'No se pudo registrar', variant: 'destructive' });
+    } finally {
+      setPresentacionSaving(false);
+    }
+  };
+
+  const revertirPresentacion = async (id: string, admin: string) => {
+    setRevertingId(id);
+    try {
+      const res = await fetch(`/api/reportes/afp/presentacion?id=${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al revertir');
+      }
+      toast({ title: 'Presentación revertida', description: `SEPP de ${admin} volvió a PENDIENTE` });
+      fetchData();
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'No se pudo revertir', variant: 'destructive' });
+    } finally {
+      setRevertingId(null);
+    }
+  };
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -164,7 +256,7 @@ export default function AfpReport({ accessToken }: AfpReportProps) {
   };
 
   const daysUntilDeadline = getDaysUntilDeadline(parseInt(mes), parseInt(anio));
-  const allPresentadas = data?.presentaciones?.length > 0 && data.presentaciones.every(p => p.estado === 'PRESENTADA');
+  const allPresentadas = data?.presentaciones?.length > 0 && data.presentaciones.every(p => p.estado === 'PRESENTADO' || p.estado === 'PRESENTADA');
 
   // Distribution by AFP administradora for donut chart
   const afpDistribution = useMemo(() => {
@@ -384,7 +476,7 @@ export default function AfpReport({ accessToken }: AfpReportProps) {
                 </div>
                 <div className="space-y-1">
                   {data.presentaciones.length > 0 ? data.presentaciones.map(p => (
-                    <Badge key={p.id} className={p.estado === 'PRESENTADA' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300' : p.estado === 'RECTIFICADA' ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300'}>
+                    <Badge key={p.id} className={(p.estado === 'PRESENTADO' || p.estado === 'PRESENTADA') ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300' : p.estado === 'RECTIFICADA' ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300'}>
                       {p.administradora}: {p.estado}
                     </Badge>
                   )) : (
@@ -551,12 +643,45 @@ export default function AfpReport({ accessToken }: AfpReportProps) {
           </CardHeader>
           <CardContent className="p-4 pt-2 space-y-4">
             <div className="flex flex-wrap gap-3">
-              {Object.keys(data.por_administradora).map(admin => (
-                <Button key={admin} onClick={() => generateSEPP(admin)} disabled={downloadingAdmin === admin} className={admin === 'CRECER' ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600' : 'bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600'}>
-                  {downloadingAdmin === admin ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                  Descargar SEPP {admin}
-                </Button>
-              ))}
+              {Object.keys(data.por_administradora).map(admin => {
+                const pres = data.presentaciones.find(p => p.administradora === admin);
+                const isPres = pres?.estado === 'PRESENTADO' || pres?.estado === 'PRESENTADA';
+                return (
+                  <div key={admin} className="flex flex-wrap items-center gap-2">
+                    <Button onClick={() => generateSEPP(admin)} disabled={downloadingAdmin === admin} className={admin === 'CRECER' ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600' : 'bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600'}>
+                      {downloadingAdmin === admin ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+                      Descargar SEPP {admin}
+                    </Button>
+                    {!isPres ? (
+                      <Button
+                        onClick={() => { setFormAdmin(admin); setFormFecha(new Date().toISOString().split('T')[0]); setShowPresentacionDialog(true); }}
+                        variant="outline"
+                        className="border-teal-300 text-teal-700 hover:bg-teal-50 dark:border-teal-700 dark:text-teal-400 dark:hover:bg-teal-900/20"
+                      >
+                        <Send className="h-4 w-4 mr-2" /> Registrar {admin}
+                      </Button>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                            {pres?.fecha_presentacion ? `Presentado ${new Date(pres.fecha_presentacion).toLocaleDateString('es-SV')}` : 'Presentado'}
+                          </span>
+                        </div>
+                        <Button
+                          onClick={() => pres && revertirPresentacion(pres.id, admin)}
+                          disabled={revertingId === pres?.id}
+                          variant="ghost"
+                          size="sm"
+                          className="text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20 h-8"
+                        >
+                          {revertingId === pres?.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
               <Button onClick={exportCSV} variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-900/20">
                 <FileSpreadsheet className="h-4 w-4 mr-2" /> Exportar CSV
               </Button>
@@ -592,6 +717,77 @@ export default function AfpReport({ accessToken }: AfpReportProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Dialog: Registrar Presentación AFP ── */}
+      <Dialog open={showPresentacionDialog} onOpenChange={setShowPresentacionDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-teal-600" />
+              Registrar Presentación SEPP — AFP {formAdmin}
+            </DialogTitle>
+            <DialogDescription>
+              Registre la radicación de la planilla SEPP ante la AFP {formAdmin}. Esto actualizará el semáforo de cumplimiento.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Administradora</Label>
+              <div className="flex gap-2">
+                {['CRECER', 'CONFIA'].map(a => (
+                  <button
+                    key={a}
+                    onClick={() => setFormAdmin(a)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
+                      formAdmin === a
+                        ? 'bg-teal-600 text-white border-teal-600'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-teal-300'
+                    }`}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fecha-presentacion-afp">Fecha de presentación *</Label>
+              <Input
+                id="fecha-presentacion-afp"
+                type="date"
+                value={formFecha}
+                onChange={(e) => setFormFecha(e.target.value)}
+              />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Fecha en que se radicó la SEPP ante la AFP {formAdmin}.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="observaciones-afp">Observaciones (opcional)</Label>
+              <Textarea
+                id="observaciones-afp"
+                placeholder="Ej. Presentada vía portal de la AFP..."
+                value={formObservaciones}
+                onChange={(e) => setFormObservaciones(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="p-3 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+              <p className="text-[11px] text-teal-700 dark:text-teal-300 leading-relaxed">
+                <strong>Acción auditable:</strong> Este registro quedará en el historial inmutable y se registrará en la bitácora con nivel de criticidad ALTA.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPresentacionDialog(false)} disabled={presentacionSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={registrarPresentacion} disabled={presentacionSaving} className="bg-teal-600 hover:bg-teal-700">
+              {presentacionSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+              Confirmar Presentación
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

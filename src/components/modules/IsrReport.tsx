@@ -5,13 +5,17 @@ import {
   FileText, Download, Calendar, Loader2, CheckCircle, Clock, AlertCircle,
   Users, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Receipt,
   ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Eye,
-  AlertTriangle, Timer, Scale
+  AlertTriangle, Timer, Scale, CheckCircle2, RotateCcw, Send
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 
 interface IsrReportProps {
@@ -66,6 +70,14 @@ export default function IsrReport({ accessToken }: IsrReportProps) {
   const [sortField, setSortField] = useState<SortField>('nombre');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [showPreview, setShowPreview] = useState(false);
+
+  // Entero registration state
+  const [showEnteroDialog, setShowEnteroDialog] = useState(false);
+  const [enteroSaving, setEnteroSaving] = useState(false);
+  const [reverting, setReverting] = useState(false);
+  const [formFecha, setFormFecha] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [formF910, setFormF910] = useState<string>('');
+  const [formObservaciones, setFormObservaciones] = useState<string>('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -143,6 +155,88 @@ export default function IsrReport({ accessToken }: IsrReportProps) {
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: 'CSV exportado', description: 'Retenciones ISR exportadas correctamente' });
+  };
+
+  // Find the most recent planilla whose period matches the selected mes/anio
+  const resolvePlanillaId = async (): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/nomina/planillas?limit=10', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return null;
+      const payload = await res.json();
+      const planillas = payload.data || payload.planillas || payload || [];
+      if (!Array.isArray(planillas) || planillas.length === 0) return null;
+      const matching = planillas.find((p: { fecha_inicio_periodo?: string; fecha_fin_periodo?: string }) => {
+        const d = new Date(p.fecha_fin_periodo || p.fecha_inicio_periodo || '');
+        return d.getMonth() + 1 === parseInt(mes) && d.getFullYear() === parseInt(anio);
+      });
+      return (matching || planillas[0]).id;
+    } catch {
+      return null;
+    }
+  };
+
+  const registrarEntero = async () => {
+    if (!formFecha) {
+      toast({ title: 'Fecha requerida', description: 'Indique la fecha de entero', variant: 'destructive' });
+      return;
+    }
+    const planilla_id = await resolvePlanillaId();
+    if (!planilla_id) {
+      toast({ title: 'Sin planilla', description: 'No se encontró una planilla para asociar', variant: 'destructive' });
+      return;
+    }
+    setEnteroSaving(true);
+    try {
+      const res = await fetch('/api/reportes/isr/entero', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          planilla_id,
+          fecha_entero: formFecha,
+          formulario_f910: formF910 || undefined,
+          observaciones: formObservaciones || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al registrar');
+      }
+      toast({
+        title: 'Entero registrado',
+        description: `Formulario F-910 marcado como ENTERADO el ${new Date(formFecha).toLocaleDateString('es-SV')}. El semáforo del dashboard se actualizará.`,
+      });
+      setShowEnteroDialog(false);
+      setFormF910('');
+      setFormObservaciones('');
+      fetchData();
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'No se pudo registrar', variant: 'destructive' });
+    } finally {
+      setEnteroSaving(false);
+    }
+  };
+
+  const revertirEntero = async () => {
+    if (!data?.entero?.id) return;
+    setReverting(true);
+    try {
+      const res = await fetch(`/api/reportes/isr/entero?id=${data.entero.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al revertir');
+      }
+      toast({ title: 'Entero revertido', description: 'El estado volvió a PENDIENTE' });
+      fetchData();
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'No se pudo revertir', variant: 'destructive' });
+    } finally {
+      setReverting(false);
+    }
   };
 
   const handleSort = (field: SortField) => {
@@ -597,6 +691,36 @@ export default function IsrReport({ accessToken }: IsrReportProps) {
               <Button onClick={() => setShowPreview(p => !p)} variant="ghost" className="text-slate-600 dark:text-slate-400">
                 <Eye className="h-4 w-4 mr-2" /> {showPreview ? 'Ocultar' : 'Vista Previa'}
               </Button>
+
+              {/* ── Entero registration / reversal ── */}
+              <div className="w-full sm:w-auto h-px sm:h-auto bg-slate-200 dark:bg-slate-700 my-1" />
+              {!isEnterado ? (
+                <Button
+                  onClick={() => { setFormFecha(new Date().toISOString().split('T')[0]); setShowEnteroDialog(true); }}
+                  className="bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Registrar Entero F-910
+                </Button>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                      Enterado{data?.entero?.fecha_entero ? ` el ${new Date(data.entero.fecha_entero).toLocaleDateString('es-SV')}` : ''}
+                    </span>
+                  </div>
+                  <Button
+                    onClick={revertirEntero}
+                    disabled={reverting}
+                    variant="outline"
+                    className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                  >
+                    {reverting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                    Revertir
+                  </Button>
+                </>
+              )}
             </div>
 
             {/* File format info */}
@@ -626,6 +750,71 @@ export default function IsrReport({ accessToken }: IsrReportProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Dialog: Registrar Entero F-910 ISR ── */}
+      <Dialog open={showEnteroDialog} onOpenChange={setShowEnteroDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-teal-600" />
+              Registrar Entero F-910 — ISR
+            </DialogTitle>
+            <DialogDescription>
+              Registre el entero del Formulario F-910 ante la DGII. Esto actualizará el semáforo de cumplimiento a verde.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="fecha-entero">Fecha de entero *</Label>
+              <Input
+                id="fecha-entero"
+                type="date"
+                value={formFecha}
+                onChange={(e) => setFormFecha(e.target.value)}
+              />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Fecha en que se enteró el formulario ante la DGII.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="formulario-f910">Número de Formulario F-910 (opcional)</Label>
+              <Input
+                id="formulario-f910"
+                placeholder="Ej. F910-2026-0001"
+                value={formF910}
+                onChange={(e) => setFormF910(e.target.value)}
+              />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Número de referencia del formulario emitido por la DGII.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="observaciones-isr">Observaciones (opcional)</Label>
+              <Textarea
+                id="observaciones-isr"
+                placeholder="Ej. Presentado vía portal en línea de la DGII..."
+                value={formObservaciones}
+                onChange={(e) => setFormObservaciones(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="p-3 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+              <p className="text-[11px] text-teal-700 dark:text-teal-300 leading-relaxed">
+                <strong>Acción auditable:</strong> Este registro quedará en el historial inmutable y se registrará en la bitácora con nivel de criticidad ALTA.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEnteroDialog(false)} disabled={enteroSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={registrarEntero} disabled={enteroSaving} className="bg-teal-600 hover:bg-teal-700">
+              {enteroSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+              Confirmar Entero
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

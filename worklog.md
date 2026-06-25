@@ -3173,3 +3173,98 @@ Stage Summary:
 - Artefactos: /src/app/page.tsx (3 funciones helper + 2 cards reescritas), no se tocaron APIs.
 - Cumplimiento legal referenciado en tooltips: Art. 78 Reglamento ISSS, Art. 21 Ley SAP, Art. 103 Código Tributario.
 - Lint: 0 errores. Dev server limpio en :3000.
+
+---
+Task ID: dash-compliance-flujo-1
+Agent: main (Z.ai Code)
+Task: Implementar el flujo completo de registro/reversión de presentaciones ISSS/AFP/ISR para que el semáforo del dashboard pueda pasar a verde cuando el usuario cumpla las obligaciones.
+
+Work Log:
+- Diagnóstico previo (ver tarea dash-compliance-recs-1): el sistema tenía schema + APIs GET + descargas CSV, pero NO había forma de registrar la presentación → el semáforo siempre quedaba en rojo.
+- Verifiqué que las 3 tablas de historial existen en schema.prisma: HistorialPresentacionISSS, HistorialPresentacionAFP, HistorialEnteroISR (con campos estado, fecha_presentacion, archivo_ois/sepp, formulario_f910, observaciones).
+- Verifiqué que el modelo BitacoraAuditoria tiene: usuario_id, usuario_email, accion, tabla_afectada, registro_id, valor_anterior, valor_nuevo, resultado, nivel_criticidad.
+
+### APIs creadas (3 nuevas rutas POST + DELETE cada una):
+
+1. **POST/DELETE /api/reportes/isss/presentacion/route.ts**
+   - POST: recibe {planilla_id, fecha_presentacion, numero_planilla_isss?, observaciones?, archivo_ois?}
+   - Resuelve periodo_mes/anio desde planilla.fecha_fin_periodo
+   - Busca registro existente por (planilla_id, periodo_mes, periodo_anio) → update o create
+   - Calcula totales reales desde DetallePlanilla (isss_laboral + isss_patronal)
+   - Sets estado='PRESENTADO', fecha_presentacion
+   - Log a bitácora: accion='PRESENTACION_ISSS', nivel_criticidad='ALTA'
+   - DELETE (?id=xxx): revierte a estado='PENDIENTE', limpia fecha_presentacion y numero_planilla_isss
+   - Log: accion='REVERSION_PRESENTACION_ISSS'
+   - RBAC: solo ADMIN, ANALISTA
+
+2. **POST/DELETE /api/reportes/afp/presentacion/route.ts**
+   - POST: recibe {planilla_id, administradora, fecha_presentacion, observaciones?, archivo_sepp?}
+   - Valida administradora ∈ {CRECER, CONFIA, CONFIÁ}
+   - Busca por (planilla_id, periodo_mes, periodo_anio, administradora) → soporta una presentación por AFP
+   - Calcula totales filtrando DetallePlanilla por empleados de esa AFP
+   - Log: accion='PRESENTACION_AFP' / 'REVERSION_PRESENTACION_AFP'
+
+3. **POST/DELETE /api/reportes/isr/entero/route.ts**
+   - POST: recibe {planilla_id, fecha_entero, formulario_f910?, observaciones?}
+   - Busca por (planilla_id, periodo_mes, periodo_anio)
+   - Calcula total_retenciones desde DetallePlanilla.isr_retenido
+   - Sets estado='ENTERADO', fecha_entero
+   - Log: accion='ENTERO_ISR' / 'REVERSION_ENTERO_ISR'
+
+### Componentes frontend actualizados (3):
+
+1. **IsssReport.tsx**
+   - Imports añadidos: Dialog, Input, Label, Textarea, Send, CheckCircle2, RotateCcw
+   - Estado: showPresentacionDialog, presentacionSaving, reverting, formFecha, formNumeroPlanilla, formObservaciones
+   - resolvePlanillaId(): busca planilla que coincida con mes/anio seleccionado vía /api/nomina/planillas
+   - registrarPresentacion(): POST + toast + refetch
+   - revertirPresentacion(): DELETE + toast + refetch
+   - UI: botón "Registrar Presentación" (teal) cuando pendiente / badge "Presentado el {fecha}" + botón "Revertir" (amber) cuando presentado
+   - Dialog: fecha (date), número planilla ISSS, observaciones, nota de auditoría
+   - Fix bug: isPresentada ahora valida 'PRESENTADO' || 'PRESENTADA' (schema usa masculino)
+
+2. **AfpReport.tsx**
+   - Mismo patrón pero con campo administradora (selector CRECER/CONFIA)
+   - Como AFP tiene múltiples administradoras, cada una tiene su propio botón Registrar/Revertir
+   - registrarPresentacion usa formAdmin, revertirPresentacion recibe (id, admin)
+   - Fix bug: allPresentadas y isPres ahora validan ambos géneros
+
+3. **IsrReport.tsx**
+   - Mismo patrón con "entero" en lugar de "presentación"
+   - Campos: fecha_entero, formulario_f910 (número), observaciones
+   - registrarEntero / revertirEntero
+   - isEnterado ya validaba correctamente 'PRESENTADA' || 'ENTERADO'
+
+### Verificación con agent-browser (login admin@nomina.gob.sv):
+
+**Flujo de registro completo (0% → 100%):**
+1. Dashboard inicial: Cumplimiento 0%, semáforo rojo, 3 items Pendientes
+2. Navegué a Planilla ISSS → botón "Registrar Presentación" → llené diálogo (OIS-2026-0001, observación) → Confirmar
+   - POST /api/reportes/isss/presentacion → 200
+   - Toast: "Presentación registrada"
+   - Estado cambió a PRESENTADO
+3. Volví al dashboard → Cumplimiento 33%, ISSS "Presentado", AFP/ISR "Pendiente"
+4. Navegué a Planilla AFP → botón "Registrar CRECER" → Confirmar → POST 200
+5. Navegué a Retenciones ISR → botón "Registrar Entero F-910" → llené F910-2026-0001 → Confirmar → POST 200
+6. Volví al dashboard → **Cumplimiento 100%, semáforo verde, "Cumplimiento al día"**, los 3 items "Presentado"
+
+**Flujo de reversión (100% → 67%):**
+7. Navegué a Planilla ISSS → ahora muestra badge "Presentado el {fecha}" + botón "Revertir"
+8. Clic en Revertir → DELETE /api/reportes/isss/presentacion?id=xxx → 200
+9. Botón volvió a "Registrar Presentación"
+10. Volví al dashboard → **Cumplimiento bajó a 67%** (AFP+ISR siguen presentados, ISSS vuelto a pendiente)
+
+- `bun run lint` pasa con 0 errores
+- Sin errores en consola del navegador ni en dev.log
+- Capturas: qa-feat-presentacion-1-isss-done.png, qa-feat-presentacion-2-all-green.png, qa-feat-presentacion-3-after-revert.png
+
+Stage Summary:
+- Tipo: Feature completa — cierra el flujo de cumplimiento del dashboard.
+- El usuario ahora puede: ver recomendación → clic "Ir a Planilla X" → descargar CSV → clic "Registrar Presentación" → el semáforo del dashboard se actualiza automáticamente a verde.
+- Cada acción (registrar/revertir) queda registrada en la bitácora inmutable con nivel ALTA, valor_anterior y valor_nuevo, para auditoría.
+- Bug adicional corregido: los componentes usaban `estado === 'PRESENTADA'` (femenino) pero el schema/API usan `'PRESENTADO'` (masculino). Se hizo la validación tolerante a ambos géneros en los 3 componentes.
+- Artefactos:
+  * 3 APIs nuevas: /api/reportes/isss/presentacion, /afp/presentacion, /isr/entero (POST + DELETE c/u)
+  * 3 componentes actualizados: IsssReport.tsx, AfpReport.tsx, IsrReport.tsx
+- No se modificó el schema ni las APIs GET existentes.
+- El cron job webDevReview (ID 230655) sigue activo para QA continuo.

@@ -5,13 +5,17 @@ import {
   FileText, Download, Calendar, Loader2, CheckCircle, Clock, AlertCircle,
   Users, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Shield,
   ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet, Eye, Building2,
-  AlertTriangle, Timer
+  AlertTriangle, Timer, CheckCircle2, RotateCcw, Send
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 
 interface IsssReportProps {
@@ -65,6 +69,14 @@ export default function IsssReport({ accessToken }: IsssReportProps) {
   const [sortField, setSortField] = useState<SortField>('nombre');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [showPreview, setShowPreview] = useState(false);
+
+  // Presentation registration state
+  const [showPresentacionDialog, setShowPresentacionDialog] = useState(false);
+  const [presentacionSaving, setPresentacionSaving] = useState(false);
+  const [reverting, setReverting] = useState(false);
+  const [formFecha, setFormFecha] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [formNumeroPlanilla, setFormNumeroPlanilla] = useState<string>('');
+  const [formObservaciones, setFormObservaciones] = useState<string>('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -121,6 +133,91 @@ export default function IsssReport({ accessToken }: IsssReportProps) {
     toast({ title: 'CSV exportado', description: 'Planilla ISSS exportada correctamente' });
   };
 
+  // Find the most recent planilla to attach the presentation to.
+  // We accept any planilla in CALCULADA/APROBADA/PAGADA state so the user can
+  // register the submission even if the payroll is not yet fully approved.
+  const resolvePlanillaId = async (): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/nomina/planillas?limit=10', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return null;
+      const payload = await res.json();
+      const planillas = payload.data || payload.planillas || payload || [];
+      if (!Array.isArray(planillas) || planillas.length === 0) return null;
+      // Prefer planillas whose period matches the selected mes/anio
+      const matching = planillas.find((p: { fecha_inicio_periodo?: string; fecha_fin_periodo?: string }) => {
+        const d = new Date(p.fecha_fin_periodo || p.fecha_inicio_periodo || '');
+        return d.getMonth() + 1 === parseInt(mes) && d.getFullYear() === parseInt(anio);
+      });
+      return (matching || planillas[0]).id;
+    } catch {
+      return null;
+    }
+  };
+
+  const registrarPresentacion = async () => {
+    if (!formFecha) {
+      toast({ title: 'Fecha requerida', description: 'Indique la fecha de presentación', variant: 'destructive' });
+      return;
+    }
+    const planilla_id = await resolvePlanillaId();
+    if (!planilla_id) {
+      toast({ title: 'Sin planilla', description: 'No se encontró una planilla para asociar la presentación', variant: 'destructive' });
+      return;
+    }
+    setPresentacionSaving(true);
+    try {
+      const res = await fetch('/api/reportes/isss/presentacion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          planilla_id,
+          fecha_presentacion: formFecha,
+          numero_planilla_isss: formNumeroPlanilla || undefined,
+          observaciones: formObservaciones || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al registrar');
+      }
+      toast({
+        title: 'Presentación registrada',
+        description: `OIS del ISSS marcada como PRESENTADO el ${new Date(formFecha).toLocaleDateString('es-SV')}. El semáforo del dashboard se actualizará.`,
+      });
+      setShowPresentacionDialog(false);
+      setFormNumeroPlanilla('');
+      setFormObservaciones('');
+      fetchData();
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'No se pudo registrar', variant: 'destructive' });
+    } finally {
+      setPresentacionSaving(false);
+    }
+  };
+
+  const revertirPresentacion = async () => {
+    if (!data?.presentacion?.id) return;
+    setReverting(true);
+    try {
+      const res = await fetch(`/api/reportes/isss/presentacion?id=${data.presentacion.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al revertir');
+      }
+      toast({ title: 'Presentación revertida', description: 'El estado volvió a PENDIENTE' });
+      fetchData();
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'No se pudo revertir', variant: 'destructive' });
+    } finally {
+      setReverting(false);
+    }
+  };
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -163,7 +260,7 @@ export default function IsssReport({ accessToken }: IsssReportProps) {
   };
 
   const daysUntilDeadline = getDaysUntilDeadline(parseInt(mes), parseInt(anio));
-  const isPresentada = data?.presentacion?.estado === 'PRESENTADA';
+  const isPresentada = data?.presentacion?.estado === 'PRESENTADO' || data?.presentacion?.estado === 'PRESENTADA';
 
   // Distribution by area for donut chart
   const areaDistribution = useMemo(() => {
@@ -551,6 +648,36 @@ export default function IsssReport({ accessToken }: IsssReportProps) {
               <Button onClick={() => setShowPreview(p => !p)} variant="ghost" className="text-slate-600 dark:text-slate-400">
                 <Eye className="h-4 w-4 mr-2" /> {showPreview ? 'Ocultar' : 'Vista Previa'}
               </Button>
+
+              {/* ── Presentation registration / reversal ── */}
+              <div className="w-full sm:w-auto h-px sm:h-auto bg-slate-200 dark:bg-slate-700 my-1" />
+              {!isPresentada ? (
+                <Button
+                  onClick={() => { setFormFecha(new Date().toISOString().split('T')[0]); setShowPresentacionDialog(true); }}
+                  className="bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Registrar Presentación
+                </Button>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                      Presentado{data?.presentacion?.fecha_presentacion ? ` el ${new Date(data.presentacion.fecha_presentacion).toLocaleDateString('es-SV')}` : ''}
+                    </span>
+                  </div>
+                  <Button
+                    onClick={revertirPresentacion}
+                    disabled={reverting}
+                    variant="outline"
+                    className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                  >
+                    {reverting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                    Revertir
+                  </Button>
+                </>
+              )}
             </div>
 
             {/* File format info */}
@@ -580,6 +707,71 @@ export default function IsssReport({ accessToken }: IsssReportProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Dialog: Registrar Presentación ISSS ── */}
+      <Dialog open={showPresentacionDialog} onOpenChange={setShowPresentacionDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-teal-600" />
+              Registrar Presentación OIS — ISSS
+            </DialogTitle>
+            <DialogDescription>
+              Registre la radicación de la planilla OIS ante el Instituto Salvadoreño del Seguro Social. Esto actualizará el semáforo de cumplimiento a verde.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="fecha-presentacion">Fecha de presentación *</Label>
+              <Input
+                id="fecha-presentacion"
+                type="date"
+                value={formFecha}
+                onChange={(e) => setFormFecha(e.target.value)}
+              />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Fecha en que se radicó la planilla ante el ISSS.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="numero-planilla">Número de planilla ISSS (opcional)</Label>
+              <Input
+                id="numero-planilla"
+                placeholder="Ej. OIS-2026-0001"
+                value={formNumeroPlanilla}
+                onChange={(e) => setFormNumeroPlanilla(e.target.value)}
+              />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Número de referencia emitido por el ISSS al recibir la planilla.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="observaciones">Observaciones (opcional)</Label>
+              <Textarea
+                id="observaciones"
+                placeholder="Ej. Presentada en oficina central, recibido por..."
+                value={formObservaciones}
+                onChange={(e) => setFormObservaciones(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="p-3 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+              <p className="text-[11px] text-teal-700 dark:text-teal-300 leading-relaxed">
+                <strong>Acción auditable:</strong> Este registro quedará en el historial inmutable y se registrará en la bitácora del sistema con nivel de criticidad ALTA.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPresentacionDialog(false)} disabled={presentacionSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={registrarPresentacion} disabled={presentacionSaving} className="bg-teal-600 hover:bg-teal-700">
+              {presentacionSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+              Confirmar Presentación
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
