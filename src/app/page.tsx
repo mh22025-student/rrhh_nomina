@@ -184,7 +184,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: '06-01', label: 'Parámetros Legales', icon: ScaleIcon },
       { id: '06-02', label: 'Organigrama', icon: GitBranch },
-      { id: '06-03', label: 'Integraciones', icon: Plug },
+      //{ id: '06-03', label: 'Integraciones', icon: Plug },
       { id: '06-04', label: 'Bitácora', icon: ScrollText },
       { id: '06-06', label: 'Bandeja Solicitudes', icon: Inbox },
     ],
