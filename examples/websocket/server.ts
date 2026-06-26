@@ -116,7 +116,8 @@ io.on('connection', (socket) => {
 })
 
 // MODIFICACIÓN DE PUERTO DINÁMICO PARA PRODUCCIÓN (RAILWAY)
-const PORT = process.env.PORT || 3003
+const PORT = process.env.NODE_ENV === 'production' ? 8081 : (process.env.PORT || 3003)
+
 httpServer.listen(Number(PORT), "0.0.0.0", () => {
   console.log(`WebSocket server running on port ${PORT}`)
 })
