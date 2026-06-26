@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "bunx prisma generate && bunx prisma db push && bun run prisma/seed.ts && next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
-    "start": "bunx prisma db push && bun examples/websocket/server.ts & PORT=$PORT NODE_ENV=production bun .next/standalone/server.js",
+    "start": "DATABASE_URL=file:/app/db/custom.db bunx prisma db push && bun examples/websocket/server.ts & DATABASE_URL=file:/app/db/custom.db PORT=$PORT NODE_ENV=production bun .next/standalone/server.js",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
