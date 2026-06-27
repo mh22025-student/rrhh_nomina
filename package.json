@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
-    "build": "bunx prisma generate && bunx prisma db push && bun run prisma/seed.ts && next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
-    "start": "DATABASE_URL=file:/app/db/custom.db bunx prisma db push && concurrently \"bun examples/websocket/server.ts\" \"DATABASE_URL=file:/app/db/custom.db PORT=$PORT NODE_ENV=production bun .next/standalone/server.js\"",
+    "build": "bunx prisma generate && bunx prisma db push && bun prisma/seed.ts && next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "start": "DATABASE_URL=file:/app/db/custom.db bunx prisma db push && DATABASE_URL=file:/app/db/custom.db bunx prisma db seed && concurrently \"bun examples/websocket/server.ts\" \"DATABASE_URL=file:/app/db/custom.db PORT=$PORT NODE_ENV=production bun .next/standalone/server.js\"",
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
@@ -86,7 +86,7 @@
     "zustand": "^5.0.6"
   },
   "prisma": {
-    "seed": "bun run prisma/seed.ts"
+    "seed": "bun prisma/seed.ts"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
