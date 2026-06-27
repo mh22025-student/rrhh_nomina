@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "bunx prisma generate && bunx prisma db push && bun run prisma/seed.ts && next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
-    "start": "DATABASE_URL=file:/app/db/custom.db bunx prisma db push && bun examples/websocket/server.ts & DATABASE_URL=file:/app/db/custom.db PORT=$PORT NODE_ENV=production bun .next/standalone/server.js",
+    "start": "DATABASE_URL=file:/app/db/custom.db bunx prisma db push && concurrently \"bun examples/websocket/server.ts\" \"DATABASE_URL=file:/app/db/custom.db PORT=$PORT NODE_ENV=production bun .next/standalone/server.js\"",
+    "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -94,6 +95,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "bun-types": "^1.3.4",
+    "concurrently": "^9.1.2",
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
